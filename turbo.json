@@ -1,0 +1,35 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "stream",
+  "remoteCache": {
+    "enabled": false
+  },
+  "globalDependencies": [".nvmrc", "pnpm-workspace.yaml"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["generated/**", ".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"]
+    },
+    "db:generate": {
+      "cache": false
+    },
+    "db:migrate": {
+      "cache": false,
+      "env": ["DATABASE_URL"]
+    }
+  }
+}

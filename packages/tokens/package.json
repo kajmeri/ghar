@@ -1,0 +1,35 @@
+{
+  "name": "@casa/tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24.16.0 <25"
+  },
+  "exports": {
+    ".": "./generated/tokens.ts",
+    "./tokens.css": "./generated/tokens.css",
+    "./tailwind.css": "./generated/tailwind.css",
+    "./tokens.json": "./tokens.json"
+  },
+  "bin": {
+    "casa-no-hex": "./scripts/check-no-hex.ts"
+  },
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "dev": "node --watch-path=tokens.json --watch-path=scripts --watch-preserve-output scripts/build.ts",
+    "lint": "eslint . && node scripts/check-no-hex.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@casa/config": "workspace:*",
+    "@types/node": "24.13.4",
+    "eslint": "9.39.5",
+    "typescript": "6.0.3",
+    "vite": "^8.0.0",
+    "vitest": "5.0.0",
+    "zod": "^4.6.0"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "casa",
+  "private": true,
+  "packageManager": "pnpm@11.4.0",
+  "engines": {
+    "node": ">=24.16.0 <25"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --filter=web...",
+    "dev:mobile": "turbo run dev --filter=mobile...",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:generate": "turbo run db:generate",
+    "db:migrate": "turbo run db:migrate",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@casa/config": "workspace:*",
+    "prettier": "3.9.6",
+    "turbo": "2.10.12"
+  }
+}

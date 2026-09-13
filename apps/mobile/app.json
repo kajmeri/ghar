@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Casa",
+    "slug": "casa",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "scheme": "casa",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "app.casa.mobile",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "app.casa.mobile"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

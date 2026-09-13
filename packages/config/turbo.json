@@ -1,0 +1,14 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/core/eslint.config.js",
+        "$TURBO_ROOT$/packages/contracts/eslint.config.js",
+        "$TURBO_ROOT$/apps/mobile/eslint.config.mjs"
+      ]
+    }
+  }
+}

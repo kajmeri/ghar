@@ -1,0 +1,43 @@
+{
+  "name": "mobile",
+  "version": "0.0.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "engines": {
+    "node": ">=24.16.0 <25"
+  },
+  "scripts": {
+    "start": "turbo run build --filter=@casa/tokens --output-logs=errors-only && expo start",
+    "dev": "expo start",
+    "ios": "turbo run build --filter=@casa/tokens --output-logs=errors-only && expo start --ios",
+    "build": "expo export --platform ios --platform android --output-dir dist",
+    "lint": "eslint . && casa-no-hex",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@casa/core": "workspace:*",
+    "@casa/tokens": "workspace:*",
+    "@expo/metro-runtime": "~57.0.15",
+    "expo": "~57.0.22",
+    "expo-constants": "~57.0.18",
+    "expo-linking": "~57.0.10",
+    "expo-router": "~57.0.21",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-worklets": "0.10.1"
+  },
+  "devDependencies": {
+    "@casa/config": "workspace:*",
+    "@types/node": "24.13.4",
+    "@types/react": "19.2.18",
+    "eslint": "9.39.5",
+    "typescript": "6.0.3",
+    "vite": "^8.0.0",
+    "vitest": "5.0.0"
+  }
+}

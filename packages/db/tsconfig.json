@@ -1,0 +1,6 @@
+{
+  "extends": "@casa/config/tsconfig/isomorphic.json",
+  "compilerOptions": {
+    "types": ["node"]
+  }
+}

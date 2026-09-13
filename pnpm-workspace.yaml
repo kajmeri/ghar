@@ -1,0 +1,25 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Metro and Next both expect a flat node_modules. pnpm 11 no longer reads node-linker from
+# .npmrc (that file is kept for tools that still look there), so this is the line that counts.
+nodeLinker: hoisted
+
+engineStrict: true
+
+overrides:
+  # react-native 0.86.3's CLI plugin peers on the matching metro-config; without this pin the
+  # optional peer resolves to the next minor.
+  '@react-native/metro-config': 0.86.3
+  # expo-router's optional peer would otherwise resolve to a reanimated that needs a newer
+  # worklets than Expo SDK 57 ships. Keep both at the SDK's bundled versions.
+  react-native-reanimated: 4.5.1
+
+# Dependency install scripts run only when listed as true here.
+allowBuilds:
+  # Verifies the platform binary that drizzle-kit and vite use.
+  esbuild: true
+  # Native resolver for eslint-plugin-import-x. The prebuilt binding ships as an optional
+  # dependency, so its fallback download script is not needed.
+  unrs-resolver: false

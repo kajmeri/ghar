@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig/isomorphic.json",
+  "compilerOptions": {
+    "types": ["node"]
+  }
+}

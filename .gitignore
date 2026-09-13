@@ -1,0 +1,26 @@
+node_modules/
+.turbo/
+coverage/
+*.tsbuildinfo
+.DS_Store
+
+# Generated from packages/tokens/tokens.json by `turbo build`
+packages/tokens/generated/
+
+# Next
+.next/
+next-env.d.ts
+
+# Expo
+.expo/
+dist/
+expo-env.d.ts
+apps/mobile/ios/
+apps/mobile/android/
+
+# Env
+.env
+.env*.local
+
+# Claude Code per-machine settings
+.claude/settings.local.json

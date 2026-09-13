@@ -1,0 +1,9 @@
+{
+  "extends": "@casa/config/tsconfig/isomorphic.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true
+  },
+  "include": ["scripts", "test", "generated", "*.ts"]
+}

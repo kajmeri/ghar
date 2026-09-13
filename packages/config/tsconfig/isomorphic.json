@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Casa isomorphic packages (core, contracts, tokens, db)",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "types": [],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["${configDir}/src", "${configDir}/test", "${configDir}/scripts", "${configDir}/*.ts"],
+  "exclude": ["${configDir}/node_modules"]
+}

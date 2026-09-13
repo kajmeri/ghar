@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+/* Generated from packages/tokens/tokens.json. Casa's palette, type scale, radii and spacing. */
+@import '@casa/tokens/tokens.css';
+@import '@casa/tokens/tailwind.css';
+
+/*
+ * The names shadcn/ui components use, pointed at Casa tokens. Tailwind's default palette is
+ * cleared in tailwind.css, so a component that reaches for slate or blue gets no class at all.
+ */
+@theme inline {
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--ink);
+  --color-primary-foreground: var(--surface);
+  --color-secondary: var(--surface);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--paper);
+  --color-muted-foreground: var(--ink-muted);
+  --color-accent: var(--paper);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--negative);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--ink-muted);
+
+  --radius-xs: var(--radius-control);
+  --radius-sm: var(--radius-control);
+  --radius-md: var(--radius-control);
+  --radius-lg: var(--radius-card);
+  --radius-xl: var(--radius-card);
+  --radius-full: var(--radius-pill);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}

@@ -1,0 +1,3 @@
+{
+  "extends": "@casa/config/tsconfig/isomorphic.json"
+}
