@@ -1,0 +1,77 @@
+import type { TripSummary } from '@casa/contracts';
+import { formatCents } from '@casa/core/money';
+import { formatTripDates, type TripStatus } from '@casa/core/trips';
+import Link from 'next/link';
+import { Card } from '@/components/ui/card';
+import { Meter } from '@/components/ui/meter';
+import { Pill } from '@/components/ui/pill';
+
+const STATUS_LABEL: Record<TripStatus, string> = {
+  idea: 'Idea',
+  planned: 'Planned',
+  booked: 'Booked',
+  past: 'Past',
+};
+
+export function TripCard({
+  trip,
+  countdown,
+  status,
+}: {
+  trip: TripSummary;
+  countdown: string;
+  status: TripStatus;
+}) {
+  const dates = formatTripDates(trip);
+  const packed = trip.packingItemCount === 0 ? null : trip.packedCount / trip.packingItemCount;
+
+  return (
+    <Card className="h-full transition-colors hover:border-ink-muted/40">
+      <Link href={`/travel/${trip.id}`} className="flex h-full flex-col gap-3 p-4 md:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-base font-semibold">{trip.name}</p>
+            {trip.destination ? (
+              <p className="truncate text-sm text-ink-muted">{trip.destination}</p>
+            ) : null}
+          </div>
+          <Pill tone={status === 'booked' ? 'positive' : 'neutral'}>{STATUS_LABEL[status]}</Pill>
+        </div>
+
+        <p className="text-sm text-ink-muted">
+          {dates ? `${dates} · ${countdown}` : countdown}
+        </p>
+
+        <dl className="mt-auto flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-muted">
+          <div className="flex gap-1">
+            <dt>Itinerary</dt>
+            <dd className="text-ink">{trip.itineraryItemCount}</dd>
+          </div>
+          <div className="flex gap-1">
+            <dt>Bookings</dt>
+            <dd className="text-ink">{trip.bookingCount}</dd>
+          </div>
+          {trip.budgetCents === null ? null : (
+            <div className="flex gap-1">
+              <dt>Budget</dt>
+              <dd className="text-ink">{formatCents(trip.budgetCents)}</dd>
+            </div>
+          )}
+        </dl>
+
+        {packed === null ? null : (
+          <div className="flex flex-col gap-1.5">
+            <Meter
+              ratio={packed}
+              tone={packed === 1 ? 'positive' : 'neutral'}
+              label={`Packing for ${trip.name}`}
+            />
+            <p className="text-xs text-ink-muted">
+              {trip.packedCount} of {trip.packingItemCount} packed
+            </p>
+          </div>
+        )}
+      </Link>
+    </Card>
+  );
+}
