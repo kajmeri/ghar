@@ -71,7 +71,7 @@ export function NewTripForm() {
   }
 
   return (
-    <Card className="w-full p-4 md:p-5" id="new-trip">
+    <Card className="w-full p-4 md:p-5">
       <form onSubmit={onSubmit} className="flex flex-col gap-4" aria-labelledby={formId}>
         <p id={formId} className="text-base font-semibold">
           Add a trip

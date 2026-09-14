@@ -1,6 +1,4 @@
 import { formatCountdown, nextTrip, settleTripStatus } from '@casa/core/trips';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { requireSession } from '@/lib/auth';
 import { loadTravelHub } from '@/lib/travel/service';
@@ -42,15 +40,8 @@ export default async function TravelPage() {
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Upcoming</h2>
         {hub.trips.length === 0 ? (
-          <EmptyState
-            title="No trips yet"
-            action={
-              <Button asChild variant="outline">
-                <Link href="#new-trip">Start a trip</Link>
-              </Button>
-            }
-          >
-            Start one from an idea below, or add a trip and hang your bookings off it.
+          <EmptyState title="No trips yet">
+            Use the button above, or vote up an idea below and make it one.
           </EmptyState>
         ) : (
           <ul className="grid gap-3 md:grid-cols-2">
