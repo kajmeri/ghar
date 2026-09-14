@@ -11,7 +11,11 @@
     ".": "./src/index.ts",
     "./dates": "./src/dates.ts",
     "./errors": "./src/errors.ts",
-    "./money": "./src/money.ts"
+    "./ideas": "./src/ideas.ts",
+    "./itinerary": "./src/itinerary.ts",
+    "./money": "./src/money.ts",
+    "./packing": "./src/packing.ts",
+    "./trips": "./src/trips.ts"
   },
   "scripts": {
     "lint": "eslint .",
