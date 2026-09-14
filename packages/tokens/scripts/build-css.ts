@@ -13,11 +13,11 @@ export function renderTokensCss(tokens: Tokens): string {
 }
 
 /**
- * Tailwind v4 theme. Default palettes, radii and shadows are cleared so only Casa tokens
+ * Tailwind v4 theme. Default palettes, radii and shadows are cleared so only Ghar tokens
  * produce utilities: `bg-paper`, `text-ink-muted`, `rounded-card`, `max-w-content`, `amount`.
  */
 export function renderTailwindCss(tokens: Tokens): string {
-  const { font, amount, typeScale, radius, space, layout, shadow } = tokens;
+  const { font, amount, typeScale, radius, space, layout, shadow, motion } = tokens;
   const sans = [`var(${font.sans.cssVariable})`, `"${font.sans.family}"`, ...font.sans.fallback];
 
   const inline = [
@@ -49,6 +49,14 @@ export function renderTailwindCss(tokens: Tokens): string {
     `  --spacing: ${rem(space.unit)};`,
     `  --spacing-tap: ${rem(layout.tapTarget)};`,
     `  --container-content: ${rem(layout.contentMaxWidth)};`,
+    '',
+    // Cleared so nothing pulses, pings or bounces on its own. Overlay animations live in the app.
+    '  --animate-*: initial;',
+    '  --ease-*: initial;',
+    ...Object.entries(motion.easing).map(
+      ([name, points]) => `  --ease-${name}: cubic-bezier(${points.join(', ')});`,
+    ),
+    ...Object.entries(motion.duration).map(([name, ms]) => `  --duration-${name}: ${ms}ms;`),
   ];
 
   return [

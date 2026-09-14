@@ -39,9 +39,12 @@ export interface FormatCentsOptions {
   locale?: string;
   /** "always" puts a + on positive amounts, for income and deltas. */
   signDisplay?: 'auto' | 'always' | 'exceptZero' | 'never';
+  /** false leaves the currency symbol off, for an input that shows it beside the field. */
+  symbol?: boolean;
 }
 
 const currencyFormatters = new Map<string, Intl.NumberFormat>();
+const numberFormatters = new Map<string, Intl.NumberFormat>();
 
 function currencyFormatter(
   locale: string,
@@ -63,6 +66,30 @@ function currencyFormatter(
   return formatter;
 }
 
+function numberFormatter(
+  locale: string,
+  fractionDigits: number,
+  signDisplay: NonNullable<FormatCentsOptions['signDisplay']>,
+): Intl.NumberFormat {
+  const key = `${locale}|${fractionDigits}|${signDisplay}`;
+  let formatter = numberFormatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+      signDisplay,
+    });
+    numberFormatters.set(key, formatter);
+  }
+  return formatter;
+}
+
+/** The symbol a currency shows in a locale: "$" for USD in en-US, "CA$" for CAD. */
+export function currencySymbol(currency = 'USD', locale = 'en-US'): string {
+  const parts = currencyFormatter(locale, currency, 'auto').formatToParts(0);
+  return parts.find((part) => part.type === 'currency')?.value ?? currency;
+}
+
 /** The only place integer cents become a display string. */
 export function formatCents(cents: Cents, options: FormatCentsOptions = {}): string {
   assertCents(cents, 'amount');
@@ -72,12 +99,14 @@ export function formatCents(cents: Cents, options: FormatCentsOptions = {}): str
     });
   }
 
-  const { currency = 'USD', locale = 'en-US', signDisplay = 'auto' } = options;
+  const { currency = 'USD', locale = 'en-US', signDisplay = 'auto', symbol = true } = options;
   const formatter = currencyFormatter(locale, currency, signDisplay);
   const minorUnitDigits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
 
   // Normalize -0 so it never renders as "-$0.00".
-  return formatter.format(cents === 0 ? 0 : cents / 10 ** minorUnitDigits);
+  const amount = cents === 0 ? 0 : cents / 10 ** minorUnitDigits;
+  if (symbol) return formatter.format(amount);
+  return numberFormatter(locale, minorUnitDigits, signDisplay).format(amount);
 }
 
 const AMOUNT_TEXT = /^(?<before>[-+]?)\s*\$?\s*(?<after>[-+]?)(?<number>[\d.,]*)$/;

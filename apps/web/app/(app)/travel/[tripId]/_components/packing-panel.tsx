@@ -10,9 +10,9 @@ import {
   type HouseholdMember,
   type PackingItem,
   type PackingTemplate,
-} from '@casa/contracts';
-import { compareMembers, memberLabel, memberLabelFor } from '@casa/core/household';
-import { byAssignee, byCategory, packingProgress } from '@casa/core/packing';
+} from '@ghar/contracts';
+import { compareMembers, memberLabel, memberLabelFor } from '@ghar/core/household';
+import { byAssignee, byCategory, packingProgress } from '@ghar/core/packing';
 import { useEffect, useState, type SyntheticEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -26,7 +26,7 @@ import { formText } from '@/lib/form';
 
 /**
  * One shared list. Group it by person to see what you are carrying, or by category to see
- * what is still in the cupboard. Both views are the same rows, sorted by @casa/core.
+ * what is still in the cupboard. Both views are the same rows, sorted by @ghar/core.
  */
 export function PackingPanel({
   tripId,

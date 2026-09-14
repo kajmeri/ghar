@@ -80,6 +80,9 @@ export function renderNativeTokens(tokens: Tokens): string {
       },
     })} as const;`,
     '',
+    '/** Only in answer to a user action. Durations in milliseconds, easings as bezier points. */',
+    `export const motion = ${json(tokens.motion)} as const;`,
+    '',
   ].join('\n');
 }
 

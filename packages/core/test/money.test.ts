@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ValidationError } from '../src/errors';
-import { addCents, formatCents, parseMoneyInput } from '../src/money';
+import { addCents, currencySymbol, formatCents, parseMoneyInput } from '../src/money';
 
 describe('formatCents', () => {
   it.each([
@@ -28,6 +28,25 @@ describe('formatCents', () => {
 
   it('rejects an unknown currency', () => {
     expect(() => formatCents(100, { currency: 'NOPE' })).toThrow(ValidationError);
+  });
+
+  it.each([
+    [123456, 'USD', '1,234.56'],
+    [-5, 'USD', '-0.05'],
+    [-0, 'USD', '0.00'],
+    [500, 'JPY', '500'],
+  ])('formats %d %s without the symbol', (cents, currency, expected) => {
+    expect(formatCents(cents, { currency, symbol: false })).toBe(expected);
+  });
+});
+
+describe('currencySymbol', () => {
+  it.each([
+    ['USD', '$'],
+    ['EUR', '€'],
+    ['CAD', 'CA$'],
+  ])('shows %s as %s', (currency, expected) => {
+    expect(currencySymbol(currency)).toBe(expected);
   });
 });
 

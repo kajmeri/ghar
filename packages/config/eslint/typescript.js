@@ -3,7 +3,7 @@ import tseslint from 'typescript-eslint';
 
 const HEX_COLOR = String.raw`#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b`;
 const HEX_MESSAGE =
-  'Hex colors live only in packages/tokens/tokens.json. Use a token (CSS variable, Tailwind class, or @casa/tokens).';
+  'Hex colors live only in packages/tokens/tokens.json. Use a token (CSS variable, Tailwind class, or @ghar/tokens).';
 
 /** no-restricted-syntax entries. Exported so configs that add their own entries keep these. */
 export const NO_HEX_SYNTAX = [

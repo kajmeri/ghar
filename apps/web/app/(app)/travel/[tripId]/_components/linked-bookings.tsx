@@ -1,14 +1,16 @@
 'use client';
 
-import { unlinkBookingFromTrip, type Booking } from '@casa/contracts';
-import { formatInstant } from '@casa/core/dates';
-import { formatCents } from '@casa/core/money';
+import { unlinkBookingFromTrip, type Booking } from '@ghar/contracts';
+import { formatCents } from '@ghar/core/money';
+import { bookingTitle } from '@ghar/core/travel';
+import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FormError } from '@/components/ui/form-error';
 import { Pill } from '@/components/ui/pill';
 import { useMutation } from '@/hooks/use-mutation';
 import { api } from '@/lib/api/client';
+import { bookingWhen } from '@/lib/travel/display';
 
 /**
  * What this trip holds. A booking stays a booking after it is on the timeline: the item is
@@ -44,20 +46,17 @@ export function LinkedBookings({
               <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-medium">{booking.title}</p>
+                    <Link href={`/travel/bookings/${booking.id}`} className="font-medium">
+                      {bookingTitle(booking)}
+                    </Link>
                     <Pill>{booking.kind}</Pill>
                   </div>
                   <p className="text-sm text-ink-muted">
                     {[
-                      booking.provider,
-                      booking.startsAt
-                        ? formatInstant(new Date(booking.startsAt), timeZone, {
-                            dateStyle: 'medium',
-                            timeStyle: 'short',
-                          })
-                        : null,
+                      booking.providerName,
+                      bookingWhen(booking, timeZone, { withTime: true }),
                       booking.confirmationCode,
-                      booking.costCents === null ? null : formatCents(booking.costCents),
+                      formatCents(booking.paidCents),
                     ]
                       .filter(Boolean)
                       .join(' · ')}

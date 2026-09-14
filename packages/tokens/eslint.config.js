@@ -1,3 +1,3 @@
-import { isomorphic } from '@casa/config/eslint/isomorphic';
+import { isomorphic } from '@ghar/config/eslint/isomorphic';
 
 export default isomorphic({ tsconfigRootDir: import.meta.dirname });

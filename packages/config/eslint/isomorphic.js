@@ -4,7 +4,7 @@ import { typescript } from './typescript.js';
 
 /**
  * For packages that run everywhere. Pass `allow` to enforce the import boundary on src/;
- * omit it for server-only packages such as @casa/db.
+ * omit it for server-only packages such as @ghar/db.
  *
  * @param {{ tsconfigRootDir: string, allow?: string[] }} options
  * @returns {import('eslint').Linter.Config[]}

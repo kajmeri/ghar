@@ -1,5 +1,5 @@
 {
-  "extends": "@casa/config/tsconfig/nextjs.json",
+  "extends": "@ghar/config/tsconfig/nextjs.json",
   "compilerOptions": {
     "paths": {
       "@/*": ["./*"]

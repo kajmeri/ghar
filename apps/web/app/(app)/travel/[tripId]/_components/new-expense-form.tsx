@@ -1,7 +1,7 @@
 'use client';
 
-import { createTransaction } from '@casa/contracts';
-import { parseMoneyInput } from '@casa/core/money';
+import { createTransaction } from '@ghar/contracts';
+import { parseMoneyInput } from '@ghar/core/money';
 import { useState, type SyntheticEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';

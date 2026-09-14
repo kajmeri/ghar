@@ -10,7 +10,7 @@ const publicSans = Public_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'Casa',
+  title: { default: 'Ghar', template: '%s · Ghar' },
   robots: { index: false, follow: false },
 };
 

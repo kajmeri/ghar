@@ -1,4 +1,4 @@
-import { previewLink } from '@casa/contracts';
+import { previewLink } from '@ghar/contracts';
 import { authedRoute } from '@/lib/api/authed';
 import { getOpenGraphProvider } from '@/lib/providers/opengraph';
 

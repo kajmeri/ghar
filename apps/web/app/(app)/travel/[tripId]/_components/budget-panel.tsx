@@ -1,9 +1,9 @@
 'use client';
 
-import { listTransactions, tagTransaction, type TripTransaction } from '@casa/contracts';
-import { formatCalendarDate } from '@casa/core/dates';
-import { formatCents } from '@casa/core/money';
-import { tripBudget, type BudgetState } from '@casa/core/trips';
+import { listTransactions, tagTransaction, type TripTransaction } from '@ghar/contracts';
+import { formatCalendarDate } from '@ghar/core/dates';
+import { formatCents } from '@ghar/core/money';
+import { tripBudget, type BudgetState } from '@ghar/core/trips';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -46,10 +46,13 @@ export function BudgetPanel({
   budget,
   tripName,
   today,
+  canSeeCharges,
 }: {
   budget: Budget;
   tripName: string;
   today: string;
+  /** The charges are finances data. Without finances access the total shows on its own. */
+  canSeeCharges: boolean;
 }) {
   const summary = tripBudget(budget);
   const tone = TONE[summary.state];
@@ -99,17 +102,25 @@ export function BudgetPanel({
         </dl>
       </Card>
 
-      <NewExpenseForm tripId={budget.tripId} today={today} />
-      <TaggedTransactions budget={budget} />
-      {/*
-        The untagged list is fetched by the browser, so it has no way to know a tag changed
-        on the server. Keying it on what is tagged now remounts it when that happens, which
-        is a lot less machinery than a shared cache for two lists on one page.
-      */}
-      <UntaggedTransactions
-        key={budget.transactions.map((transaction) => transaction.id).join(',')}
-        tripId={budget.tripId}
-      />
+      {canSeeCharges ? (
+        <>
+          <NewExpenseForm tripId={budget.tripId} today={today} />
+          <TaggedTransactions budget={budget} />
+          {/*
+            The untagged list is fetched by the browser, so it has no way to know a tag changed
+            on the server. Keying it on what is tagged now remounts it when that happens, which
+            is a lot less machinery than a shared cache for two lists on one page.
+          */}
+          <UntaggedTransactions
+            key={budget.transactions.map((transaction) => transaction.id).join(',')}
+            tripId={budget.tripId}
+          />
+        </>
+      ) : (
+        <p className="text-sm text-ink-muted">
+          The charges behind this total are in finances, which owners and adults can open.
+        </p>
+      )}
     </div>
   );
 }

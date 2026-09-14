@@ -1,5 +1,5 @@
 {
-  "name": "casa",
+  "name": "ghar",
   "private": true,
   "packageManager": "pnpm@11.4.0",
   "engines": {
@@ -18,7 +18,7 @@
     "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "@casa/config": "workspace:*",
+    "@ghar/config": "workspace:*",
     "prettier": "3.9.6",
     "turbo": "2.10.12"
   }

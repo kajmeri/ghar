@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "display": "Casa isomorphic packages (core, contracts, tokens, db)",
+  "display": "Ghar isomorphic packages (core, contracts, tokens, db)",
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2023"],

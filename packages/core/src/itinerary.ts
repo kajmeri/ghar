@@ -1,6 +1,8 @@
 import { toCalendarDate, type CalendarDate, type TimeZone } from './dates';
 import { ValidationError } from './errors';
 import type { Cents } from './money';
+import { bookingTitle, carrierName } from './travel/bookings';
+import type { BookingFields, BookingKind } from './travel/types';
 import { tripDays, type TripDates } from './trips';
 
 export const ITINERARY_KINDS = [
@@ -12,9 +14,6 @@ export const ITINERARY_KINDS = [
   'note',
 ] as const;
 export type ItineraryKind = (typeof ITINERARY_KINDS)[number];
-
-export const BOOKING_KINDS = ['flight', 'lodging', 'car', 'rail', 'activity', 'other'] as const;
-export type BookingKind = (typeof BOOKING_KINDS)[number];
 
 /**
  * Positions are spaced so a future insert between two items has room without renumbering.
@@ -160,23 +159,20 @@ export function moveWithinDay(
   return reorderWithinDay(ordered, itemId, toIndex);
 }
 
-/** What a booking looks like to this module. A subset of the bookings table. */
-export interface BookingLike {
-  readonly id: string;
-  readonly kind: BookingKind;
-  readonly title: string;
-  readonly provider: string | null;
-  readonly confirmationCode: string | null;
-  readonly startsAt: Date | null;
-  readonly endsAt: Date | null;
-  readonly origin: string | null;
-  readonly destination: string | null;
-  readonly address: string | null;
-  readonly lat: number | null;
-  readonly lng: number | null;
-  readonly costCents: Cents | null;
-  readonly url: string | null;
-}
+/** What a booking looks like to this module. A subset of a booking from @ghar/core/travel. */
+export type BookingLike = Pick<
+  BookingFields,
+  | 'kind'
+  | 'confirmationCode'
+  | 'providerName'
+  | 'carrier'
+  | 'origin'
+  | 'destination'
+  | 'propertyName'
+  | 'checkIn'
+  | 'departAt'
+  | 'paidCents'
+> & { readonly id: string };
 
 /** An itinerary item that has not been written yet. `sortOrder` is the caller's to assign. */
 export interface ItineraryDraft {
@@ -195,57 +191,53 @@ export interface ItineraryDraft {
   readonly url: string | null;
 }
 
-/** A car or a train is transport on the timeline; anything unclassified is a note. */
+/** A car rental is transport on the timeline. */
 const KIND_FROM_BOOKING: Record<BookingKind, ItineraryKind> = {
   flight: 'flight',
-  lodging: 'lodging',
+  hotel: 'lodging',
   car: 'transport',
-  rail: 'transport',
-  activity: 'activity',
-  other: 'note',
 };
 
 /**
- * The line a booking gets on the timeline. A flight becomes "Newark to Lisbon" with its
- * departure time and confirmation code; lodging becomes one item spanning the stay, so
- * check-out lives on the same row as check-in rather than as a second orphan item.
+ * The line a booking gets on the timeline. A flight becomes "TAP Air Portugal: EWR to LIS" at
+ * its departure time; a stay becomes one item on check-in day, so check-out lives on the same
+ * row rather than as a second orphan item; a car sits on its pick-up day.
  *
- * Returns null when there is no day to put it on: an undated booking on an undated trip
+ * Returns null when there is no day to put it on: a booking without dates on a trip without dates
  * has nowhere to go, and inventing a day would be worse than leaving it linked but unlisted.
  */
 export function itineraryDraftFromBooking(
   booking: BookingLike,
   options: { timeZone: TimeZone; fallbackDay?: CalendarDate | null },
 ): ItineraryDraft | null {
-  const day = booking.startsAt
-    ? toCalendarDate(booking.startsAt, options.timeZone)
-    : (options.fallbackDay ?? null);
+  const day =
+    (booking.departAt ? toCalendarDate(booking.departAt, options.timeZone) : booking.checkIn) ??
+    options.fallbackDay ??
+    null;
   if (day === null) return null;
 
   return {
     bookingId: booking.id,
     day,
-    startsAt: booking.startsAt,
-    endsAt: booking.endsAt,
+    startsAt: booking.departAt,
+    endsAt: null,
     kind: KIND_FROM_BOOKING[booking.kind],
     title: bookingItemTitle(booking),
-    location: booking.destination ?? booking.origin,
-    address: booking.address,
-    lat: booking.lat,
-    lng: booking.lng,
+    location: booking.kind === 'car' ? booking.origin : booking.destination,
+    address: null,
+    lat: null,
+    lng: null,
     confirmationCode: booking.confirmationCode,
-    costCents: booking.costCents,
-    url: booking.url,
+    costCents: booking.paidCents,
+    url: null,
   };
 }
 
 function bookingItemTitle(booking: BookingLike): string {
-  const { kind, title, provider, origin, destination } = booking;
-  if (kind === 'flight' && origin && destination) {
-    return provider ? `${provider}: ${origin} to ${destination}` : `${origin} to ${destination}`;
-  }
-  if (kind === 'lodging') return provider ?? title;
-  return title;
+  const title = bookingTitle(booking);
+  if (booking.kind !== 'flight') return title;
+  const airline = carrierName(booking.carrier);
+  return airline ? `${airline}: ${title}` : title;
 }
 
 /**

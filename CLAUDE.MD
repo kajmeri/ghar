@@ -1,4 +1,4 @@
-# Casa
+# Ghar
 
 A private household operations app for one family. Finances, calendar, travel,
 documents, and home maintenance in one place. Not a SaaS product. No public signup,
@@ -23,11 +23,11 @@ apps/web Next.js. UI, API routes, cron, all I/O and integrations. apps/mobile Ex
 
 Rules about these boundaries, in priority order:
 
-- `@casa/core` and `@casa/contracts` must import nothing from `node:*`, `next/*`,
-  `react`, `@casa/db`, or any SDK. If you reach for one of those, the code belongs in
+- `@ghar/core` and `@ghar/contracts` must import nothing from `node:*`, `next/*`,
+  `react`, `@ghar/db`, or any SDK. If you reach for one of those, the code belongs in
   `apps/web` instead. This is enforced by an eslint `no-restricted-imports` rule. Do
   not disable the rule; move the code.
-- `@casa/db` is imported by `apps/web` only. Never by mobile, never by core.
+- `@ghar/db` is imported by `apps/web` only. Never by mobile, never by core.
 - Decide placement by purity, not by topic. The price-drop threshold math and the
   `isActionable` fare-rule table are pure, so they go in `core`. The Travelpayouts
   fetch that feeds them is I/O, so it goes in `apps/web/lib/providers`.
@@ -45,17 +45,17 @@ Rules about these boundaries, in priority order:
    is the real boundary.
 
 2. **Business logic never lives in components or route handlers.** Route handlers
-   parse, authorize, call into `@casa/core` or `packages/db`, and serialize. Pure
+   parse, authorize, call into `@ghar/core` or `packages/db`, and serialize. Pure
    rules go in `core`; orchestration and I/O go in `apps/web/lib`.
 
 3. **The API is the mobile boundary.** Every feature must be fully reachable through
-   `app/api/v1/`, with request and response schemas from `@casa/contracts`. Server
+   `app/api/v1/`, with request and response schemas from `@ghar/contracts`. Server
    actions are allowed only for simple form mutations a phone client will never need.
    If a capability exists only as a server action, it doesn't exist as far as the
    mobile app is concerned.
 
 4. **Money is integer cents, always.** Column type `bigint`. Never float, never
-   `numeric` in app code. A `formatCents` helper in `@casa/core/money` is the only place
+   `numeric` in app code. A `formatCents` helper in `@ghar/core/money` is the only place
    that turns cents into a display string.
 
 5. **Dates:** store UTC timestamptz. Store calendar dates that have no time (a
@@ -80,7 +80,7 @@ Rules about these boundaries, in priority order:
 - Server Components by default. `"use client"` only where interaction requires it.
 - No `any`. No non-null assertions on external data.
 - Colocate: `apps/web/app/(app)/finances/_components/`, not a global components dump.
-- Errors: throw typed errors from `@casa/core/errors`; route handlers map them to status
+- Errors: throw typed errors from `@ghar/core/errors`; route handlers map them to status
   codes in one place.
 - Migrations: Drizzle Kit, checked into `packages/db/drizzle/`. Never edit an applied
   migration.

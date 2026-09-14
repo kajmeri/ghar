@@ -1,5 +1,5 @@
 {
-  "name": "@casa/contracts",
+  "name": "@ghar/contracts",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,8 @@
     "zod": "^4.6.0"
   },
   "devDependencies": {
-    "@casa/config": "workspace:*",
+    "@ghar/config": "workspace:*",
+    "@ghar/core": "workspace:*",
     "eslint": "9.39.5",
     "typescript": "6.0.3",
     "vite": "^8.0.0",

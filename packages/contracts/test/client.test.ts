@@ -27,7 +27,7 @@ function setup(response: FetchResponseLike | Error, token: string | null = 'toke
   const fetch = vi.fn<FetchLike>(() =>
     response instanceof Error ? Promise.reject(response) : Promise.resolve(response),
   );
-  const client = createClient({ baseUrl: 'https://casa.test/', getToken: () => token, fetch });
+  const client = createClient({ baseUrl: 'https://ghar.test/', getToken: () => token, fetch });
   return { client, fetch };
 }
 
@@ -66,7 +66,7 @@ describe('createClient', () => {
       status: 'ok',
       time: '2026-09-13T18:05:00Z',
     });
-    expect(fetch).toHaveBeenCalledWith('https://casa.test/api/v1/health', {
+    expect(fetch).toHaveBeenCalledWith('https://ghar.test/api/v1/health', {
       method: 'GET',
       headers: { accept: 'application/json', authorization: 'Bearer token-123' },
     });
@@ -89,7 +89,7 @@ describe('createClient', () => {
       query: { include: ['x', 'y z'], limit: 10 },
     });
     expect(fetch.mock.calls[0]?.[0]).toBe(
-      'https://casa.test/api/v1/things/a%2Fb?include=x&include=y%20z&limit=10',
+      'https://ghar.test/api/v1/things/a%2Fb?include=x&include=y%20z&limit=10',
     );
   });
 

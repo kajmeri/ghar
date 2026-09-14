@@ -189,78 +189,89 @@ describe('moveWithinDay', () => {
 });
 
 describe('itineraryDraftFromBooking', () => {
-  const booking: BookingLike = {
+  const flight: BookingLike = {
     id: 'booking-1',
     kind: 'flight',
-    title: 'Flight to Lisbon',
-    provider: 'TAP',
     confirmationCode: 'XK4P2Q',
-    startsAt: at('2026-03-03T10:30:00Z'),
-    endsAt: at('2026-03-03T17:05:00Z'),
+    providerName: null,
+    carrier: 'BA',
     origin: 'EWR',
-    destination: 'LIS',
-    address: null,
-    lat: null,
-    lng: null,
-    costCents: 84_200,
-    url: 'https://example.com/booking',
+    destination: 'LHR',
+    propertyName: null,
+    checkIn: null,
+    departAt: at('2026-03-03T22:30:00Z'),
+    paidCents: 84_200,
+  };
+  const hotel: BookingLike = {
+    ...flight,
+    id: 'booking-2',
+    kind: 'hotel',
+    carrier: null,
+    origin: null,
+    destination: 'London',
+    propertyName: 'The Hoxton',
+    checkIn: '2026-03-04',
+    departAt: null,
   };
 
-  it('turns a flight into a flight item with times and the confirmation code', () => {
-    const draft = itineraryDraftFromBooking(booking, { timeZone: 'America/New_York' });
+  it('turns a flight into a flight item at its departure, with the confirmation code', () => {
+    const draft = itineraryDraftFromBooking(flight, { timeZone: 'America/New_York' });
     expect(draft).toMatchObject({
       bookingId: 'booking-1',
       kind: 'flight',
-      title: 'TAP: EWR to LIS',
+      title: 'British Airways: EWR to LHR',
       day: '2026-03-03',
+      location: 'LHR',
       confirmationCode: 'XK4P2Q',
       costCents: 84_200,
     });
-    expect(draft?.startsAt).toEqual(booking.startsAt);
-    expect(draft?.endsAt).toEqual(booking.endsAt);
+    expect(draft?.startsAt).toEqual(flight.departAt);
+    expect(draft?.endsAt).toBeNull();
   });
 
-  it('puts the item on the day the booking starts in the household zone, not in UTC', () => {
-    const redEye = { ...booking, startsAt: at('2026-03-04T02:30:00Z') };
+  it('puts a flight on the day it leaves in the household zone, not in UTC', () => {
+    const redEye = { ...flight, departAt: at('2026-03-04T02:30:00Z') };
     expect(itineraryDraftFromBooking(redEye, { timeZone: 'America/New_York' })?.day).toBe(
       '2026-03-03',
     );
     expect(itineraryDraftFromBooking(redEye, { timeZone: 'UTC' })?.day).toBe('2026-03-04');
   });
 
-  it('names a flight by its route even without an airline', () => {
-    const draft = itineraryDraftFromBooking({ ...booking, provider: null }, { timeZone: 'UTC' });
-    expect(draft?.title).toBe('EWR to LIS');
+  it('shows an unknown carrier by its code', () => {
+    const draft = itineraryDraftFromBooking({ ...flight, carrier: 'ZZ' }, { timeZone: 'UTC' });
+    expect(draft?.title).toBe('ZZ: EWR to LHR');
   });
 
-  it('maps a car and a train onto transport, and anything else onto a note', () => {
-    const kinds = (['car', 'rail', 'other', 'lodging', 'activity'] as const).map(
-      (kind) => itineraryDraftFromBooking({ ...booking, kind }, { timeZone: 'UTC' })?.kind,
-    );
-    expect(kinds).toEqual(['transport', 'transport', 'note', 'lodging', 'activity']);
+  it('puts a hotel on its check-in day as lodging, named after the property', () => {
+    const draft = itineraryDraftFromBooking(hotel, { timeZone: 'UTC' });
+    expect(draft).toMatchObject({
+      kind: 'lodging',
+      title: 'The Hoxton',
+      day: '2026-03-04',
+      location: 'London',
+      startsAt: null,
+    });
   });
 
-  it('names lodging after the hotel', () => {
+  it('makes a car rental transport at its pick-up location', () => {
+    const car = { ...hotel, kind: 'car' as const, providerName: 'Hertz', origin: 'LHR' };
+    expect(itineraryDraftFromBooking(car, { timeZone: 'UTC' })).toMatchObject({
+      kind: 'transport',
+      title: 'Hertz, LHR',
+      location: 'LHR',
+    });
+  });
+
+  it('falls back to the trip start when the booking has no date', () => {
     const draft = itineraryDraftFromBooking(
-      { ...booking, kind: 'lodging', provider: 'Casa do Alto', title: 'Hotel' },
-      { timeZone: 'UTC' },
-    );
-    expect(draft?.title).toBe('Casa do Alto');
-  });
-
-  it('falls back to the trip start when the booking has no time', () => {
-    const draft = itineraryDraftFromBooking(
-      { ...booking, startsAt: null },
+      { ...hotel, checkIn: null },
       { timeZone: 'UTC', fallbackDay: '2026-03-03' },
     );
     expect(draft?.day).toBe('2026-03-03');
-    expect(draft?.startsAt).toBeNull();
   });
 
   it('returns null when there is no day to put it on', () => {
-    expect(
-      itineraryDraftFromBooking({ ...booking, startsAt: null }, { timeZone: 'UTC' }),
-    ).toBeNull();
+    expect(itineraryDraftFromBooking({ ...hotel, checkIn: null }, { timeZone: 'UTC' })).toBeNull();
   });
 });
 

@@ -1,8 +1,8 @@
-import { radius } from '@casa/tokens';
+import { radius } from '@ghar/tokens';
 import { clsx, type ClassValue } from 'clsx';
 import { extendTailwindMerge } from 'tailwind-merge';
 
-// Teach tailwind-merge Casa's token names so `rounded-control` and `rounded-card` conflict.
+// Teach tailwind-merge Ghar's token names so `rounded-control` and `rounded-card` conflict.
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {

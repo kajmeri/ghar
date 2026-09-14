@@ -1,12 +1,12 @@
-import type { TripSummary } from '@casa/contracts';
-import type { CalendarDate } from '@casa/core/dates';
+import type { TripSummary } from '@ghar/contracts';
+import type { CalendarDate } from '@ghar/core/dates';
 import {
   daysUntilTrip,
   formatTripDates,
   tripDayNumber,
   tripDays,
   tripPhase,
-} from '@casa/core/trips';
+} from '@ghar/core/trips';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';

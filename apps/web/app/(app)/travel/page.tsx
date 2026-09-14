@@ -1,22 +1,22 @@
-import { formatCountdown, nextTrip, settleTripStatus } from '@casa/core/trips';
+import { formatCountdown, nextTrip, settleTripStatus } from '@ghar/core/trips';
 import Link from 'next/link';
 import { EmptyState } from '@/components/ui/empty-state';
-import { requireSession } from '@/lib/auth';
-import { loadTravelHub } from '@/lib/travel/service';
+import { getPageSession } from '@/lib/api/authed';
+import { loadTravelHub } from '@/lib/travel/trips';
 import { IdeaBoard } from './_components/idea-board';
 import { NextTripCountdown } from './_components/next-trip-countdown';
 import { NewTripForm } from './_components/new-trip-form';
 import { TripCard } from './_components/trip-card';
 import { UnfiledBookings } from './_components/unfiled-bookings';
 
-export const metadata = { title: 'Travel · Casa' };
+export const metadata = { title: 'Travel' };
 
 /**
  * The hub. What is coming up, how long until it, what still needs filing, and the pile of
  * places nobody has committed to yet.
  */
 export default async function TravelPage() {
-  const session = await requireSession();
+  const session = await getPageSession();
   const hub = await loadTravelHub(session);
   const soonest = nextTrip(hub.trips, hub.today);
 
@@ -34,8 +34,11 @@ export default async function TravelPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
-          <Link href="/household" className="text-sm text-ink-muted underline underline-offset-4">
-            Household
+          <Link
+            href="/travel/bookings"
+            className="text-sm text-ink-muted underline underline-offset-4"
+          >
+            Bookings
           </Link>
           <NewTripForm />
         </div>

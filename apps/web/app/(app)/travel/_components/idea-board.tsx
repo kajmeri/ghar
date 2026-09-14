@@ -8,8 +8,8 @@ import {
   voteOnTripIdea,
   type LinkPreview,
   type TripIdea,
-} from '@casa/contracts';
-import { compareIdeasByVotes, tallyVotes, voteOf } from '@casa/core/ideas';
+} from '@ghar/contracts';
+import { compareIdeasByVotes, tallyVotes, voteOf } from '@ghar/core/ideas';
 import { useRouter } from 'next/navigation';
 import { useState, type SyntheticEvent } from 'react';
 import { Button } from '@/components/ui/button';

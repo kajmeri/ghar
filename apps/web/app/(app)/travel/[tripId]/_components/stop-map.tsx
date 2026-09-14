@@ -1,4 +1,4 @@
-import type { ItineraryItem } from '@casa/contracts';
+import type { ItineraryItem } from '@ghar/contracts';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 

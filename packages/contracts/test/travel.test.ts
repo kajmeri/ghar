@@ -1,6 +1,13 @@
+import {
+  BOOKING_KINDS,
+  BOOKING_SOURCES,
+  BOOKING_STATUSES,
+  CABINS,
+  DROP_ACTIONS,
+  PRICE_CONFIDENCES,
+  RATE_PLANS,
+} from '@ghar/core/travel';
 import { describe, expect, it } from 'vitest';
-import { createBookingBodySchema } from '../src/v1/bookings';
-import { updateHouseholdMember } from '../src/v1/household';
 import { promoteTripIdea } from '../src/v1/ideas';
 import {
   createItineraryItemBodySchema,
@@ -8,10 +15,72 @@ import {
   updateItineraryItemBodySchema,
 } from '../src/v1/itinerary';
 import { calendarDateSchema, httpUrlSchema } from '../src/v1/shared';
-import { createTransaction } from '../src/v1/travel';
-import { createTripBodySchema, updateTripBodySchema } from '../src/v1/trips';
+import {
+  bookingBodySchema,
+  bookingKindSchema,
+  bookingSourceSchema,
+  bookingStatusSchema,
+  cabinSchema,
+  dropActionSchema,
+  priceConfidenceSchema,
+  ratePlanSchema,
+} from '../src/v1/travel';
+import { createTransaction } from '../src/v1/travel-hub';
+import {
+  createTripBodySchema,
+  linkBookingToTrip,
+  updateTripBodySchema,
+} from '../src/v1/trips';
 
 const UUID = '2a3fbc0e-1c2d-4f5a-8b6c-7d8e9f0a1b2c';
+
+describe('travel lists', () => {
+  it('match @ghar/core/travel, in order', () => {
+    expect(bookingKindSchema.options).toEqual([...BOOKING_KINDS]);
+    expect(bookingStatusSchema.options).toEqual([...BOOKING_STATUSES]);
+    expect(ratePlanSchema.options).toEqual([...RATE_PLANS]);
+    expect(bookingSourceSchema.options).toEqual([...BOOKING_SOURCES]);
+    expect(cabinSchema.options).toEqual([...CABINS]);
+    expect(priceConfidenceSchema.options).toEqual([...PRICE_CONFIDENCES]);
+    expect(dropActionSchema.options).toEqual([...DROP_ACTIONS]);
+  });
+});
+
+describe('booking body', () => {
+  it('fills in what a hotel leaves out', () => {
+    expect(
+      bookingBodySchema.parse({
+        kind: 'hotel',
+        propertyName: 'Hotel Figueroa',
+        destination: 'Los Angeles',
+        ratePlan: 'pay_at_property',
+        checkIn: '2026-12-01',
+        checkOut: '2026-12-04',
+        paidCents: 90_000,
+        currency: 'USD',
+      }),
+    ).toMatchObject({
+      status: 'booked',
+      carrier: null,
+      cabin: null,
+      departAt: null,
+      travelers: 1,
+      refundable: false,
+      watchEnabled: true,
+    });
+  });
+
+  it('refuses fractional cents and times without a zone', () => {
+    const flight = { kind: 'flight', paidCents: 100, currency: 'USD' };
+    expect(bookingBodySchema.safeParse({ ...flight, paidCents: 10.5 }).success).toBe(false);
+    expect(bookingBodySchema.safeParse({ ...flight, departAt: '2026-11-20T08:00' }).success).toBe(
+      false,
+    );
+    expect(
+      bookingBodySchema.safeParse({ ...flight, departAt: '2026-11-20T08:00:00-05:00' }).success,
+    ).toBe(true);
+  });
+});
 
 describe('calendarDateSchema', () => {
   it.each(['2026-03-03', '2026-12-31'])('accepts %s', (value) => {
@@ -105,6 +174,12 @@ describe('updateTripBodySchema', () => {
   });
 });
 
+describe('linkBookingToTrip', () => {
+  it('puts the booking on the timeline unless told not to', () => {
+    expect(linkBookingToTrip.body.parse({ bookingId: UUID }).generateItineraryItem).toBe(true);
+  });
+});
+
 describe('createItineraryItemBodySchema', () => {
   const base = { day: '2026-03-03', kind: 'activity', title: 'Tram 28' };
 
@@ -175,25 +250,6 @@ describe('reorderItineraryBodySchema', () => {
   });
 });
 
-describe('createBookingBodySchema', () => {
-  it('leaves a booking unfiled by default', () => {
-    expect(
-      createBookingBodySchema.parse({ kind: 'flight', title: 'EWR to LIS' }).tripId,
-    ).toBeNull();
-  });
-
-  it('refuses a booking that ends before it starts', () => {
-    expect(
-      createBookingBodySchema.safeParse({
-        kind: 'lodging',
-        title: 'Casa do Alto',
-        startsAt: '2026-03-10T15:00:00Z',
-        endsAt: '2026-03-03T11:00:00Z',
-      }).success,
-    ).toBe(false);
-  });
-});
-
 describe('promoteTripIdea', () => {
   it('takes an idea straight across with no dates', () => {
     expect(promoteTripIdea.body.safeParse({}).success).toBe(true);
@@ -254,21 +310,5 @@ describe('createTransaction', () => {
         amountCents: -1.5,
       }).success,
     ).toBe(false);
-  });
-});
-
-describe('updateHouseholdMember', () => {
-  it('takes a name', () => {
-    expect(updateHouseholdMember.body.safeParse({ displayName: 'Ana' }).success).toBe(true);
-  });
-
-  it('takes null to clear one', () => {
-    expect(updateHouseholdMember.body.safeParse({ displayName: null }).success).toBe(true);
-  });
-
-  it('refuses a name nobody typed on purpose', () => {
-    expect(updateHouseholdMember.body.safeParse({ displayName: 'a'.repeat(101) }).success).toBe(
-      false,
-    );
   });
 });

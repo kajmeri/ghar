@@ -1,14 +1,12 @@
 import 'server-only';
-import { createDb, type Database } from '@casa/db';
+import { createDb, type Database } from '@ghar/db';
+import { env } from '@/lib/env';
 
-let db: Database | undefined;
+// Kept on globalThis so hot reloads in development reuse one connection pool.
+const globalForDb = globalThis as typeof globalThis & { gharDb?: Database };
 
-/** The shared Drizzle client. apps/web is the only workspace allowed to import @casa/db. */
+/** The shared Drizzle client. apps/web is the only workspace allowed to import @ghar/db. */
 export function getDb(): Database {
-  if (!db) {
-    const url = process.env.DATABASE_URL;
-    if (!url) throw new Error('DATABASE_URL is not set. Copy apps/web/.env.example to .env.local.');
-    db = createDb(url);
-  }
-  return db;
+  globalForDb.gharDb ??= createDb(env().DATABASE_URL);
+  return globalForDb.gharDb;
 }

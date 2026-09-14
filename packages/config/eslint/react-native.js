@@ -13,13 +13,13 @@ export function reactNative({ tsconfigRootDir }) {
     ...typescript({ tsconfigRootDir }),
     {
       // Metro loads its config with require(), so this one file stays CommonJS.
-      name: 'casa/metro-config',
+      name: 'ghar/metro-config',
       files: ['metro.config.js'],
       languageOptions: { sourceType: 'commonjs' },
       rules: { '@typescript-eslint/no-require-imports': 'off' },
     },
     {
-      name: 'casa/mobile-boundaries',
+      name: 'ghar/mobile-boundaries',
       files: ['src/**'],
       rules: {
         'no-restricted-imports': [
@@ -27,8 +27,8 @@ export function reactNative({ tsconfigRootDir }) {
           {
             patterns: [
               {
-                regex: '^@casa/db(?:/|$)',
-                message: 'Mobile is an API client. Call apps/web through @casa/contracts instead.',
+                regex: '^@ghar/db(?:/|$)',
+                message: 'Mobile is an API client. Call apps/web through @ghar/contracts instead.',
               },
               {
                 regex: '^(?:node:|next(?:/|$)|server-only$)',

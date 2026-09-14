@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-export const householdRoleSchema = z.enum(['owner', 'member']);
+/** Most trusted first. Mirrors HOUSEHOLD_ROLES in @ghar/core/auth; a test keeps them equal. */
+export const householdRoleSchema = z.enum(['owner', 'adult', 'member', 'viewer']);
 export type HouseholdRole = z.infer<typeof householdRoleSchema>;
 
 /**

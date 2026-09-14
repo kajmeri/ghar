@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CasaError,
+  GharError,
   ConflictError,
   ForbiddenError,
   NotFoundError,
   UnauthorizedError,
   ValidationError,
-  isCasaError,
+  isGharError,
 } from '../src/errors';
 
 describe('typed errors', () => {
@@ -19,11 +19,11 @@ describe('typed errors', () => {
   ] as const)('%o carries code %s', (ErrorClass, code) => {
     const error = new ErrorClass('nope');
     expect(error).toBeInstanceOf(Error);
-    expect(error).toBeInstanceOf(CasaError);
+    expect(error).toBeInstanceOf(GharError);
     expect(error.code).toBe(code);
     expect(error.name).toBe(ErrorClass.name);
     expect(error.message).toBe('nope');
-    expect(isCasaError(error)).toBe(true);
+    expect(isGharError(error)).toBe(true);
   });
 
   it('keeps cause and details', () => {
@@ -34,7 +34,7 @@ describe('typed errors', () => {
   });
 
   it('does not treat other errors as domain errors', () => {
-    expect(isCasaError(new Error('x'))).toBe(false);
-    expect(isCasaError({ code: 'not_found' })).toBe(false);
+    expect(isGharError(new Error('x'))).toBe(false);
+    expect(isGharError({ code: 'not_found' })).toBe(false);
   });
 });

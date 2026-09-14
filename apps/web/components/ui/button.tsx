@@ -5,7 +5,7 @@ import type * as React from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * shadcn/ui button, restyled for Casa: ink primary, hairline outline, 8px radius, 44px tall.
+ * shadcn/ui button, restyled for Ghar: ink primary, hairline outline, 8px radius, 44px tall.
  * There are no small sizes because nothing tappable may be under 44px, and no shadows.
  */
 const buttonVariants = cva(

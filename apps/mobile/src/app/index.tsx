@@ -1,5 +1,5 @@
-import { formatCents } from '@casa/core/money';
-import { amount, colors, numeric, radius, space, typeScale } from '@casa/tokens';
+import { formatCents } from '@ghar/core/money';
+import { amount, colors, numeric, radius, space, typeScale } from '@ghar/tokens';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 

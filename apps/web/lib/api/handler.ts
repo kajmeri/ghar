@@ -1,6 +1,6 @@
 import 'server-only';
-import type { EndpointDefinition, EndpointParsedInput, EndpointResponse } from '@casa/contracts';
-import { ValidationError } from '@casa/core/errors';
+import type { EndpointDefinition, EndpointParsedInput, EndpointResponse } from '@ghar/contracts';
+import { ForbiddenError, ValidationError } from '@ghar/core/errors';
 import type { z } from 'zod';
 import { errorResponse } from './errors';
 
@@ -28,6 +28,7 @@ export function route<T extends EndpointDefinition>(
   return async (request: Request, context: RouteContext): Promise<Response> => {
     const requestId = crypto.randomUUID();
     try {
+      assertSameOrigin(request);
       const input = {
         params: endpoint.params && parseInput('params', endpoint.params, await context.params),
         query:
@@ -54,6 +55,29 @@ export function route<T extends EndpointDefinition>(
       return errorResponse(error, requestId);
     }
   };
+}
+
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/**
+ * Cookie-authenticated writes must come from this site's own pages. Bearer-token requests (the
+ * mobile app) and requests without cookies carry no ambient credentials, so they pass.
+ */
+function assertSameOrigin(request: Request): void {
+  if (SAFE_METHODS.has(request.method)) return;
+  if (request.headers.has('authorization') || !request.headers.has('cookie')) return;
+
+  const origin = request.headers.get('origin');
+  const host = request.headers.get('host') ?? new URL(request.url).host;
+  let originHost: string | undefined;
+  try {
+    originHost = origin ? new URL(origin).host : undefined;
+  } catch {
+    originHost = undefined;
+  }
+  if (originHost !== host) {
+    throw new ForbiddenError('Cross-site requests are not allowed.');
+  }
 }
 
 function parseInput<S extends z.ZodType>(part: string, schema: S, value: unknown): z.output<S> {

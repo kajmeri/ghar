@@ -173,6 +173,62 @@ export function wallClockTimeInTimeZone(instant: Date, timeZone: TimeZone): stri
   return formatInstant(instant, timeZone, WALL_CLOCK_FORMAT);
 }
 
+/**
+ * A local date and time with no zone, "YYYY-MM-DDTHH:mm": what a person reads off a ticket and
+ * what a datetime-local input holds. It only means an instant once paired with a zone.
+ */
+export type WallClock = string;
+
+const WALL_CLOCK = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
+export function isWallClock(value: string): boolean {
+  return (
+    WALL_CLOCK.test(value) &&
+    isCalendarDate(value.slice(0, 10)) &&
+    Number(value.slice(11, 13)) < 24 &&
+    Number(value.slice(14, 16)) < 60
+  );
+}
+
+/** The wall-clock time an instant shows in a zone, to the minute. */
+export function toWallClock(instant: Date, timeZone: TimeZone): WallClock {
+  const p = zonedParts(instant, timeZone);
+  return `${pad(p.year, 4)}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * The instant a wall-clock time happens in a zone. A time repeated when clocks go back takes the
+ * earlier instant. A time skipped when clocks go forward moves forward by the gap, so 2:30 on a
+ * spring-forward night in New York is 3:30 daylight time.
+ */
+export function instantFromWallClock(value: WallClock, timeZone: TimeZone): Date {
+  if (!isWallClock(value)) {
+    throw new ValidationError(`"${value}" is not a date and time (YYYY-MM-DDTHH:mm)`, {
+      details: { value },
+    });
+  }
+  const asUtc = Date.UTC(
+    Number(value.slice(0, 4)),
+    Number(value.slice(5, 7)) - 1,
+    Number(value.slice(8, 10)),
+    Number(value.slice(11, 13)),
+    Number(value.slice(14, 16)),
+  );
+  // The offsets in force around that time. Zones don't change twice within a day.
+  const offsetBefore = zoneOffsetMs(new Date(asUtc - DAY_MS), timeZone);
+  const offsets = [offsetBefore, zoneOffsetMs(new Date(asUtc), timeZone)];
+  offsets.push(zoneOffsetMs(new Date(asUtc + DAY_MS), timeZone));
+
+  const matching = offsets
+    .map((offset) => asUtc - offset)
+    .filter((candidate) => toWallClock(new Date(candidate), timeZone) === value)
+    .sort((a, b) => a - b);
+
+  return new Date(matching[0] ?? asUtc - offsetBefore);
+}
+
 export interface FormatInstantOptions extends Omit<Intl.DateTimeFormatOptions, 'timeZone'> {
   /** BCP 47 locale. Defaults to en-US. */
   locale?: string;

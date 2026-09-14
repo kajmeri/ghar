@@ -1,5 +1,5 @@
 {
-  "name": "@casa/core",
+  "name": "@ghar/core",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,13 +9,22 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./auth": "./src/auth/index.ts",
+    "./banking": "./src/banking/index.ts",
+    "./calendar": "./src/calendar/index.ts",
     "./dates": "./src/dates.ts",
     "./errors": "./src/errors.ts",
+    "./finances": "./src/finances/index.ts",
     "./household": "./src/household.ts",
+    "./households": "./src/households.ts",
     "./ideas": "./src/ideas.ts",
+    "./invitations": "./src/invitations.ts",
     "./itinerary": "./src/itinerary.ts",
     "./money": "./src/money.ts",
     "./packing": "./src/packing.ts",
+    "./progress": "./src/progress.ts",
+    "./redirects": "./src/redirects.ts",
+    "./travel": "./src/travel/index.ts",
     "./trips": "./src/trips.ts"
   },
   "scripts": {
@@ -24,10 +33,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "date-fns": "^4.4.0"
+    "date-fns": "^4.4.0",
+    "zod": "^4.6.0"
   },
   "devDependencies": {
-    "@casa/config": "workspace:*",
+    "@ghar/config": "workspace:*",
     "eslint": "9.39.5",
     "typescript": "6.0.3",
     "vite": "^8.0.0",

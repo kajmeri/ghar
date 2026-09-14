@@ -5,7 +5,7 @@ import {
   createClient,
   type EndpointDefinition,
   type EndpointInput,
-} from '@casa/contracts';
+} from '@ghar/contracts';
 
 /**
  * The browser's client for app/api/v1, built on the same typed client apps/mobile uses.

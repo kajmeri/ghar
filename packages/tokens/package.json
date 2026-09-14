@@ -1,5 +1,5 @@
 {
-  "name": "@casa/tokens",
+  "name": "@ghar/tokens",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "./tokens.json": "./tokens.json"
   },
   "bin": {
-    "casa-no-hex": "./scripts/check-no-hex.ts"
+    "ghar-no-hex": "./scripts/check-no-hex.ts"
   },
   "scripts": {
     "build": "node scripts/build.ts",
@@ -24,7 +24,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@casa/config": "workspace:*",
+    "@ghar/config": "workspace:*",
     "@types/node": "24.13.4",
     "eslint": "9.39.5",
     "typescript": "6.0.3",

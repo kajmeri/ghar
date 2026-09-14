@@ -1,18 +1,19 @@
-import { formatCountdown, formatTripDates, settleTripStatus, tripPhase } from '@casa/core/trips';
-import { NotFoundError } from '@casa/core/errors';
+import { can } from '@ghar/core/auth';
+import { formatCountdown, formatTripDates, settleTripStatus, tripPhase } from '@ghar/core/trips';
+import { NotFoundError } from '@ghar/core/errors';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Pill } from '@/components/ui/pill';
-import { requireSession } from '@/lib/auth';
-import { loadTripBudget, loadTripDetail } from '@/lib/travel/service';
+import { getPageSession } from '@/lib/api/authed';
+import { loadTripBudget, loadTripDetail } from '@/lib/travel/trips';
 import { BudgetPanel } from './_components/budget-panel';
 import { ItineraryPanel } from './_components/itinerary-panel';
 import { PackingPanel } from './_components/packing-panel';
 import { TripSettings } from './_components/trip-settings';
 import { TripTabs, type TripTab } from './_components/trip-tabs';
 
-export const metadata = { title: 'Trip · Casa' };
+export const metadata = { title: 'Trip' };
 
 const TABS = ['itinerary', 'packing', 'budget'] as const;
 
@@ -30,7 +31,7 @@ export default async function TripPage({
   params: Promise<{ tripId: string }>;
   searchParams: Promise<{ tab?: string }>;
 }) {
-  const session = await requireSession();
+  const session = await getPageSession();
   const { tripId } = await params;
   const { tab: requested } = await searchParams;
   const tab: TripTab = TABS.find((value) => value === requested) ?? 'itinerary';
@@ -95,6 +96,7 @@ export default async function TripPage({
           budget={await loadTripBudget(session, trip.id)}
           tripName={trip.name}
           today={today}
+          canSeeCharges={can(session.context.role, 'finances.manage')}
         />
       )}
     </div>

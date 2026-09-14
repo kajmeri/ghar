@@ -9,24 +9,24 @@ import type {
   TripIdea,
   TripSummary,
   TripTransaction,
-} from '@casa/contracts';
+} from '@ghar/contracts';
 import type {
   BookingRow,
-  HouseholdMemberRow,
   ItineraryItemRow,
+  MemberRow,
   PackingItemRow,
   PackingTemplateWithItems,
-  TransactionRow,
   TripIdeaRow,
+  TripTransactionRow,
   TripWithCounts,
-} from '@casa/db/queries';
+} from '@ghar/db/queries';
 
 /**
  * Rows in, contract shapes out. One direction, one place.
  *
  * The only real work is timestamps: the database hands back Date objects and the wire
- * carries ISO strings. Everything else is a rename-free copy, which is the point: if a
- * column and its contract field drift apart, this file stops compiling.
+ * carries ISO strings. Everything else is a copy, which is the point: if a column and its
+ * contract field drift apart, this file stops compiling.
  */
 
 const instant = (value: Date | null): string | null => value?.toISOString() ?? null;
@@ -58,8 +58,9 @@ export function toTripSummary(row: TripWithCounts): TripSummary {
   };
 }
 
-export function toHouseholdMember(row: HouseholdMemberRow): HouseholdMember {
-  return { userId: row.userId, displayName: row.displayName, role: row.role };
+/** The name is the one on the person's profile. */
+export function toHouseholdMember(row: MemberRow): HouseholdMember {
+  return { userId: row.userId, displayName: row.fullName, role: row.role };
 }
 
 export function toItineraryItem(row: ItineraryItemRow): ItineraryItem {
@@ -87,22 +88,29 @@ export function toItineraryItem(row: ItineraryItemRow): ItineraryItem {
 export function toBooking(row: BookingRow): Booking {
   return {
     id: row.id,
-    tripId: row.tripId,
     kind: row.kind,
-    title: row.title,
-    provider: row.provider,
+    status: row.status,
     confirmationCode: row.confirmationCode,
-    startsAt: instant(row.startsAt),
-    endsAt: instant(row.endsAt),
+    providerName: row.providerName,
+    carrier: row.carrier,
+    cabin: row.cabin,
+    ratePlan: row.ratePlan,
+    refundable: row.refundable,
     origin: row.origin,
     destination: row.destination,
-    address: row.address,
-    lat: row.lat,
-    lng: row.lng,
-    costCents: row.costCents,
-    url: row.url,
-    notes: row.notes,
+    propertyName: row.propertyName,
+    checkIn: row.checkIn,
+    checkOut: row.checkOut,
+    departAt: instant(row.departAt),
+    returnAt: instant(row.returnAt),
+    travelers: row.travelers,
+    paidCents: row.paidCents,
+    currency: row.currency,
+    watchEnabled: row.watchEnabled,
+    source: row.source,
+    tripId: row.tripId,
     createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -145,12 +153,12 @@ export function toTripIdea(row: TripIdeaRow): TripIdea {
   };
 }
 
-export function toTripTransaction(row: TransactionRow): TripTransaction {
+export function toTripTransaction(row: TripTransactionRow): TripTransaction {
   return {
     id: row.id,
-    postedOn: row.postedOn,
-    description: row.description,
-    merchant: row.merchant,
+    postedOn: row.date,
+    description: row.name,
+    merchant: row.merchantName,
     amountCents: row.amountCents,
     tripId: row.tripId,
   };

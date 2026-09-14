@@ -1,6 +1,6 @@
 import 'server-only';
-import type { LinkPreview } from '@casa/contracts';
-import { ValidationError } from '@casa/core/errors';
+import type { LinkPreview } from '@ghar/contracts';
+import { ValidationError } from '@ghar/core/errors';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
@@ -26,7 +26,7 @@ const MAX_BYTES = 512 * 1024;
 const TIMEOUT_MS = 5000;
 const MAX_REDIRECTS = 3;
 
-const USER_AGENT = 'Casa/1.0 (household app; reads OpenGraph tags only)';
+const USER_AGENT = 'Ghar/1.0 (household app; reads OpenGraph tags only)';
 
 function realProvider(): OpenGraphProvider {
   return {

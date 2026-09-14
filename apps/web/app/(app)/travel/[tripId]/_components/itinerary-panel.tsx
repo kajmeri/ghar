@@ -6,10 +6,10 @@ import {
   reorderItinerary,
   type ItineraryItem,
   type TripDetail,
-} from '@casa/contracts';
-import { formatCalendarDate } from '@casa/core/dates';
-import { groupByDay } from '@casa/core/itinerary';
-import { tripDayNumber } from '@casa/core/trips';
+} from '@ghar/contracts';
+import { formatCalendarDate } from '@ghar/core/dates';
+import { groupByDay } from '@ghar/core/itinerary';
+import { tripDayNumber } from '@ghar/core/trips';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -27,7 +27,7 @@ import { StopMap } from './stop-map';
  * same column with the trip's stops plotted beside it, because there is room.
  *
  * Order is the person's, not the clock's: dragging on desktop and the move buttons on
- * mobile both write a position, and @casa/core decides what the new positions are.
+ * mobile both write a position, and @ghar/core decides what the new positions are.
  */
 export function ItineraryPanel({ detail }: { detail: TripDetail }) {
   const { trip, itinerary, bookings, timeZone, today } = detail;
@@ -35,7 +35,7 @@ export function ItineraryPanel({ detail }: { detail: TripDetail }) {
   const [editing, setEditing] = useState<ItineraryItem | null>(null);
 
   // Instants are ISO on the wire and the ordering rules want Dates, so the row travels
-  // alongside the shape @casa/core sorts and groups by rather than being converted twice.
+  // alongside the shape @ghar/core sorts and groups by rather than being converted twice.
   const days = groupByDay(
     itinerary.map((item) => ({
       id: item.id,
@@ -143,7 +143,7 @@ export function ItineraryPanel({ detail }: { detail: TripDetail }) {
   );
 }
 
-/** One row on the timeline: what @casa/core orders by, plus the row itself to render. */
+/** One row on the timeline: what @ghar/core orders by, plus the row itself to render. */
 interface TimelineEntry {
   id: string;
   day: string;

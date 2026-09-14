@@ -7,17 +7,17 @@
     "node": ">=24.16.0 <25"
   },
   "scripts": {
-    "start": "turbo run build --filter=@casa/tokens --output-logs=errors-only && expo start",
+    "start": "turbo run build --filter=@ghar/tokens --output-logs=errors-only && expo start",
     "dev": "expo start",
-    "ios": "turbo run build --filter=@casa/tokens --output-logs=errors-only && expo start --ios",
+    "ios": "turbo run build --filter=@ghar/tokens --output-logs=errors-only && expo start --ios",
     "build": "expo export --platform ios --platform android --output-dir dist",
-    "lint": "eslint . && casa-no-hex",
+    "lint": "eslint . && ghar-no-hex",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@casa/core": "workspace:*",
-    "@casa/tokens": "workspace:*",
+    "@ghar/core": "workspace:*",
+    "@ghar/tokens": "workspace:*",
     "@expo/metro-runtime": "~57.0.15",
     "expo": "~57.0.22",
     "expo-constants": "~57.0.18",
@@ -32,7 +32,7 @@
     "react-native-worklets": "0.10.1"
   },
   "devDependencies": {
-    "@casa/config": "workspace:*",
+    "@ghar/config": "workspace:*",
     "@types/node": "24.13.4",
     "@types/react": "19.2.18",
     "eslint": "9.39.5",

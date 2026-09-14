@@ -1,17 +1,17 @@
 {
   "expo": {
-    "name": "Casa",
-    "slug": "casa",
+    "name": "Ghar",
+    "slug": "ghar",
     "version": "0.0.0",
     "orientation": "portrait",
-    "scheme": "casa",
+    "scheme": "ghar",
     "userInterfaceStyle": "light",
     "ios": {
-      "bundleIdentifier": "app.casa.mobile",
+      "bundleIdentifier": "app.ghar.mobile",
       "supportsTablet": false
     },
     "android": {
-      "package": "app.casa.mobile"
+      "package": "app.ghar.mobile"
     },
     "plugins": ["expo-router"],
     "experiments": {

@@ -30,6 +30,9 @@
     "db:migrate": {
       "cache": false,
       "env": ["DATABASE_URL"]
+    },
+    "db:seed": {
+      "cache": false
     }
   }
 }

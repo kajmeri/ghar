@@ -18,7 +18,7 @@ export interface FetchResponseLike {
 }
 
 export interface ClientOptions {
-  /** Origin of apps/web, such as "https://casa.example.com". Endpoint paths start with /api/v1. */
+  /** Origin of apps/web, such as "https://ghar.example.com". Endpoint paths start with /api/v1. */
   baseUrl: string;
   /** Returns the current access token, or null when signed out. Called before every request. */
   getToken: () => string | null | undefined | Promise<string | null | undefined>;
@@ -52,7 +52,7 @@ export class ApiClientError extends Error {
   }
 }
 
-export type CasaClient = ReturnType<typeof createClient>;
+export type GharClient = ReturnType<typeof createClient>;
 
 interface WireInput {
   params?: Record<string, string>;

@@ -1,6 +1,6 @@
 'use client';
 
-import { travelModeSchema, type TravelMode } from '@casa/contracts';
+import { travelModeSchema, type TravelMode } from '@ghar/contracts';
 
 /**
  * Travel mode's offline copy.
@@ -13,7 +13,7 @@ import { travelModeSchema, type TravelMode } from '@casa/contracts';
  * is thrown away rather than rendered, because a shape that half-matches is worse than no
  * cache at all.
  */
-const KEY = (tripId: string) => `casa:travel-mode:${tripId}`;
+const KEY = (tripId: string) => `ghar:travel-mode:${tripId}`;
 
 export function cacheTravelMode(mode: TravelMode): void {
   try {

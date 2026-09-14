@@ -1,9 +1,9 @@
 'use client';
 
-import { deleteTrip, updateTrip, type HouseholdMember, type Trip } from '@casa/contracts';
-import { compareMembers, memberLabel } from '@casa/core/household';
-import { parseMoneyInput } from '@casa/core/money';
-import { TRIP_STATUSES, type TripStatus } from '@casa/core/trips';
+import { deleteTrip, updateTrip, type HouseholdMember, type Trip } from '@ghar/contracts';
+import { compareMembers, memberLabel } from '@ghar/core/household';
+import { parseMoneyInput } from '@ghar/core/money';
+import { TRIP_STATUSES, type TripStatus } from '@ghar/core/trips';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type SyntheticEvent } from 'react';

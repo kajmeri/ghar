@@ -54,6 +54,13 @@ const tokensSchema = z
         opacity: z.number().min(0).max(1),
       }),
     }),
+    motion: z.object({
+      duration: z.record(z.string().regex(kebab), z.int().positive()),
+      easing: z.record(
+        z.string().regex(kebab),
+        z.tuple([z.number().min(0).max(1), z.number(), z.number().min(0).max(1), z.number()]),
+      ),
+    }),
   })
   .superRefine((tokens, ctx) => {
     if (!(tokens.shadow.overlay.color in tokens.color)) {

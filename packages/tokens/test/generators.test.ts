@@ -68,5 +68,13 @@ describe('generators', () => {
     expect(generated.colors.inkMuted).toBe(tokens.color['ink-muted']?.value);
     expect(generated.radius).toEqual({ card: 12, control: 8, pill: 999 });
     expect(generated.space[4]).toBe(16);
+    expect(generated.motion.duration.overlay).toBe(tokens.motion.duration.overlay);
+  });
+
+  it('emits motion tokens and clears the default animations', () => {
+    const tailwind = renderTailwindCss(tokens);
+    expect(tailwind).toContain('--animate-*: initial;');
+    expect(tailwind).toContain('--ease-enter: cubic-bezier(0.2, 0, 0, 1);');
+    expect(tailwind).toContain('--duration-overlay: 200ms;');
   });
 });

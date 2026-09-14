@@ -1,5 +1,5 @@
 {
-  "extends": "@casa/config/tsconfig/isomorphic.json",
+  "extends": "@ghar/config/tsconfig/isomorphic.json",
   "compilerOptions": {
     "types": ["node"],
     "allowImportingTsExtensions": true,

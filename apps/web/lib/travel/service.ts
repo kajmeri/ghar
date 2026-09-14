@@ -1,188 +1,175 @@
 import 'server-only';
-import type { TravelHub, TravelMode, TripDetail } from '@casa/contracts';
-import { todayInTimeZone } from '@casa/core/dates';
-import { itineraryDraftFromBooking } from '@casa/core/itinerary';
-import { tripCommittedCents } from '@casa/core/trips';
+import type {
+  Booking,
+  BookingBody,
+  BookingDetail,
+  BookingListItem,
+  PriceAlert,
+  PriceCheck,
+  PriceSummary,
+  RequestContext,
+} from '@ghar/contracts';
+import { addCalendarDays, todayInTimeZone } from '@ghar/core/dates';
 import {
-  countPastTrips,
-  insertGeneratedItems,
-  listBookings,
-  listHouseholdMembers,
-  listItineraryItems,
-  listPackingItems,
-  listTransactions,
-  listTripIdeas,
-  listTrips,
-  requireTrip,
-  sumTripActualCents,
-  getTripWithCounts,
-  type ItineraryItemRow,
-} from '@casa/db/queries';
-import type { Session } from '../auth';
-import { getDb } from '../db';
-import {
-  toBooking,
-  toHouseholdMember,
-  toItineraryItem,
-  toPackingItem,
-  toTrip,
-  toTripIdea,
-  toTripSummary,
-  toTripTransaction,
-} from './serialize';
+  actionabilityFor,
+  alertCeilingCents,
+  comparePriceChecks,
+  dailyPriceSeries,
+  isWatchable,
+  summarizePriceHistory,
+  type BookingFields,
+} from '@ghar/core/travel';
+import * as queries from '@ghar/db/queries';
+import { getDb } from '@/lib/db';
+import { toBooking } from '@/lib/travel/serialize';
 
-/**
- * The orchestration behind the travel feature: several queries, assembled into one answer.
- * Route handlers and Server Components both come through here, so a page and its API
- * never drift into showing different things.
- *
- * "Today" is always the household's today. The server decides it, because a phone in a
- * different zone is still on the household's trip.
- */
+// Bookings and their price history, shared by app/api/v1/travel and the travel pages. The rules
+// live in @ghar/core/travel and the queries; this assembles them and turns rows into contracts.
 
-export async function loadTravelHub(session: Session): Promise<TravelHub> {
-  const db = getDb();
-  const { context, household } = session;
-  const today = todayInTimeZone(household.timeZone);
+const SPARKLINE_DAYS = 30;
+const RECENT_CHECKS = 20;
 
-  const [trips, pastTripCount, unlinkedBookings, ideas] = await Promise.all([
-    listTrips(db, context, { phase: 'upcoming', today }),
-    countPastTrips(db, context, today),
-    listBookings(db, context, { filed: 'unlinked' }),
-    listTripIdeas(db, context),
-  ]);
-
-  return {
-    today,
-    timeZone: household.timeZone,
-    trips: trips.map(toTripSummary),
-    pastTripCount,
-    unlinkedBookings: unlinkedBookings.map(toBooking),
-    ideas: ideas.map(toTripIdea),
-  };
+/** The household's zone and currency, which the travel pages render and enter amounts in. */
+export async function getTravelSettings(
+  ctx: RequestContext,
+): Promise<{ timezone: string; currency: string }> {
+  const { timezone, currency } = await queries.getHousehold(ctx, getDb());
+  return { timezone, currency };
 }
 
-export async function loadTripDetail(session: Session, tripId: string): Promise<TripDetail> {
+export async function listBookings(ctx: RequestContext): Promise<BookingListItem[]> {
   const db = getDb();
-  const { context, household } = session;
-
-  const [trip, members, itinerary, bookings, packing, actualCents] = await Promise.all([
-    getTripWithCounts(db, context, tripId),
-    listHouseholdMembers(db, context),
-    listItineraryItems(db, context, tripId),
-    listBookings(db, context, { tripId }),
-    listPackingItems(db, context, tripId),
-    sumTripActualCents(db, context, tripId),
+  const [household, rows] = await Promise.all([
+    queries.getHousehold(ctx, db),
+    queries.listBookings(ctx, db),
   ]);
-
-  return {
-    trip: toTrip(trip),
-    timeZone: household.timeZone,
-    today: todayInTimeZone(household.timeZone),
-    members: members.map(toHouseholdMember),
-    itinerary: itinerary.map(toItineraryItem),
-    bookings: bookings.map(toBooking),
-    packing: packing.map(toPackingItem),
-    actualCents,
-    // What the plan expects to cost, from the itinerary. Bookings show up through the
-    // items generated from them, so counting both would double every linked booking.
-    committedCents: tripCommittedCents(itinerary),
-  };
-}
-
-export async function loadTripBudget(session: Session, tripId: string) {
-  const db = getDb();
-  const { context } = session;
-
-  const [trip, itinerary, actualCents, transactions] = await Promise.all([
-    requireTrip(db, context, tripId),
-    listItineraryItems(db, context, tripId),
-    sumTripActualCents(db, context, tripId),
-    listTransactions(db, context, { tripId, limit: 200 }),
-  ]);
-
-  return {
-    tripId: trip.id,
-    plannedCents: trip.budgetCents,
-    actualCents,
-    committedCents: tripCommittedCents(itinerary),
-    transactions: transactions.map(toTripTransaction),
-  };
-}
-
-/**
- * Travel mode gets the whole trip, not just today: a client that caches this still has
- * tomorrow when there is no signal. `generatedAt` is what a cached copy shows to say how
- * old it is.
- */
-export async function loadTravelMode(session: Session, tripId: string): Promise<TravelMode> {
-  const db = getDb();
-  const { context, household } = session;
-
-  const [trip, items, bookings] = await Promise.all([
-    getTripWithCounts(db, context, tripId),
-    listItineraryItems(db, context, tripId),
-    listBookings(db, context, { tripId }),
-  ]);
-
-  return {
-    trip: toTrip(trip),
-    timeZone: household.timeZone,
-    today: todayInTimeZone(household.timeZone),
-    generatedAt: new Date().toISOString(),
-    items: items.map(toItineraryItem),
-    bookings: bookings.map(toBooking),
-  };
-}
-
-/**
- * Fills the timeline in from the trip's linked bookings.
- *
- * Idempotent twice over: bookings that already have an item are filtered out here, and the
- * unique index on (trip_id, booking_id) catches anything that slips past a concurrent run.
- * Bookings with no date and a trip with no dates have nowhere to go, and come back as
- * skipped rather than being guessed at.
- */
-export async function generateItineraryFromBookings(
-  session: Session,
-  tripId: string,
-  bookingIds?: readonly string[],
-): Promise<{ items: ItineraryItemRow[]; createdCount: number; skippedBookingIds: string[] }> {
-  const db = getDb();
-  const { context, household } = session;
-
-  const trip = await requireTrip(db, context, tripId);
-  const [linked, existing] = await Promise.all([
-    listBookings(db, context, { tripId }),
-    listItineraryItems(db, context, tripId),
-  ]);
-
-  const alreadyOnTimeline = new Set(
-    existing.flatMap((item) => (item.bookingId === null ? [] : [item.bookingId])),
-  );
-  const wanted = bookingIds ? new Set(bookingIds) : null;
-
-  const skippedBookingIds: string[] = [];
-  const drafts = [];
-  for (const booking of linked) {
-    if (alreadyOnTimeline.has(booking.id)) continue;
-    if (wanted && !wanted.has(booking.id)) continue;
-
-    const draft = itineraryDraftFromBooking(booking, {
-      timeZone: household.timeZone,
-      fallbackDay: trip.startsOn,
-    });
-    if (!draft) {
-      skippedBookingIds.push(booking.id);
-      continue;
-    }
-    drafts.push({ ...draft, notes: null });
+  const checks = await queries.listPriceChecks(ctx, db, {
+    bookingIds: rows.map((row) => row.id),
+    since: null,
+  });
+  const checksByBooking = new Map<string, queries.PriceCheckRow[]>();
+  for (const check of checks) {
+    const own = checksByBooking.get(check.bookingId);
+    if (own) own.push(check);
+    else checksByBooking.set(check.bookingId, [check]);
   }
+  const firstDay = addCalendarDays(todayInTimeZone(household.timezone), -(SPARKLINE_DAYS - 1));
 
-  const created = await insertGeneratedItems(db, tripId, drafts);
+  return rows.map((row) => {
+    const own = checksByBooking.get(row.id) ?? [];
+    return {
+      booking: toBooking(row),
+      price: toPriceSummary(summarizePriceHistory(own, row.paidCents)),
+      sparkline: dailyPriceSeries(own, household.timezone).filter((day) => day.date >= firstDay),
+    };
+  });
+}
+
+export async function getBookingDetail(
+  ctx: RequestContext,
+  input: { bookingId: string },
+): Promise<BookingDetail> {
+  const db = getDb();
+  const [household, row, alerts, floorCents] = await Promise.all([
+    queries.getHousehold(ctx, db),
+    queries.getBooking(ctx, db, input),
+    queries.listPriceAlerts(ctx, db, input),
+    queries.getAlertFloor(ctx, db, input),
+  ]);
+  const checks = await queries.listPriceChecks(ctx, db, { bookingIds: [row.id], since: null });
+  const now = new Date();
+  const rule = actionabilityFor(row);
+
   return {
-    items: await listItineraryItems(db, context, tripId),
-    createdCount: created.length,
-    skippedBookingIds,
+    booking: toBooking(row),
+    price: toPriceSummary(summarizePriceHistory(checks, row.paidCents)),
+    history: dailyPriceSeries(checks, household.timezone),
+    checks: [...checks]
+      .sort(comparePriceChecks)
+      .reverse()
+      .slice(0, RECENT_CHECKS)
+      .map(toPriceCheck),
+    alerts: alerts.map(toPriceAlert),
+    watchable: isWatchable(row, { now, today: todayInTimeZone(household.timezone, now) }),
+    alertBelowCents: rule.actionable ? alertCeilingCents({ booking: row, floorCents }) : null,
+    actionability: { actionable: rule.actionable, action: rule.action, reason: rule.reason },
+  };
+}
+
+export async function getBooking(
+  ctx: RequestContext,
+  input: { bookingId: string },
+): Promise<Booking> {
+  return toBooking(await queries.getBooking(ctx, getDb(), input));
+}
+
+/** A contract body has instants as ISO strings; the domain has Dates. */
+export function bookingFieldsFromBody(body: BookingBody): BookingFields {
+  return {
+    ...body,
+    departAt: body.departAt === null ? null : new Date(body.departAt),
+    returnAt: body.returnAt === null ? null : new Date(body.returnAt),
+  };
+}
+
+export async function createBooking(ctx: RequestContext, fields: BookingFields): Promise<Booking> {
+  return toBooking(await queries.createBooking(ctx, getDb(), fields));
+}
+
+export async function updateBooking(
+  ctx: RequestContext,
+  input: BookingFields & { bookingId: string },
+): Promise<Booking> {
+  return toBooking(await queries.updateBooking(ctx, getDb(), input));
+}
+
+export async function setBookingWatch(
+  ctx: RequestContext,
+  input: { bookingId: string; watchEnabled: boolean },
+): Promise<Booking> {
+  return toBooking(await queries.setBookingWatch(ctx, getDb(), input));
+}
+
+export async function deleteBooking(
+  ctx: RequestContext,
+  input: { bookingId: string },
+): Promise<{ bookingId: string }> {
+  await queries.deleteBooking(ctx, getDb(), input);
+  return { bookingId: input.bookingId };
+}
+
+function toPriceSummary(summary: ReturnType<typeof summarizePriceHistory>): PriceSummary {
+  return {
+    latest: summary.latest && {
+      priceCents: summary.latest.priceCents,
+      confidence: summary.latest.confidence,
+      checkedAt: summary.latest.checkedAt.toISOString(),
+    },
+    deltaCents: summary.deltaCents,
+    lowestCents: summary.lowestCents,
+    lastCheckedAt: summary.lastCheckedAt?.toISOString() ?? null,
+    lastCheckFailed: summary.lastCheckFailed,
+  };
+}
+
+function toPriceCheck(row: queries.PriceCheckRow): PriceCheck {
+  return {
+    id: row.id,
+    checkedAt: row.checkedAt.toISOString(),
+    provider: row.provider,
+    priceCents: row.priceCents,
+    confidence: row.confidence,
+    success: row.success,
+    error: row.error,
+  };
+}
+
+function toPriceAlert(row: queries.PriceAlertRow): PriceAlert {
+  return {
+    id: row.id,
+    sentAt: row.sentAt.toISOString(),
+    priceCents: row.priceCents,
+    deltaCents: row.deltaCents,
+    floorCents: row.floorCents,
   };
 }

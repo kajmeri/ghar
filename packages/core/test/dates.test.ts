@@ -5,11 +5,14 @@ import {
   formatCalendarDate,
   formatInstant,
   instantInTimeZone,
+  instantFromWallClock,
   isCalendarDate,
+  isWallClock,
   startOfDayInTimeZone,
   toCalendarDate,
   todayInTimeZone,
   wallClockTimeInTimeZone,
+  toWallClock,
 } from '../src/dates';
 import { ValidationError } from '../src/errors';
 
@@ -53,6 +56,43 @@ describe('startOfDayInTimeZone', () => {
     const start = startOfDayInTimeZone('2026-09-13', 'Australia/Lord_Howe');
     expect(toCalendarDate(start, 'Australia/Lord_Howe')).toBe('2026-09-13');
     expect(toCalendarDate(new Date(start.getTime() - 1), 'Australia/Lord_Howe')).toBe('2026-09-12');
+  });
+});
+
+describe('wall-clock times', () => {
+  it.each([
+    ['2026-09-13T14:05', 'UTC', '2026-09-13T14:05:00.000Z'],
+    ['2026-09-13T14:05', 'America/Los_Angeles', '2026-09-13T21:05:00.000Z'],
+    ['2026-09-14T01:30', 'Asia/Kolkata', '2026-09-13T20:00:00.000Z'],
+    // Repeated when clocks go back: the earlier instant, west and east of UTC.
+    ['2026-11-01T01:30', 'America/New_York', '2026-11-01T05:30:00.000Z'],
+    ['2026-10-25T01:30', 'Europe/London', '2026-10-25T00:30:00.000Z'],
+    // Skipped when clocks go forward: moved forward by the gap.
+    ['2026-03-08T02:30', 'America/New_York', '2026-03-08T07:30:00.000Z'],
+    ['2026-03-29T01:30', 'Europe/London', '2026-03-29T01:30:00.000Z'],
+  ])('%s in %s is %s', (value, zone, expected) => {
+    expect(instantFromWallClock(value, zone).toISOString()).toBe(expected);
+  });
+
+  it('round-trips through the zone', () => {
+    const instant = instantFromWallClock('2026-12-24T18:45', 'Australia/Sydney');
+    expect(toWallClock(instant, 'Australia/Sydney')).toBe('2026-12-24T18:45');
+    expect(toWallClock(instant, 'UTC')).toBe('2026-12-24T07:45');
+  });
+
+  it.each([
+    ['2026-09-13T14:05', true],
+    ['2026-09-13T24:00', false],
+    ['2026-09-13T14:60', false],
+    ['2026-02-30T10:00', false],
+    ['2026-09-13T14:05:00', false],
+    ['2026-09-13', false],
+  ])('isWallClock(%j) is %s', (value, expected) => {
+    expect(isWallClock(value)).toBe(expected);
+  });
+
+  it('rejects a malformed time', () => {
+    expect(() => instantFromWallClock('tomorrow', 'UTC')).toThrow(ValidationError);
   });
 });
 

@@ -1,9 +1,9 @@
 'use client';
 
-import { createItineraryItem, updateItineraryItem, type ItineraryItem } from '@casa/contracts';
-import { instantInTimeZone, wallClockTimeInTimeZone } from '@casa/core/dates';
-import { ITINERARY_KINDS, type ItineraryKind } from '@casa/core/itinerary';
-import { parseMoneyInput } from '@casa/core/money';
+import { createItineraryItem, updateItineraryItem, type ItineraryItem } from '@ghar/contracts';
+import { instantInTimeZone, wallClockTimeInTimeZone } from '@ghar/core/dates';
+import { ITINERARY_KINDS, type ItineraryKind } from '@ghar/core/itinerary';
+import { parseMoneyInput } from '@ghar/core/money';
 import { useState, type SyntheticEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';

@@ -1,1 +1,0 @@
-ALTER TABLE "household_members" ADD COLUMN "display_name" text;

@@ -1,16 +1,25 @@
-import 'server-only';
-import type { RequestContext } from '@casa/contracts';
-import type { CalendarDate } from '@casa/core/dates';
-import { NotFoundError } from '@casa/core/errors';
-import { applyVote, type Vote } from '@casa/core/ideas';
-import { and, eq } from 'drizzle-orm';
-import type { Database } from '../index';
+import { requirePermission } from '@ghar/core/auth';
+import type { CalendarDate } from '@ghar/core/dates';
+import { NotFoundError } from '@ghar/core/errors';
+import { applyVote, type Vote } from '@ghar/core/ideas';
+import { and, eq, sql } from 'drizzle-orm';
 import { tripIdeas } from '../schema';
+import { recordAudit } from './audit';
 import { createTrip, type TripWithCounts } from './trips';
+import type { Db, RequestContext } from './types';
+
+// The idea board: places the household might go, voted on, and promoted into trips.
 
 export type TripIdeaRow = typeof tripIdeas.$inferSelect;
 
-export async function listTripIdeas(db: Database, ctx: RequestContext): Promise<TripIdeaRow[]> {
+const IDEA_NOT_FOUND = 'That idea no longer exists.';
+
+function ideaKey(ctx: RequestContext, ideaId: string) {
+  return and(eq(tripIdeas.id, ideaId), eq(tripIdeas.householdId, ctx.householdId));
+}
+
+export async function listTripIdeas(ctx: RequestContext, db: Db): Promise<TripIdeaRow[]> {
+  requirePermission(ctx, 'travel.view');
   return db
     .select()
     .from(tripIdeas)
@@ -19,22 +28,19 @@ export async function listTripIdeas(db: Database, ctx: RequestContext): Promise<
 }
 
 export async function requireTripIdea(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   ideaId: string,
 ): Promise<TripIdeaRow> {
-  const [idea] = await db
-    .select()
-    .from(tripIdeas)
-    .where(and(eq(tripIdeas.id, ideaId), eq(tripIdeas.householdId, ctx.householdId)))
-    .limit(1);
-  if (!idea) throw new NotFoundError('That idea does not exist');
+  requirePermission(ctx, 'travel.view');
+  const [idea] = await db.select().from(tripIdeas).where(ideaKey(ctx, ideaId)).limit(1);
+  if (!idea) throw new NotFoundError(IDEA_NOT_FOUND);
   return idea;
 }
 
 export async function createTripIdea(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   input: {
     title: string;
     destination: string | null;
@@ -43,6 +49,7 @@ export async function createTripIdea(
     imageUrl: string | null;
   },
 ): Promise<TripIdeaRow> {
+  requirePermission(ctx, 'travel.manage');
   const [idea] = await db
     .insert(tripIdeas)
     .values({ householdId: ctx.householdId, createdByUserId: ctx.userId, ...input })
@@ -51,16 +58,21 @@ export async function createTripIdea(
   return idea;
 }
 
-export async function deleteTripIdea(
-  db: Database,
-  ctx: RequestContext,
-  ideaId: string,
-): Promise<void> {
-  const [deleted] = await db
-    .delete(tripIdeas)
-    .where(and(eq(tripIdeas.id, ideaId), eq(tripIdeas.householdId, ctx.householdId)))
-    .returning({ id: tripIdeas.id });
-  if (!deleted) throw new NotFoundError('That idea does not exist');
+export async function deleteTripIdea(ctx: RequestContext, db: Db, ideaId: string): Promise<void> {
+  requirePermission(ctx, 'travel.manage');
+  await db.transaction(async (tx) => {
+    const [deleted] = await tx
+      .delete(tripIdeas)
+      .where(ideaKey(ctx, ideaId))
+      .returning({ id: tripIdeas.id, title: tripIdeas.title });
+    if (!deleted) throw new NotFoundError(IDEA_NOT_FOUND);
+    await recordAudit(ctx, tx, {
+      action: 'trip_idea.deleted',
+      entity: 'trip_idea',
+      entityId: ideaId,
+      metadata: { title: deleted.title },
+    });
+  });
 }
 
 /**
@@ -68,26 +80,27 @@ export async function deleteTripIdea(
  * voting at once do not lose each other's vote.
  */
 export async function voteOnTripIdea(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   ideaId: string,
   vote: Vote | null,
 ): Promise<TripIdeaRow> {
+  requirePermission(ctx, 'travel.manage');
   return db.transaction(async (tx) => {
     const [current] = await tx
       .select()
       .from(tripIdeas)
-      .where(and(eq(tripIdeas.id, ideaId), eq(tripIdeas.householdId, ctx.householdId)))
+      .where(ideaKey(ctx, ideaId))
       .limit(1)
       .for('update');
-    if (!current) throw new NotFoundError('That idea does not exist');
+    if (!current) throw new NotFoundError(IDEA_NOT_FOUND);
 
     const [idea] = await tx
       .update(tripIdeas)
-      .set({ votes: applyVote(current.votes, ctx.userId, vote), updatedAt: new Date() })
-      .where(eq(tripIdeas.id, ideaId))
+      .set({ votes: applyVote(current.votes, ctx.userId, vote), updatedAt: sql`now()` })
+      .where(ideaKey(ctx, ideaId))
       .returning();
-    if (!idea) throw new NotFoundError('That idea does not exist');
+    if (!idea) throw new NotFoundError(IDEA_NOT_FOUND);
     return idea;
   });
 }
@@ -100,23 +113,33 @@ export async function voteOnTripIdea(
  * the distinction the board is drawing in the first place.
  */
 export async function promoteTripIdea(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   ideaId: string,
   input: { name?: string; startsOn: CalendarDate | null; endsOn: CalendarDate | null },
 ): Promise<TripWithCounts> {
-  const idea = await requireTripIdea(db, ctx, ideaId);
-  const trip = await createTrip(db, ctx, {
-    name: input.name ?? idea.title,
-    destination: idea.destination,
-    startsOn: input.startsOn,
-    endsOn: input.endsOn,
-    status: input.startsOn === null ? 'idea' : 'planned',
-    coverImageUrl: idea.imageUrl,
-    budgetCents: null,
-    notes: idea.notes,
-    memberUserIds: [],
+  requirePermission(ctx, 'travel.manage');
+  const idea = await requireTripIdea(ctx, db, ideaId);
+
+  return db.transaction(async (tx) => {
+    const trip = await createTrip(ctx, tx, {
+      name: input.name ?? idea.title,
+      destination: idea.destination,
+      startsOn: input.startsOn,
+      endsOn: input.endsOn,
+      status: input.startsOn === null ? 'idea' : 'planned',
+      coverImageUrl: idea.imageUrl,
+      budgetCents: null,
+      notes: idea.notes,
+      memberUserIds: [],
+    });
+    await tx.delete(tripIdeas).where(ideaKey(ctx, ideaId));
+    await recordAudit(ctx, tx, {
+      action: 'trip_idea.promoted',
+      entity: 'trip_idea',
+      entityId: ideaId,
+      metadata: { tripId: trip.id },
+    });
+    return trip;
   });
-  await deleteTripIdea(db, ctx, ideaId);
-  return trip;
 }

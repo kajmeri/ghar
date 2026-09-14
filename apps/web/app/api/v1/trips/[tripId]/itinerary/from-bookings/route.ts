@@ -1,12 +1,16 @@
-import { generateItineraryFromBookings } from '@casa/contracts';
+import { generateItineraryFromBookings } from '@ghar/contracts';
+import { generateItineraryFromBookings as generate } from '@ghar/db/queries';
 import { authedRoute } from '@/lib/api/authed';
+import { getDb } from '@/lib/db';
 import { toItineraryItem } from '@/lib/travel/serialize';
-import { generateItineraryFromBookings as generate } from '@/lib/travel/service';
 
 export const POST = authedRoute(
   generateItineraryFromBookings,
-  async ({ params, body }, session) => {
-    const result = await generate(session, params.tripId, body.bookingIds);
+  async ({ params, body }, { context, household }) => {
+    const result = await generate(context, getDb(), params.tripId, {
+      timeZone: household.timeZone,
+      bookingIds: body.bookingIds,
+    });
     return { ...result, items: result.items.map(toItineraryItem) };
   },
 );

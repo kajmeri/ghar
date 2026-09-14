@@ -1,20 +1,25 @@
-import { createTransaction, listTransactions } from '@casa/contracts';
-import {
-  createTransaction as insertTransaction,
-  listTransactions as selectTransactions,
-} from '@casa/db/queries';
+import { createTransaction, listTransactions } from '@ghar/contracts';
+import { createManualTransaction, listTripTransactions } from '@ghar/db/queries';
 import { authedRoute } from '@/lib/api/authed';
 import { getDb } from '@/lib/db';
 import { toTripTransaction } from '@/lib/travel/serialize';
 
 export const GET = authedRoute(listTransactions, async ({ query }, { context }) => ({
-  transactions: (await selectTransactions(getDb(), context, query)).map(toTripTransaction),
+  transactions: (await listTripTransactions(context, getDb(), query)).map(toTripTransaction),
 }));
 
 export const POST = authedRoute(
   createTransaction,
   async ({ body }, { context }) => ({
-    transaction: toTripTransaction(await insertTransaction(getDb(), context, body)),
+    transaction: toTripTransaction(
+      await createManualTransaction(context, getDb(), {
+        date: body.postedOn,
+        name: body.description,
+        merchantName: body.merchant,
+        amountCents: body.amountCents,
+        tripId: body.tripId,
+      }),
+    ),
   }),
   { status: 201 },
 );

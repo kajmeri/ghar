@@ -4,12 +4,12 @@ import { z } from 'zod';
  * The wire vocabulary. Every value that crosses the API boundary is one of these, so a
  * change here shows up as a typecheck failure in both the route handler and the clients.
  *
- * The enums repeat the ones in @casa/core on purpose: contracts depends on zod alone (see
+ * The enums repeat the ones in @ghar/core on purpose: contracts depends on zod alone (see
  * the boundary rule in CLAUDE.md). They cannot drift silently, because apps/web passes
  * parsed values straight into core's functions and a mismatch fails to compile there.
  */
 
-/** A calendar date with no time and no zone, as @casa/core's CalendarDate. */
+/** A calendar date with no time and no zone, as @ghar/core's CalendarDate. */
 export const calendarDateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a calendar date, YYYY-MM-DD')
@@ -48,9 +48,6 @@ export const itineraryKindSchema = z.enum([
   'note',
 ]);
 export type ItineraryKindValue = z.infer<typeof itineraryKindSchema>;
-
-export const bookingKindSchema = z.enum(['flight', 'lodging', 'car', 'rail', 'activity', 'other']);
-export type BookingKindValue = z.infer<typeof bookingKindSchema>;
 
 export const voteSchema = z.enum(['up', 'down']);
 export type VoteValue = z.infer<typeof voteSchema>;

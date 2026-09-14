@@ -1,28 +1,32 @@
-import 'server-only';
-import type { RequestContext } from '@casa/contracts';
-import type { CalendarDate } from '@casa/core/dates';
-import { NotFoundError } from '@casa/core/errors';
+import { requirePermission } from '@ghar/core/auth';
+import type { CalendarDate } from '@ghar/core/dates';
+import { NotFoundError } from '@ghar/core/errors';
 import {
-  type ItineraryKind,
-  type PositionChange,
   itemsOnDay,
   moveWithinDay,
   reorderWithinDay,
   sortOrderForInsert,
-} from '@casa/core/itinerary';
-import { and, eq, inArray } from 'drizzle-orm';
-import type { Database } from '../index';
+  type ItineraryKind,
+  type PositionChange,
+} from '@ghar/core/itinerary';
+import { and, eq, sql } from 'drizzle-orm';
 import { itineraryItems } from '../schema';
 import { requireTrip } from './scope';
+import type { Db, RequestContext } from './types';
+
+// A trip's day-by-day timeline. Items carry no household id; every function resolves the trip
+// first, and every write filters on the trip id as well as the item id.
 
 export type ItineraryItemRow = typeof itineraryItems.$inferSelect;
 
+const ITEM_NOT_FOUND = 'That itinerary item no longer exists.';
+
 export async function listItineraryItems(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   tripId: string,
 ): Promise<ItineraryItemRow[]> {
-  await requireTrip(db, ctx, tripId);
+  await requireTrip(ctx, db, tripId);
   return db
     .select()
     .from(itineraryItems)
@@ -49,12 +53,13 @@ export interface CreateItineraryItemInput {
 
 /** Position is worked out here, not asked for: a caller adding an item has no order to give. */
 export async function createItineraryItem(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   tripId: string,
-  input: CreateItineraryItemInput,
+  input: Omit<CreateItineraryItemInput, 'bookingId'>,
 ): Promise<ItineraryItemRow> {
-  await requireTrip(db, ctx, tripId);
+  requirePermission(ctx, 'travel.manage');
+  await requireTrip(ctx, db, tripId);
   const dayItems = await db
     .select()
     .from(itineraryItems)
@@ -65,7 +70,6 @@ export async function createItineraryItem(
     .values({
       tripId,
       ...input,
-      bookingId: input.bookingId ?? null,
       sortOrder: sortOrderForInsert(dayItems, input.startsAt),
     })
     .returning();
@@ -76,34 +80,36 @@ export async function createItineraryItem(
 export type UpdateItineraryItemInput = Partial<Omit<CreateItineraryItemInput, 'bookingId'>>;
 
 export async function updateItineraryItem(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   tripId: string,
   itemId: string,
   patch: UpdateItineraryItemInput,
 ): Promise<ItineraryItemRow> {
-  await requireTrip(db, ctx, tripId);
+  requirePermission(ctx, 'travel.manage');
+  await requireTrip(ctx, db, tripId);
   const [item] = await db
     .update(itineraryItems)
-    .set({ ...patch, updatedAt: new Date() })
+    .set({ ...patch, updatedAt: sql`now()` })
     .where(and(eq(itineraryItems.id, itemId), eq(itineraryItems.tripId, tripId)))
     .returning();
-  if (!item) throw new NotFoundError('That itinerary item does not exist');
+  if (!item) throw new NotFoundError(ITEM_NOT_FOUND);
   return item;
 }
 
 export async function deleteItineraryItem(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   tripId: string,
   itemId: string,
 ): Promise<void> {
-  await requireTrip(db, ctx, tripId);
+  requirePermission(ctx, 'travel.manage');
+  await requireTrip(ctx, db, tripId);
   const [deleted] = await db
     .delete(itineraryItems)
     .where(and(eq(itineraryItems.id, itemId), eq(itineraryItems.tripId, tripId)))
     .returning({ id: itineraryItems.id });
-  if (!deleted) throw new NotFoundError('That itinerary item does not exist');
+  if (!deleted) throw new NotFoundError(ITEM_NOT_FOUND);
 }
 
 export type ReorderInput =
@@ -112,23 +118,24 @@ export type ReorderInput =
 
 /**
  * Both gestures come through here: a drag sends the index it was dropped at, the move
- * buttons send a direction. @casa/core works out the new positions; this writes them.
+ * buttons send a direction. @ghar/core works out the new positions; this writes them.
  *
  * A drop onto a different day moves the item there first, so a drag across days is one
  * transaction rather than a move followed by a reorder that could half-apply.
  */
 export async function reorderItinerary(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   tripId: string,
   input: ReorderInput,
 ): Promise<ItineraryItemRow[]> {
-  await requireTrip(db, ctx, tripId);
+  requirePermission(ctx, 'travel.manage');
+  await requireTrip(ctx, db, tripId);
 
   return db.transaction(async (tx) => {
     const all = await tx.select().from(itineraryItems).where(eq(itineraryItems.tripId, tripId));
     const moved = all.find((item) => item.id === input.itemId);
-    if (!moved) throw new NotFoundError('That itinerary item does not exist');
+    if (!moved) throw new NotFoundError(ITEM_NOT_FOUND);
 
     let changes: PositionChange[];
     if ('direction' in input) {
@@ -137,8 +144,8 @@ export async function reorderItinerary(
       if (input.day !== moved.day) {
         await tx
           .update(itineraryItems)
-          .set({ day: input.day, updatedAt: new Date() })
-          .where(eq(itineraryItems.id, moved.id));
+          .set({ day: input.day, updatedAt: sql`now()` })
+          .where(and(eq(itineraryItems.id, moved.id), eq(itineraryItems.tripId, tripId)));
       }
       const day = [
         ...itemsOnDay(all, input.day).filter((item) => item.id !== moved.id),
@@ -150,8 +157,8 @@ export async function reorderItinerary(
     for (const change of changes) {
       await tx
         .update(itineraryItems)
-        .set({ sortOrder: change.sortOrder, updatedAt: new Date() })
-        .where(eq(itineraryItems.id, change.id));
+        .set({ sortOrder: change.sortOrder, updatedAt: sql`now()` })
+        .where(and(eq(itineraryItems.id, change.id), eq(itineraryItems.tripId, tripId)));
     }
 
     return tx
@@ -160,50 +167,4 @@ export async function reorderItinerary(
       .where(eq(itineraryItems.tripId, tripId))
       .orderBy(itineraryItems.day, itineraryItems.sortOrder);
   });
-}
-
-/**
- * Writes items generated from bookings. `onConflictDoNothing` on (tripId, bookingId) is
- * what makes generating twice a no-op the second time rather than a pile of duplicates.
- */
-export async function insertGeneratedItems(
-  db: Database,
-  tripId: string,
-  drafts: readonly (CreateItineraryItemInput & { bookingId: string })[],
-): Promise<ItineraryItemRow[]> {
-  if (drafts.length === 0) return [];
-
-  // Positions continue from whatever each day already holds, per day.
-  const existing = await db.select().from(itineraryItems).where(eq(itineraryItems.tripId, tripId));
-  const nextByDay = new Map<CalendarDate, number>();
-  for (const item of existing) {
-    nextByDay.set(item.day, Math.max(nextByDay.get(item.day) ?? 0, item.sortOrder));
-  }
-
-  const values = drafts.map((draft) => {
-    const sortOrder = (nextByDay.get(draft.day) ?? 0) + 1000;
-    nextByDay.set(draft.day, sortOrder);
-    return { tripId, ...draft, sortOrder };
-  });
-
-  return db
-    .insert(itineraryItems)
-    .values(values)
-    .onConflictDoNothing({ target: [itineraryItems.tripId, itineraryItems.bookingId] })
-    .returning();
-}
-
-export async function deleteItemsForBookings(
-  db: Database,
-  tripId: string,
-  bookingIds: readonly string[],
-): Promise<number> {
-  if (bookingIds.length === 0) return 0;
-  const deleted = await db
-    .delete(itineraryItems)
-    .where(
-      and(eq(itineraryItems.tripId, tripId), inArray(itineraryItems.bookingId, [...bookingIds])),
-    )
-    .returning({ id: itineraryItems.id });
-  return deleted.length;
 }

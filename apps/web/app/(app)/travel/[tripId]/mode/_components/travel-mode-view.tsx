@@ -1,9 +1,10 @@
 'use client';
 
-import { getTravelMode, type ItineraryItem, type TravelMode } from '@casa/contracts';
-import { addCalendarDays, formatCalendarDate, formatInstant } from '@casa/core/dates';
-import { dayPlan } from '@casa/core/itinerary';
-import { tripDayNumber, tripDays } from '@casa/core/trips';
+import { getTravelMode, type ItineraryItem, type TravelMode } from '@ghar/contracts';
+import { addCalendarDays, formatCalendarDate, formatInstant } from '@ghar/core/dates';
+import { dayPlan } from '@ghar/core/itinerary';
+import { bookingTitle } from '@ghar/core/travel';
+import { tripDayNumber, tripDays } from '@ghar/core/trips';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -168,7 +169,7 @@ export function TravelModeView({ initial }: { initial: TravelMode }) {
             {unlisted.map((booking) => (
               <li key={booking.id}>
                 <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-                  <p className="font-medium">{booking.title}</p>
+                  <p className="font-medium">{bookingTitle(booking)}</p>
                   {booking.confirmationCode ? (
                     <ConfirmationCode code={booking.confirmationCode} />
                   ) : null}

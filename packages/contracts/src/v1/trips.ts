@@ -1,7 +1,6 @@
 import { z } from 'zod';
+import { householdRoleSchema } from '../context';
 import { defineEndpoint } from '../endpoint';
-import { bookingSchema } from './bookings';
-import { householdMemberSchema } from './household';
 import { itineraryItemSchema } from './itinerary';
 import { packingItemSchema } from './packing';
 import {
@@ -14,11 +13,24 @@ import {
   tripParamsSchema,
   tripStatusSchema,
 } from './shared';
+import { bookingSchema } from './travel';
+
+/**
+ * A person a trip can be assigned to. `displayName` is the name on their profile; null means
+ * they have not set one, and clients fall back through `memberLabel` in @ghar/core rather than
+ * showing a raw user id.
+ */
+export const householdMemberSchema = z.object({
+  userId: z.uuid(),
+  displayName: z.string().nullable(),
+  role: householdRoleSchema,
+});
+export type HouseholdMember = z.infer<typeof householdMemberSchema>;
 
 /**
  * A trip as it crosses the wire. Dates are a matched pair: both set once the trip has
  * dates, both null while it is still an idea. Clients derive phase, countdown and budget
- * state from these with @casa/core rather than the server sending prose.
+ * state from these with @ghar/core rather than the server sending prose.
  */
 export const tripSchema = z.object({
   id: z.uuid(),
@@ -107,7 +119,7 @@ export const tripDetailSchema = z.object({
   itinerary: z.array(itineraryItemSchema),
   bookings: z.array(bookingSchema),
   packing: z.array(packingItemSchema),
-  /** Raw budget inputs. Clients call tripBudget in @casa/core to get the state. */
+  /** Raw budget inputs. Clients call tripBudget in @ghar/core to get the state. */
   actualCents: centsSchema,
   committedCents: centsSchema,
 });
@@ -155,4 +167,35 @@ export const deleteTrip = defineEndpoint({
   path: '/api/v1/trips/:tripId',
   params: tripParamsSchema,
   response: z.object({ deleted: z.literal(true) }),
+});
+
+/**
+ * Filing a booking under a trip. `generateItineraryItem` is on by default because the
+ * reason to link a booking is almost always to get it onto the timeline; turning it off
+ * leaves the booking attached to the trip without adding a row to the day.
+ */
+export const linkBookingToTrip = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/trips/:tripId/bookings',
+  params: tripParamsSchema,
+  body: z.object({
+    bookingId: z.uuid(),
+    generateItineraryItem: z.boolean().default(true),
+  }),
+  response: z.object({
+    booking: bookingSchema,
+    /** Null when the booking has no date to put it on, or generation was declined. */
+    itineraryItemId: z.uuid().nullable(),
+  }),
+});
+
+/**
+ * Taking a booking off a trip. The itinerary item generated from it goes too, because an
+ * item that outlives its booking is a row nobody can explain.
+ */
+export const unlinkBookingFromTrip = defineEndpoint({
+  method: 'DELETE',
+  path: '/api/v1/trips/:tripId/bookings/:bookingId',
+  params: tripParamsSchema.extend({ bookingId: z.uuid() }),
+  response: z.object({ booking: bookingSchema, removedItineraryItemCount: z.int().nonnegative() }),
 });

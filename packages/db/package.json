@@ -1,5 +1,5 @@
 {
-  "name": "@casa/db",
+  "name": "@ghar/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,27 +8,31 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema/index.ts",
-    "./queries": "./src/queries/index.ts"
+    "./queries": "./src/queries/index.ts",
+    "./schema": "./src/schema/index.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@casa/contracts": "workspace:*",
-    "@casa/core": "workspace:*",
+    "@ghar/contracts": "workspace:*",
+    "@ghar/core": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9",
     "server-only": "^0.0.1"
   },
   "devDependencies": {
-    "@casa/config": "workspace:*",
+    "@ghar/config": "workspace:*",
+    "@electric-sql/pglite": "^0.5.8",
     "@types/node": "24.13.4",
     "drizzle-kit": "^0.31.10",
     "eslint": "9.39.5",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vite": "^8.3.0",
+    "vitest": "5.0.0"
   }
 }

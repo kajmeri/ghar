@@ -1,9 +1,10 @@
 'use client';
 
-import type { Booking, TripSummary } from '@casa/contracts';
-import { formatInstant } from '@casa/core/dates';
-import { linkBookingToTrip } from '@casa/contracts';
-import { formatCents } from '@casa/core/money';
+import type { Booking, TripSummary } from '@ghar/contracts';
+import { linkBookingToTrip } from '@ghar/contracts';
+import { formatCents } from '@ghar/core/money';
+import { bookingTitle } from '@ghar/core/travel';
+import Link from 'next/link';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -13,7 +14,7 @@ import { FormError } from '@/components/ui/form-error';
 import { Pill } from '@/components/ui/pill';
 import { useMutation } from '@/hooks/use-mutation';
 import { api } from '@/lib/api/client';
-import { NewBookingForm } from './new-booking-form';
+import { bookingWhen } from '@/lib/travel/display';
 
 /**
  * The hub's one piece of unfinished business: confirmations that arrived before anyone
@@ -33,7 +34,9 @@ export function UnfiledBookings({
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Bookings to file</h2>
-        <NewBookingForm trips={trips} timeZone={timeZone} />
+        <Button asChild variant="outline">
+          <Link href="/travel/bookings/new">Add booking</Link>
+        </Button>
       </div>
 
       {bookings.length === 0 ? (
@@ -70,24 +73,22 @@ function UnfiledBooking({
     }),
   );
 
-  const when = booking.startsAt
-    ? formatInstant(new Date(booking.startsAt), timeZone, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      })
-    : 'No date';
+  const title = bookingTitle(booking);
+  const when = bookingWhen(booking, timeZone, { withTime: true }) ?? 'No date';
 
   return (
     <Card className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between md:p-5">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="font-medium">{booking.title}</p>
+          <Link href={`/travel/bookings/${booking.id}`} className="font-medium">
+            {title}
+          </Link>
           <Pill>{booking.kind}</Pill>
         </div>
         <p className="mt-0.5 text-sm text-ink-muted">
           {when}
           {booking.confirmationCode ? ` · ${booking.confirmationCode}` : ''}
-          {booking.costCents === null ? '' : ` · ${formatCents(booking.costCents)}`}
+          {` · ${formatCents(booking.paidCents)}`}
         </p>
       </div>
 
@@ -96,7 +97,7 @@ function UnfiledBooking({
       ) : (
         <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center">
           <Select
-            aria-label={`Trip for ${booking.title}`}
+            aria-label={`Trip for ${title}`}
             value={tripId}
             onChange={(event) => {
               setTripId(event.target.value);

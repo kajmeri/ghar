@@ -1,139 +1,211 @@
 import { z } from 'zod';
 import { defineEndpoint } from '../endpoint';
-import { bookingSchema } from './bookings';
-import { tripIdeaSchema } from './ideas';
-import { itineraryItemSchema } from './itinerary';
-import {
-  calendarDateSchema,
-  centsSchema,
-  instantSchema,
-  queryBooleanSchema,
-  shortTextSchema,
-  tripParamsSchema,
-} from './shared';
-import { tripSchema, tripSummarySchema } from './trips';
 
-/**
- * Everything /travel shows, in one request: the trips that have not happened yet, the
- * bookings nobody has filed under one, and the idea board.
- *
- * `today` and `timeZone` come from the server because the household's zone is the one that
- * decides what day it is, not the device's. Clients feed them to @casa/core for the
- * countdown rather than reading the phone's clock.
- */
-export const travelHubSchema = z.object({
-  today: calendarDateSchema,
-  timeZone: z.string(),
-  /** Current and upcoming, soonest first. Undated ideas come last. */
-  trips: z.array(tripSummarySchema),
-  pastTripCount: z.int().nonnegative(),
-  /** Bookings with no trip. The hub's one piece of unfinished business. */
-  unlinkedBookings: z.array(bookingSchema),
-  ideas: z.array(tripIdeaSchema),
-});
-export type TravelHub = z.infer<typeof travelHubSchema>;
+// These lists mirror @ghar/core/travel. A test keeps them equal.
+export const bookingKindSchema = z.enum(['flight', 'hotel', 'car']);
+export const bookingStatusSchema = z.enum(['booked', 'cancelled', 'completed']);
+export const ratePlanSchema = z.enum(['prepaid', 'pay_at_property', 'refundable']);
+export const bookingSourceSchema = z.enum(['manual', 'email']);
+export const cabinSchema = z.enum([
+  'basic_economy',
+  'economy',
+  'premium_economy',
+  'business',
+  'first',
+]);
+export const priceConfidenceSchema = z.enum(['cached', 'exact']);
+export const dropActionSchema = z.enum(['rebook', 'call', 'claim_credit']);
 
-export const getTravelHub = defineEndpoint({
-  method: 'GET',
-  path: '/api/v1/travel',
-  response: travelHubSchema,
-});
+const calendarDateSchema = z.iso.date();
+const instantSchema = z.iso.datetime({ offset: true });
+const centsSchema = z.number().int();
 
-/**
- * Travel mode. The whole trip comes back rather than just today, so a client that caches
- * the response still has tomorrow when there is no signal. `generatedAt` is what a cached
- * copy shows to say how stale it is.
- */
-export const travelModeSchema = z.object({
-  trip: tripSchema,
-  timeZone: z.string(),
-  today: calendarDateSchema,
-  generatedAt: instantSchema,
-  items: z.array(itineraryItemSchema),
-  /** Linked bookings, so a confirmation code is there even for a booking with no item. */
-  bookings: z.array(bookingSchema),
-});
-export type TravelMode = z.infer<typeof travelModeSchema>;
-
-export const getTravelMode = defineEndpoint({
-  method: 'GET',
-  path: '/api/v1/trips/:tripId/travel-mode',
-  params: tripParamsSchema,
-  response: travelModeSchema,
-});
-
-export const tripTransactionSchema = z.object({
+export const bookingSchema = z.object({
   id: z.uuid(),
-  postedOn: calendarDateSchema,
-  description: z.string(),
-  merchant: z.string().nullable(),
-  /** Negative is money out. `tripActualCents` in @casa/core turns a list of these into spend. */
-  amountCents: centsSchema,
+  kind: bookingKindSchema,
+  status: bookingStatusSchema,
+  confirmationCode: z.string().nullable(),
+  providerName: z.string().nullable(),
+  /** Two-character IATA airline code. Flights only. */
+  carrier: z.string().nullable(),
+  cabin: cabinSchema.nullable(),
+  /** Stays and rentals only. */
+  ratePlan: ratePlanSchema.nullable(),
+  refundable: z.boolean(),
+  /** Departure airport for a flight, pick-up location for a car. */
+  origin: z.string().nullable(),
+  /** Arrival airport for a flight, the city for a hotel, drop-off for a car. */
+  destination: z.string().nullable(),
+  propertyName: z.string().nullable(),
+  checkIn: calendarDateSchema.nullable(),
+  checkOut: calendarDateSchema.nullable(),
+  departAt: instantSchema.nullable(),
+  returnAt: instantSchema.nullable(),
+  travelers: z.number().int(),
+  /** The total for everyone on the booking, in `currency`. */
+  paidCents: centsSchema,
+  currency: z.string().length(3),
+  watchEnabled: z.boolean(),
+  source: bookingSourceSchema,
   tripId: z.uuid().nullable(),
+  createdAt: instantSchema,
+  updatedAt: instantSchema,
 });
-export type TripTransaction = z.infer<typeof tripTransactionSchema>;
+export type Booking = z.infer<typeof bookingSchema>;
 
-/**
- * Planned against actual. The server sends the numbers and the transactions behind them;
- * `tripBudget` in @casa/core decides whether that reads under, close, or over.
- */
-export const tripBudgetSchema = z.object({
-  tripId: z.uuid(),
-  plannedCents: centsSchema.nullable(),
-  actualCents: centsSchema,
-  committedCents: centsSchema,
-  transactions: z.array(tripTransactionSchema),
+export const priceSummarySchema = z.object({
+  /** The most recent price found. A cached price is a hint, never a promise. */
+  latest: z
+    .object({
+      priceCents: centsSchema,
+      confidence: priceConfidenceSchema,
+      checkedAt: instantSchema,
+    })
+    .nullable(),
+  /** Latest price minus what was paid. Negative is cheaper now. */
+  deltaCents: centsSchema.nullable(),
+  lowestCents: centsSchema.nullable(),
+  lastCheckedAt: instantSchema.nullable(),
+  lastCheckFailed: z.boolean(),
 });
+export type PriceSummary = z.infer<typeof priceSummarySchema>;
 
-export const getTripBudget = defineEndpoint({
-  method: 'GET',
-  path: '/api/v1/trips/:tripId/budget',
-  params: tripParamsSchema,
-  response: tripBudgetSchema,
+/** One price per day in the household's zone. */
+export const dailyPriceSchema = z.object({
+  date: calendarDateSchema,
+  priceCents: centsSchema,
+  confidence: priceConfidenceSchema,
 });
+export type DailyPrice = z.infer<typeof dailyPriceSchema>;
 
-/** Everyday spending, so a charge can be found and tagged to a trip. */
-export const listTransactions = defineEndpoint({
-  method: 'GET',
-  path: '/api/v1/transactions',
-  query: z.object({
-    tripId: z.uuid().optional(),
-    /** Only what is not tagged to any trip yet. */
-    untagged: queryBooleanSchema.optional(),
-    from: calendarDateSchema.optional(),
-    to: calendarDateSchema.optional(),
-    limit: z.coerce.number().int().min(1).max(200).default(50),
+export const bookingListItemSchema = z.object({
+  booking: bookingSchema,
+  price: priceSummarySchema,
+  /** The last 30 days, oldest first. */
+  sparkline: z.array(dailyPriceSchema),
+});
+export type BookingListItem = z.infer<typeof bookingListItemSchema>;
+
+export const priceCheckSchema = z.object({
+  id: z.uuid(),
+  checkedAt: instantSchema,
+  provider: z.string(),
+  priceCents: centsSchema.nullable(),
+  confidence: priceConfidenceSchema,
+  success: z.boolean(),
+  error: z.string().nullable(),
+});
+export type PriceCheck = z.infer<typeof priceCheckSchema>;
+
+export const priceAlertSchema = z.object({
+  id: z.uuid(),
+  sentAt: instantSchema,
+  priceCents: centsSchema,
+  deltaCents: centsSchema,
+  floorCents: centsSchema,
+});
+export type PriceAlert = z.infer<typeof priceAlertSchema>;
+
+export const bookingDetailSchema = z.object({
+  booking: bookingSchema,
+  price: priceSummarySchema,
+  /** Every day with a price, oldest first. */
+  history: z.array(dailyPriceSchema),
+  /** The most recent checks, newest first, failures included. */
+  checks: z.array(priceCheckSchema),
+  /** Newest first. */
+  alerts: z.array(priceAlertSchema),
+  /** Whether the daily check prices it: booked, watched, and still ahead. */
+  watchable: z.boolean(),
+  /**
+   * A verified price at or under this sends the next alert: a full step under what was paid, or
+   * under the last alert. Null when a drop on this booking couldn't be captured.
+   */
+  alertBelowCents: centsSchema.nullable(),
+  /** Whether a drop could be captured, and how. Fare rules change; the ticket's own rules count. */
+  actionability: z.object({
+    actionable: z.boolean(),
+    action: dropActionSchema.nullable(),
+    reason: z.string(),
   }),
-  response: z.object({ transactions: z.array(tripTransactionSchema) }),
 });
+export type BookingDetail = z.infer<typeof bookingDetailSchema>;
+
+const optionalTextSchema = z.string().max(200).nullable().default(null);
 
 /**
- * A charge typed in by hand.
- *
- * The finances feature will bring these in from a bank connection and from parsed
- * receipts. Until it does, this is how a trip's actual spend gets anything to add up, and
- * it is also how you log the cash dinner no card will ever tell you about.
- *
- * `amountCents` is negative for money out, as the column is. `tripId` tags it on the way in.
+ * What a client sends to create or replace a booking. Fields that don't apply to the kind may be
+ * left out; the server clears them either way and answers 400 with `fieldErrors` for the rest.
  */
-export const createTransaction = defineEndpoint({
+export const bookingBodySchema = z.object({
+  kind: bookingKindSchema,
+  status: bookingStatusSchema.default('booked'),
+  confirmationCode: optionalTextSchema,
+  providerName: optionalTextSchema,
+  carrier: optionalTextSchema,
+  cabin: cabinSchema.nullable().default(null),
+  ratePlan: ratePlanSchema.nullable().default(null),
+  /** Flights only. A stay or rental is refundable exactly when its rate plan is. */
+  refundable: z.boolean().default(false),
+  origin: optionalTextSchema,
+  destination: optionalTextSchema,
+  propertyName: optionalTextSchema,
+  checkIn: calendarDateSchema.nullable().default(null),
+  checkOut: calendarDateSchema.nullable().default(null),
+  departAt: instantSchema.nullable().default(null),
+  returnAt: instantSchema.nullable().default(null),
+  travelers: z.number().int().default(1),
+  paidCents: centsSchema,
+  currency: z.string().max(3),
+  watchEnabled: z.boolean().default(true),
+});
+export type BookingBody = z.output<typeof bookingBodySchema>;
+
+export const bookingParamsSchema = z.object({ bookingId: z.uuid() });
+
+/** Every booking, soonest trip first, with where its price stands. */
+export const listBookings = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/travel/bookings',
+  response: z.object({ bookings: z.array(bookingListItemSchema) }),
+});
+
+export const getBooking = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/travel/bookings/:bookingId',
+  params: bookingParamsSchema,
+  response: bookingDetailSchema,
+});
+
+/** Owners, adults and members. The price watch starts on by default. */
+export const createBooking = defineEndpoint({
   method: 'POST',
-  path: '/api/v1/transactions',
-  body: z.object({
-    postedOn: calendarDateSchema,
-    description: shortTextSchema,
-    merchant: shortTextSchema.nullable().default(null),
-    amountCents: centsSchema.refine((value) => value !== 0, 'An amount of nothing is not a charge'),
-    tripId: z.uuid().nullable().default(null),
-  }),
-  response: z.object({ transaction: tripTransactionSchema }),
+  path: '/api/v1/travel/bookings',
+  body: bookingBodySchema,
+  response: z.object({ booking: bookingSchema }),
 });
 
-/** The trip tag. Null takes a charge back off a trip. */
-export const tagTransaction = defineEndpoint({
-  method: 'PATCH',
-  path: '/api/v1/transactions/:transactionId',
-  params: z.object({ transactionId: z.uuid() }),
-  body: z.object({ tripId: z.uuid().nullable() }),
-  response: z.object({ transaction: tripTransactionSchema }),
+/** Replaces every field. Owners, adults and members. */
+export const updateBooking = defineEndpoint({
+  method: 'PUT',
+  path: '/api/v1/travel/bookings/:bookingId',
+  params: bookingParamsSchema,
+  body: bookingBodySchema,
+  response: z.object({ booking: bookingSchema }),
+});
+
+export const setBookingWatch = defineEndpoint({
+  method: 'PUT',
+  path: '/api/v1/travel/bookings/:bookingId/watch',
+  params: bookingParamsSchema,
+  body: z.object({ watchEnabled: z.boolean() }),
+  response: z.object({ booking: bookingSchema }),
+});
+
+/** Removes the booking with its price history and alerts. */
+export const deleteBooking = defineEndpoint({
+  method: 'DELETE',
+  path: '/api/v1/travel/bookings/:bookingId',
+  params: bookingParamsSchema,
+  response: z.object({ bookingId: z.uuid() }),
 });

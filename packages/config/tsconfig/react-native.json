@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "display": "Casa React Native app (mirrors expo/tsconfig.base, plus strict)",
+  "display": "Ghar React Native app (mirrors expo/tsconfig.base, plus strict)",
   "compilerOptions": {
     "target": "ESNext",
     "lib": ["DOM", "ESNext"],

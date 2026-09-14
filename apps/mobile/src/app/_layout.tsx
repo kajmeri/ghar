@@ -1,4 +1,4 @@
-import { colors } from '@casa/tokens';
+import { colors } from '@ghar/tokens';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 

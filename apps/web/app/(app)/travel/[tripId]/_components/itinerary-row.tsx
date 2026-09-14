@@ -1,9 +1,9 @@
 'use client';
 
-import type { ItineraryItem } from '@casa/contracts';
-import { formatInstant } from '@casa/core/dates';
-import type { ItineraryKind } from '@casa/core/itinerary';
-import { formatCents } from '@casa/core/money';
+import type { ItineraryItem } from '@ghar/contracts';
+import { formatInstant } from '@ghar/core/dates';
+import type { ItineraryKind } from '@ghar/core/itinerary';
+import { formatCents } from '@ghar/core/money';
 import { Button } from '@/components/ui/button';
 import { ConfirmationCode } from './confirmation-code';
 

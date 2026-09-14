@@ -1,11 +1,13 @@
-import 'server-only';
-import type { RequestContext } from '@casa/contracts';
-import { NotFoundError } from '@casa/core/errors';
-import { draftsFromTemplate, templateDraftsFromItems } from '@casa/core/packing';
-import { and, eq, inArray, max } from 'drizzle-orm';
-import type { Database } from '../index';
+import { requirePermission } from '@ghar/core/auth';
+import { NotFoundError, ValidationError } from '@ghar/core/errors';
+import { draftsFromTemplate, templateDraftsFromItems } from '@ghar/core/packing';
+import { and, eq, inArray, max, sql } from 'drizzle-orm';
 import { packingItems, packingTemplateItems, packingTemplates } from '../schema';
-import { requireTrip } from './scope';
+import { recordAudit } from './audit';
+import { requireHouseholdMembers, requireTrip } from './scope';
+import type { Db, RequestContext } from './types';
+
+// A trip's shared packing list, and the household's reusable templates.
 
 export type PackingItemRow = typeof packingItems.$inferSelect;
 export type PackingTemplateRow = typeof packingTemplates.$inferSelect;
@@ -15,12 +17,15 @@ export interface PackingTemplateWithItems extends PackingTemplateRow {
   readonly items: PackingTemplateItemRow[];
 }
 
+const ITEM_NOT_FOUND = 'That packing item no longer exists.';
+const TEMPLATE_NOT_FOUND = 'That packing template no longer exists.';
+
 export async function listPackingItems(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   tripId: string,
 ): Promise<PackingItemRow[]> {
-  await requireTrip(db, ctx, tripId);
+  await requireTrip(ctx, db, tripId);
   return db
     .select()
     .from(packingItems)
@@ -29,12 +34,15 @@ export async function listPackingItems(
 }
 
 export async function createPackingItem(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   tripId: string,
   input: { label: string; assignedUserId: string | null; category: string | null },
 ): Promise<PackingItemRow> {
-  await requireTrip(db, ctx, tripId);
+  requirePermission(ctx, 'travel.manage');
+  await requireTrip(ctx, db, tripId);
+  if (input.assignedUserId) await requireHouseholdMembers(ctx, db, [input.assignedUserId]);
+
   const [highest] = await db
     .select({ value: max(packingItems.sortOrder) })
     .from(packingItems)
@@ -49,8 +57,8 @@ export async function createPackingItem(
 }
 
 export async function updatePackingItem(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   tripId: string,
   itemId: string,
   patch: Partial<{
@@ -60,34 +68,39 @@ export async function updatePackingItem(
     category: string | null;
   }>,
 ): Promise<PackingItemRow> {
-  await requireTrip(db, ctx, tripId);
+  requirePermission(ctx, 'travel.manage');
+  await requireTrip(ctx, db, tripId);
+  if (patch.assignedUserId) await requireHouseholdMembers(ctx, db, [patch.assignedUserId]);
+
   const [item] = await db
     .update(packingItems)
-    .set({ ...patch, updatedAt: new Date() })
+    .set({ ...patch, updatedAt: sql`now()` })
     .where(and(eq(packingItems.id, itemId), eq(packingItems.tripId, tripId)))
     .returning();
-  if (!item) throw new NotFoundError('That packing item does not exist');
+  if (!item) throw new NotFoundError(ITEM_NOT_FOUND);
   return item;
 }
 
 export async function deletePackingItem(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   tripId: string,
   itemId: string,
 ): Promise<void> {
-  await requireTrip(db, ctx, tripId);
+  requirePermission(ctx, 'travel.manage');
+  await requireTrip(ctx, db, tripId);
   const [deleted] = await db
     .delete(packingItems)
     .where(and(eq(packingItems.id, itemId), eq(packingItems.tripId, tripId)))
     .returning({ id: packingItems.id });
-  if (!deleted) throw new NotFoundError('That packing item does not exist');
+  if (!deleted) throw new NotFoundError(ITEM_NOT_FOUND);
 }
 
 export async function listPackingTemplates(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
 ): Promise<PackingTemplateWithItems[]> {
+  requirePermission(ctx, 'travel.view');
   const templates = await db
     .select()
     .from(packingTemplates)
@@ -119,10 +132,11 @@ export async function listPackingTemplates(
 }
 
 export async function requireTemplate(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   templateId: string,
 ): Promise<PackingTemplateWithItems> {
+  requirePermission(ctx, 'travel.view');
   const [template] = await db
     .select()
     .from(packingTemplates)
@@ -130,7 +144,7 @@ export async function requireTemplate(
       and(eq(packingTemplates.id, templateId), eq(packingTemplates.householdId, ctx.householdId)),
     )
     .limit(1);
-  if (!template) throw new NotFoundError('That packing template does not exist');
+  if (!template) throw new NotFoundError(TEMPLATE_NOT_FOUND);
 
   const items = await db
     .select()
@@ -145,20 +159,21 @@ export async function requireTemplate(
  * state and assignment dropped; given items, they are taken as written.
  */
 export async function createPackingTemplate(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   input: {
     name: string;
     fromTripId?: string;
     items?: readonly { label: string; category: string | null }[];
   },
 ): Promise<PackingTemplateWithItems> {
+  requirePermission(ctx, 'travel.manage');
   const drafts = input.fromTripId
-    ? templateDraftsFromItems(await listPackingItems(db, ctx, input.fromTripId))
+    ? templateDraftsFromItems(await listPackingItems(ctx, db, input.fromTripId))
     : (input.items ?? []).map((item, index) => ({ ...item, sortOrder: (index + 1) * 10 }));
 
   if (drafts.length === 0) {
-    throw new NotFoundError('A template needs at least one item');
+    throw new ValidationError('A template needs at least one item.');
   }
 
   return db.transaction(async (tx) => {
@@ -172,34 +187,48 @@ export async function createPackingTemplate(
       .insert(packingTemplateItems)
       .values(drafts.map((draft) => ({ templateId: template.id, ...draft })))
       .returning();
+    await recordAudit(ctx, tx, {
+      action: 'packing_template.created',
+      entity: 'packing_template',
+      entityId: template.id,
+    });
     return { ...template, items };
   });
 }
 
 export async function deletePackingTemplate(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   templateId: string,
 ): Promise<void> {
-  const [deleted] = await db
-    .delete(packingTemplates)
-    .where(
-      and(eq(packingTemplates.id, templateId), eq(packingTemplates.householdId, ctx.householdId)),
-    )
-    .returning({ id: packingTemplates.id });
-  if (!deleted) throw new NotFoundError('That packing template does not exist');
+  requirePermission(ctx, 'travel.manage');
+  await db.transaction(async (tx) => {
+    const [deleted] = await tx
+      .delete(packingTemplates)
+      .where(
+        and(eq(packingTemplates.id, templateId), eq(packingTemplates.householdId, ctx.householdId)),
+      )
+      .returning({ id: packingTemplates.id, name: packingTemplates.name });
+    if (!deleted) throw new NotFoundError(TEMPLATE_NOT_FOUND);
+    await recordAudit(ctx, tx, {
+      action: 'packing_template.deleted',
+      entity: 'packing_template',
+      entityId: templateId,
+      metadata: { name: deleted.name },
+    });
+  });
 }
 
 /** Applying a template. Items the list already holds are skipped, so this is safe to repeat. */
 export async function applyPackingTemplate(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   tripId: string,
   templateId: string,
 ): Promise<{ items: PackingItemRow[]; addedCount: number }> {
-  await requireTrip(db, ctx, tripId);
-  const template = await requireTemplate(db, ctx, templateId);
-  const existing = await listPackingItems(db, ctx, tripId);
+  requirePermission(ctx, 'travel.manage');
+  const template = await requireTemplate(ctx, db, templateId);
+  const existing = await listPackingItems(ctx, db, tripId);
   const drafts = draftsFromTemplate(template.items, existing);
 
   if (drafts.length > 0) {
@@ -207,5 +236,5 @@ export async function applyPackingTemplate(
       .insert(packingItems)
       .values(drafts.map((draft) => ({ tripId, ...draft, assignedUserId: null })));
   }
-  return { items: await listPackingItems(db, ctx, tripId), addedCount: drafts.length };
+  return { items: await listPackingItems(ctx, db, tripId), addedCount: drafts.length };
 }

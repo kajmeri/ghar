@@ -38,7 +38,7 @@ const SKIP_DIRS = new Set([
  * Walks everything a workspace can load: its dependencies and devDependencies, then the
  * dependencies, optional and peer dependencies of each package they resolve to, following
  * Node resolution from each package's real location. Workspace packages reached at runtime
- * also have their source scanned, so an undeclared `import '@casa/db'` is caught too.
+ * also have their source scanned, so an undeclared `import '@ghar/db'` is caught too.
  */
 export function analyzeDependencyGraph(startDir: string, target: string): GraphReport {
   const start = realpathSync(startDir);

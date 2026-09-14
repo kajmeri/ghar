@@ -1,7 +1,7 @@
 'use client';
 
-import { createTrip } from '@casa/contracts';
-import { parseMoneyInput } from '@casa/core/money';
+import { createTrip } from '@ghar/contracts';
+import { parseMoneyInput } from '@ghar/core/money';
 import { useRouter } from 'next/navigation';
 import { useId, useState, type SyntheticEvent } from 'react';
 import { Button } from '@/components/ui/button';

@@ -1,10 +1,10 @@
 @import 'tailwindcss';
-/* Generated from packages/tokens/tokens.json. Casa's palette, type scale, radii and spacing. */
-@import '@casa/tokens/tokens.css';
-@import '@casa/tokens/tailwind.css';
+/* Generated from packages/tokens/tokens.json. Ghar's palette, type scale, radii and spacing. */
+@import '@ghar/tokens/tokens.css';
+@import '@ghar/tokens/tailwind.css';
 
 /*
- * The names shadcn/ui components use, pointed at Casa tokens. Tailwind's default palette is
+ * The names shadcn/ui components use, pointed at Ghar tokens. Tailwind's default palette is
  * cleared in tailwind.css, so a component that reaches for slate or blue gets no class at all.
  */
 @theme inline {
@@ -35,6 +35,67 @@
   --radius-full: var(--radius-pill);
 }
 
+/*
+ * Motion, from the tokens. Hover and press transitions use the quick duration. Overlays animate
+ * only when someone opens or closes one, and every call site gates them with motion-safe:.
+ */
+@theme {
+  --default-transition-duration: var(--duration-quick);
+  --default-transition-timing-function: var(--ease-enter);
+
+  --animate-fade-in: fade-in var(--duration-overlay) var(--ease-enter);
+  --animate-fade-out: fade-out var(--duration-overlay) var(--ease-exit);
+  --animate-rise-in: rise-in var(--duration-overlay) var(--ease-enter);
+  --animate-sink-out: sink-out var(--duration-overlay) var(--ease-exit);
+  --animate-slide-in-right: slide-in-right var(--duration-overlay) var(--ease-enter);
+  --animate-slide-out-right: slide-out-right var(--duration-overlay) var(--ease-exit);
+  --animate-lift-in: lift-in var(--duration-overlay) var(--ease-enter);
+  --animate-lift-out: lift-out var(--duration-overlay) var(--ease-exit);
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes rise-in {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes sink-out {
+    to {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes slide-in-right {
+    from {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes slide-out-right {
+    to {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes lift-in {
+    from {
+      opacity: 0;
+      transform: translateY(calc(var(--spacing) * 2));
+    }
+  }
+  @keyframes lift-out {
+    to {
+      opacity: 0;
+      transform: translateY(calc(var(--spacing) * 2));
+    }
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -42,5 +103,17 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* A backstop for anything that forgets motion-safe: no movement when reduced motion is on. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

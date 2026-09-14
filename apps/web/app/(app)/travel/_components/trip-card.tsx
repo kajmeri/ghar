@@ -1,6 +1,6 @@
-import type { TripSummary } from '@casa/contracts';
-import { formatCents } from '@casa/core/money';
-import { formatTripDates, type TripStatus } from '@casa/core/trips';
+import type { TripSummary } from '@ghar/contracts';
+import { formatCents } from '@ghar/core/money';
+import { formatTripDates, type TripStatus } from '@ghar/core/trips';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Meter } from '@/components/ui/meter';

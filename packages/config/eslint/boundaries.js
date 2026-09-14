@@ -53,8 +53,8 @@ export const BANNED_IMPORTS = [
     message: 'React belongs in the apps. core and contracts have no UI.',
   },
   {
-    regex: '^@casa/db(?:/|$)',
-    message: '@casa/db is server-only and imported by apps/web alone.',
+    regex: '^@ghar/db(?:/|$)',
+    message: '@ghar/db is server-only and imported by apps/web alone.',
   },
   {
     regex: `^(?:${SDKS.map((sdk) => (sdk.endsWith('/') || sdk.endsWith('-') ? escape(sdk) : `${escape(sdk)}(?:/|$)`)).join('|')})`,
@@ -63,7 +63,7 @@ export const BANNED_IMPORTS = [
 ];
 
 /**
- * Package boundary for @casa/core and @casa/contracts: the explicit bans above, plus an
+ * Package boundary for @ghar/core and @ghar/contracts: the explicit bans above, plus an
  * allowlist so a new dependency cannot slip in without someone changing this call.
  *
  * @param {{ files: string[], allow: string[] }} options
@@ -74,7 +74,7 @@ export function boundaries({ files, allow }) {
   const alreadyBanned = BANNED_IMPORTS.map(({ regex }) => regex.slice(1));
 
   return {
-    name: 'casa/boundaries',
+    name: 'ghar/boundaries',
     files,
     rules: {
       'no-restricted-imports': [

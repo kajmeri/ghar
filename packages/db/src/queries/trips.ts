@@ -1,13 +1,13 @@
-import 'server-only';
-import type { RequestContext } from '@casa/contracts';
-import type { CalendarDate } from '@casa/core/dates';
-import type { TripStatus } from '@casa/core/trips';
+import { requirePermission } from '@ghar/core/auth';
+import type { CalendarDate } from '@ghar/core/dates';
+import type { TripStatus } from '@ghar/core/trips';
 import { and, count, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
-import type { Database } from '../index';
 import { bookings, itineraryItems, packingItems, tripMembers, trips } from '../schema';
-import { requireTrip } from './scope';
+import { recordAudit } from './audit';
+import { requireHouseholdMembers, requireTrip, type TripRow } from './scope';
+import type { Db, RequestContext } from './types';
 
-export type TripRow = typeof trips.$inferSelect;
+// Trips: the dated container bookings, the itinerary, packing and tagged charges hang off.
 
 /** A trip with the counts its card shows, so a list does not cost one query per trip. */
 export interface TripWithCounts extends TripRow {
@@ -27,10 +27,11 @@ export interface ListTripsOptions {
 }
 
 export async function listTrips(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   { phase = 'all', status, today }: ListTripsOptions,
 ): Promise<TripWithCounts[]> {
+  requirePermission(ctx, 'travel.view');
   const phaseFilter =
     phase === 'past'
       ? lt(trips.endsOn, today)
@@ -54,21 +55,22 @@ export async function listTrips(
 }
 
 export async function getTripWithCounts(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   tripId: string,
 ): Promise<TripWithCounts> {
-  const trip = await requireTrip(db, ctx, tripId);
+  const trip = await requireTrip(ctx, db, tripId);
   const [withCount] = await withCounts(db, [trip]);
   if (!withCount) throw new Error('unreachable: a trip was dropped while counting');
   return withCount;
 }
 
 export async function countPastTrips(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   today: CalendarDate,
 ): Promise<number> {
+  requirePermission(ctx, 'travel.view');
   const [row] = await db
     .select({ value: count() })
     .from(trips)
@@ -90,10 +92,14 @@ export interface CreateTripInput {
 
 /** Whoever creates a trip is on it; nobody plans a trip they are not going on by accident. */
 export async function createTrip(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   input: CreateTripInput,
 ): Promise<TripWithCounts> {
+  requirePermission(ctx, 'travel.manage');
+  const userIds = [...new Set([ctx.userId, ...input.memberUserIds])];
+  await requireHouseholdMembers(ctx, db, userIds);
+
   return db.transaction(async (tx) => {
     const [trip] = await tx
       .insert(trips)
@@ -111,8 +117,8 @@ export async function createTrip(
       .returning();
     if (!trip) throw new Error('The trip was not created');
 
-    const userIds = [...new Set([ctx.userId, ...input.memberUserIds])];
     await tx.insert(tripMembers).values(userIds.map((userId) => ({ tripId: trip.id, userId })));
+    await recordAudit(ctx, tx, { action: 'trip.created', entity: 'trip', entityId: trip.id });
 
     return { ...trip, ...emptyCounts, memberUserIds: userIds };
   });
@@ -123,19 +129,21 @@ export type UpdateTripInput = Partial<Omit<CreateTripInput, 'memberUserIds'>> & 
 };
 
 export async function updateTrip(
-  db: Database,
   ctx: RequestContext,
+  db: Db,
   tripId: string,
   patch: UpdateTripInput,
 ): Promise<TripWithCounts> {
-  await requireTrip(db, ctx, tripId);
+  requirePermission(ctx, 'travel.manage');
+  await requireTrip(ctx, db, tripId);
   const { memberUserIds, ...columns } = patch;
+  if (memberUserIds) await requireHouseholdMembers(ctx, db, memberUserIds);
 
   await db.transaction(async (tx) => {
     if (Object.keys(columns).length > 0) {
       await tx
         .update(trips)
-        .set({ ...columns, updatedAt: new Date() })
+        .set({ ...columns, updatedAt: sql`now()` })
         .where(and(eq(trips.id, tripId), eq(trips.householdId, ctx.householdId)));
     }
     if (memberUserIds) {
@@ -146,9 +154,15 @@ export async function updateTrip(
         await tx.insert(tripMembers).values(userIds.map((userId) => ({ tripId, userId })));
       }
     }
+    await recordAudit(ctx, tx, {
+      action: 'trip.updated',
+      entity: 'trip',
+      entityId: tripId,
+      metadata: { fields: Object.keys(patch) },
+    });
   });
 
-  return getTripWithCounts(db, ctx, tripId);
+  return getTripWithCounts(ctx, db, tripId);
 }
 
 /**
@@ -156,9 +170,18 @@ export async function updateTrip(
  * bookings and tagged transactions lose their trip but survive, because they are records
  * of things that happened.
  */
-export async function deleteTrip(db: Database, ctx: RequestContext, tripId: string): Promise<void> {
-  await requireTrip(db, ctx, tripId);
-  await db.delete(trips).where(and(eq(trips.id, tripId), eq(trips.householdId, ctx.householdId)));
+export async function deleteTrip(ctx: RequestContext, db: Db, tripId: string): Promise<void> {
+  requirePermission(ctx, 'travel.manage');
+  const trip = await requireTrip(ctx, db, tripId);
+  await db.transaction(async (tx) => {
+    await tx.delete(trips).where(and(eq(trips.id, tripId), eq(trips.householdId, ctx.householdId)));
+    await recordAudit(ctx, tx, {
+      action: 'trip.deleted',
+      entity: 'trip',
+      entityId: tripId,
+      metadata: { name: trip.name },
+    });
+  });
 }
 
 const emptyCounts = {
@@ -168,7 +191,8 @@ const emptyCounts = {
   packingItemCount: 0,
 } as const;
 
-async function withCounts(db: Database, rows: TripRow[]): Promise<TripWithCounts[]> {
+/** Callers have already scoped `rows` to the household. */
+async function withCounts(db: Db, rows: TripRow[]): Promise<TripWithCounts[]> {
   if (rows.length === 0) return [];
   const tripIds = rows.map((trip) => trip.id);
 

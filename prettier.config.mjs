@@ -1,1 +1,1 @@
-export { default } from '@casa/config/prettier';
+export { default } from '@ghar/config/prettier';
