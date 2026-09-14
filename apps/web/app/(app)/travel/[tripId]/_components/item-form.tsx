@@ -1,10 +1,6 @@
 'use client';
 
-import {
-  createItineraryItem,
-  updateItineraryItem,
-  type ItineraryItem,
-} from '@casa/contracts';
+import { createItineraryItem, updateItineraryItem, type ItineraryItem } from '@casa/contracts';
 import { instantInTimeZone, wallClockTimeInTimeZone } from '@casa/core/dates';
 import { ITINERARY_KINDS, type ItineraryKind } from '@casa/core/itinerary';
 import { parseMoneyInput } from '@casa/core/money';
@@ -151,7 +147,9 @@ export function ItemForm({
             <Input
               name="cost"
               inputMode="decimal"
-              defaultValue={item?.costCents === null || item === null ? '' : String(item.costCents / 100)}
+              defaultValue={
+                item?.costCents === null || item === null ? '' : String(item.costCents / 100)
+              }
             />
           </Field>
           <Field label="Link" className="md:col-span-2">

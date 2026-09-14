@@ -156,11 +156,7 @@ export async function updateTrip(
  * bookings and tagged transactions lose their trip but survive, because they are records
  * of things that happened.
  */
-export async function deleteTrip(
-  db: Database,
-  ctx: RequestContext,
-  tripId: string,
-): Promise<void> {
+export async function deleteTrip(db: Database, ctx: RequestContext, tripId: string): Promise<void> {
   await requireTrip(db, ctx, tripId);
   await db.delete(trips).where(and(eq(trips.id, tripId), eq(trips.householdId, ctx.householdId)));
 }

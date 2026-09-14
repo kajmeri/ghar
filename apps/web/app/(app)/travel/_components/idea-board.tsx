@@ -25,13 +25,7 @@ import { api, errorMessage } from '@/lib/api/client';
  * OpenGraph tags for a title and a picture; vote on what the household actually wants;
  * promote the winner and it becomes a trip.
  */
-export function IdeaBoard({
-  ideas,
-  currentUserId,
-}: {
-  ideas: TripIdea[];
-  currentUserId: string;
-}) {
+export function IdeaBoard({ ideas, currentUserId }: { ideas: TripIdea[]; currentUserId: string }) {
   const ranked = [...ideas].sort(compareIdeasByVotes);
 
   return (
@@ -186,9 +180,7 @@ function IdeaCard({ idea, currentUserId }: { idea: TripIdea; currentUserId: stri
   const vote = useMutation((next: 'up' | 'down') =>
     api.request(voteOnTripIdea, { params: { ideaId: idea.id }, body: { vote: next } }),
   );
-  const remove = useMutation(() =>
-    api.request(deleteTripIdea, { params: { ideaId: idea.id } }),
-  );
+  const remove = useMutation(() => api.request(deleteTripIdea, { params: { ideaId: idea.id } }));
   const promote = useMutation(async () => {
     const { tripId } = await api.request(promoteTripIdea, {
       params: { ideaId: idea.id },
@@ -207,9 +199,7 @@ function IdeaCard({ idea, currentUserId }: { idea: TripIdea; currentUserId: stri
       <div className="flex flex-1 flex-col gap-3 p-4 md:p-5">
         <div>
           <p className="font-semibold">{idea.title}</p>
-          {idea.destination ? (
-            <p className="text-sm text-ink-muted">{idea.destination}</p>
-          ) : null}
+          {idea.destination ? <p className="text-sm text-ink-muted">{idea.destination}</p> : null}
           {idea.url ? (
             <a
               href={idea.url}

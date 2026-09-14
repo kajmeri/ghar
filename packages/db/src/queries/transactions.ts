@@ -77,9 +77,7 @@ export async function tagTransaction(
   const [transaction] = await db
     .update(transactions)
     .set({ tripId, updatedAt: new Date() })
-    .where(
-      and(eq(transactions.id, transactionId), eq(transactions.householdId, ctx.householdId)),
-    )
+    .where(and(eq(transactions.id, transactionId), eq(transactions.householdId, ctx.householdId)))
     .returning();
   if (!transaction) throw new NotFoundError('That transaction does not exist');
   return transaction;

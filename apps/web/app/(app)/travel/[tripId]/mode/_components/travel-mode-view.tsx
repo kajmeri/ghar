@@ -125,7 +125,10 @@ export function TravelModeView({ initial }: { initial: TravelMode }) {
         </div>
 
         {staleSince ? (
-          <p role="status" className="rounded-control border border-caution/40 px-3 py-2 text-base text-caution">
+          <p
+            role="status"
+            className="rounded-control border border-caution/40 px-3 py-2 text-base text-caution"
+          >
             Showing a saved copy from{' '}
             {formatInstant(new Date(staleSince), mode.timeZone, {
               dateStyle: 'medium',
@@ -214,7 +217,7 @@ function DayCard({
       <p className="mt-1 text-xl font-semibold">{item.title}</p>
       {ends ? <p className="text-base text-ink-muted">until {ends}</p> : null}
 
-      {item.location ?? item.address ? (
+      {(item.location ?? item.address) ? (
         <p className="mt-1 text-base text-ink-muted">
           {[item.location, item.address].filter(Boolean).join(' · ')}
         </p>

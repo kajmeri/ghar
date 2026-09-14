@@ -13,6 +13,7 @@ import { FormError } from '@/components/ui/form-error';
 import { Pill } from '@/components/ui/pill';
 import { useMutation } from '@/hooks/use-mutation';
 import { api } from '@/lib/api/client';
+import { NewBookingForm } from './new-booking-form';
 
 /**
  * The hub's one piece of unfinished business: confirmations that arrived before anyone
@@ -30,7 +31,10 @@ export function UnfiledBookings({
 }) {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-lg font-semibold">Bookings to file</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">Bookings to file</h2>
+        <NewBookingForm trips={trips} timeZone={timeZone} />
+      </div>
 
       {bookings.length === 0 ? (
         <EmptyState title="Everything is filed">

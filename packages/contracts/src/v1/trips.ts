@@ -79,18 +79,14 @@ export const updateTripBodySchema = z
     startsOn: calendarDateSchema.nullable().optional(),
     endsOn: calendarDateSchema.nullable().optional(),
   })
-  .refine(
-    (body) => Object.keys(body).length > 0,
-    'Send at least one field to change',
-  )
+  .refine((body) => Object.keys(body).length > 0, 'Send at least one field to change')
   .refine(
     // Dates move together, so a patch that touches one must touch the other.
-    (body) => ('startsOn' in body) === ('endsOn' in body),
+    (body) => 'startsOn' in body === 'endsOn' in body,
     'Change both dates together, or neither',
   )
   .refine(
-    ({ startsOn, endsOn }) =>
-      startsOn == null || endsOn == null || endsOn >= startsOn,
+    ({ startsOn, endsOn }) => startsOn == null || endsOn == null || endsOn >= startsOn,
     'A trip cannot end before it starts',
   )
   .refine(

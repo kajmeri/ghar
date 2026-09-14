@@ -229,10 +229,7 @@ describe('itineraryDraftFromBooking', () => {
   });
 
   it('names a flight by its route even without an airline', () => {
-    const draft = itineraryDraftFromBooking(
-      { ...booking, provider: null },
-      { timeZone: 'UTC' },
-    );
+    const draft = itineraryDraftFromBooking({ ...booking, provider: null }, { timeZone: 'UTC' });
     expect(draft?.title).toBe('EWR to LIS');
   });
 

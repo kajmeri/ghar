@@ -103,7 +103,11 @@ export function compareTripsByStart(
     if (b.startsOn !== null) return 1;
     return a.name.localeCompare(b.name);
   }
-  return a.startsOn === b.startsOn ? a.name.localeCompare(b.name) : a.startsOn < b.startsOn ? -1 : 1;
+  return a.startsOn === b.startsOn
+    ? a.name.localeCompare(b.name)
+    : a.startsOn < b.startsOn
+      ? -1
+      : 1;
 }
 
 /**
@@ -179,9 +183,7 @@ const MS_PER_DAY = 86_400_000;
 export function calendarDaysBetween(from: CalendarDate, to: CalendarDate): number {
   const utc = (date: CalendarDate) =>
     Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10)));
-  return Math.round(
-    (utc(assertCalendarDate(to)) - utc(assertCalendarDate(from))) / MS_PER_DAY,
-  );
+  return Math.round((utc(assertCalendarDate(to)) - utc(assertCalendarDate(from))) / MS_PER_DAY);
 }
 
 /** At or past this share of the budget, a trip is "approaching a limit" and reads caution. */
@@ -219,9 +221,7 @@ export function tripActualCents(transactions: readonly { amountCents: Cents }[])
 }
 
 /** Costs already attached to the plan, whether or not they have been paid. */
-export function tripCommittedCents(
-  items: readonly { costCents: Cents | null }[],
-): Cents {
+export function tripCommittedCents(items: readonly { costCents: Cents | null }[]): Cents {
   let total = 0;
   for (const { costCents } of items) total += costCents ?? 0;
   if (!Number.isSafeInteger(total)) {

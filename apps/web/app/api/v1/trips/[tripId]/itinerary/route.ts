@@ -1,8 +1,5 @@
 import { createItineraryItem, listItinerary } from '@casa/contracts';
-import {
-  createItineraryItem as insertItem,
-  listItineraryItems,
-} from '@casa/db/queries';
+import { createItineraryItem as insertItem, listItineraryItems } from '@casa/db/queries';
 import { authedRoute } from '@/lib/api/authed';
 import { getDb } from '@/lib/db';
 import { toDate, toItineraryItem } from '@/lib/travel/serialize';

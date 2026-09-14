@@ -76,7 +76,9 @@ function Plot({ stops }: { stops: Stop[] }) {
 
   const kilometres = span * 111;
   const scaleLabel =
-    kilometres < 2 ? `${Math.round(kilometres * 1000)} m across` : `${Math.round(kilometres)} km across`;
+    kilometres < 2
+      ? `${Math.round(kilometres * 1000)} m across`
+      : `${Math.round(kilometres)} km across`;
 
   return (
     <div className="mt-3 flex flex-col gap-3">

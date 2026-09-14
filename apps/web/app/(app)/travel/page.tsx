@@ -67,11 +67,7 @@ export default async function TravelPage() {
         )}
       </section>
 
-      <UnfiledBookings
-        bookings={hub.unlinkedBookings}
-        trips={hub.trips}
-        timeZone={hub.timeZone}
-      />
+      <UnfiledBookings bookings={hub.unlinkedBookings} trips={hub.trips} timeZone={hub.timeZone} />
 
       <IdeaBoard ideas={hub.ideas} currentUserId={session.context.userId} />
     </div>

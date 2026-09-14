@@ -10,10 +10,7 @@ import { createTrip, type TripWithCounts } from './trips';
 
 export type TripIdeaRow = typeof tripIdeas.$inferSelect;
 
-export async function listTripIdeas(
-  db: Database,
-  ctx: RequestContext,
-): Promise<TripIdeaRow[]> {
+export async function listTripIdeas(db: Database, ctx: RequestContext): Promise<TripIdeaRow[]> {
   return db
     .select()
     .from(tripIdeas)

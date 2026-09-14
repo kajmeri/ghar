@@ -6,7 +6,5 @@ import { toTripTransaction } from '@/lib/travel/serialize';
 
 /** The trip tag on a charge. This is what makes a trip's actual spend add up. */
 export const PATCH = authedRoute(tagTransaction, async ({ params, body }, { context }) => ({
-  transaction: toTripTransaction(
-    await tag(getDb(), context, params.transactionId, body.tripId),
-  ),
+  transaction: toTripTransaction(await tag(getDb(), context, params.transactionId, body.tripId)),
 }));

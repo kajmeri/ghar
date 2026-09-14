@@ -9,6 +9,7 @@ import { loadTripBudget, loadTripDetail } from '@/lib/travel/service';
 import { BudgetPanel } from './_components/budget-panel';
 import { ItineraryPanel } from './_components/itinerary-panel';
 import { PackingPanel } from './_components/packing-panel';
+import { TripSettings } from './_components/trip-settings';
 import { TripTabs, type TripTab } from './_components/trip-tabs';
 
 export const metadata = { title: 'Trip · Casa' };
@@ -62,11 +63,14 @@ export default async function TripPage({
             </p>
           </div>
 
-          {phase === 'current' || phase === 'upcoming' ? (
-            <Button asChild variant={phase === 'current' ? 'default' : 'outline'}>
-              <Link href={`/travel/${trip.id}/mode`}>Travel mode</Link>
-            </Button>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <TripSettings trip={trip} />
+            {phase === 'current' || phase === 'upcoming' ? (
+              <Button asChild variant={phase === 'current' ? 'default' : 'outline'}>
+                <Link href={`/travel/${trip.id}/mode`}>Travel mode</Link>
+              </Button>
+            ) : null}
+          </div>
         </div>
       </header>
 

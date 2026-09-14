@@ -106,8 +106,8 @@ export function ItineraryPanel({ detail }: { detail: TripDetail }) {
 
         {itinerary.length === 0 ? (
           <EmptyState title="Nothing planned yet">
-            Add the first thing you know about, or link a booking and it becomes a row on the day
-            it happens.
+            Add the first thing you know about, or link a booking and it becomes a row on the day it
+            happens.
           </EmptyState>
         ) : (
           <ol className="flex flex-col">
@@ -153,8 +153,7 @@ interface TimelineEntry {
 }
 
 type ReorderBody =
-  | { itemId: string; day: string; toIndex: number }
-  | { itemId: string; direction: 'up' | 'down' };
+  { itemId: string; day: string; toIndex: number } | { itemId: string; direction: 'up' | 'down' };
 
 function DayHeading({
   day,
@@ -207,7 +206,8 @@ function DayItems({
   const drop = (beforeId: string | null) => {
     if (draggingId === null) return;
     const without = items.filter((item) => item.id !== draggingId);
-    const toIndex = beforeId === null ? without.length : without.findIndex((i) => i.id === beforeId);
+    const toIndex =
+      beforeId === null ? without.length : without.findIndex((i) => i.id === beforeId);
     setDraggingId(null);
     setOverId(null);
     if (toIndex >= 0) onReorder({ itemId: draggingId, day, toIndex });

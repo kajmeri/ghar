@@ -28,5 +28,12 @@ export function useMutation<Args extends unknown[]>(run: (...args: Args) => Prom
     });
   };
 
-  return { mutate, pending, error, clearError: () => { setError(null); } };
+  return {
+    mutate,
+    pending,
+    error,
+    clearError: () => {
+      setError(null);
+    },
+  };
 }

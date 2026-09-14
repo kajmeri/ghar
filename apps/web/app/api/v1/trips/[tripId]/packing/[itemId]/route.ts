@@ -1,8 +1,5 @@
 import { deletePackingItem, updatePackingItem } from '@casa/contracts';
-import {
-  deletePackingItem as removeItem,
-  updatePackingItem as patchItem,
-} from '@casa/db/queries';
+import { deletePackingItem as removeItem, updatePackingItem as patchItem } from '@casa/db/queries';
 import { authedRoute } from '@/lib/api/authed';
 import { getDb } from '@/lib/db';
 import { toPackingItem } from '@/lib/travel/serialize';

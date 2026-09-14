@@ -232,9 +232,9 @@ describe('tripBudget', () => {
 
   it('reads under, then caution as it approaches the limit, then over', () => {
     const planned = 100_000;
-    expect(tripBudget({ plannedCents: planned, actualCents: 40_000, committedCents: 0 }).state).toBe(
-      'under',
-    );
+    expect(
+      tripBudget({ plannedCents: planned, actualCents: 40_000, committedCents: 0 }).state,
+    ).toBe('under');
     expect(
       tripBudget({
         plannedCents: planned,

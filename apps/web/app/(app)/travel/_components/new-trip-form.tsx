@@ -22,13 +22,11 @@ export function NewTripForm() {
   const [budgetError, setBudgetError] = useState<string | null>(null);
   const formId = useId();
 
-  const { mutate, pending, error } = useMutation<[BodyOf<typeof createTrip>]>(
-    async (body) => {
-      const { trip } = await api.request(createTrip, { body });
-      setOpen(false);
-      router.push(`/travel/${trip.id}`);
-    },
-  );
+  const { mutate, pending, error } = useMutation<[BodyOf<typeof createTrip>]>(async (body) => {
+    const { trip } = await api.request(createTrip, { body });
+    setOpen(false);
+    router.push(`/travel/${trip.id}`);
+  });
 
   const onSubmit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();

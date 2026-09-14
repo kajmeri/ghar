@@ -1,8 +1,5 @@
 import { createBooking, listBookings } from '@casa/contracts';
-import {
-  createBooking as insertBooking,
-  listBookings as selectBookings,
-} from '@casa/db/queries';
+import { createBooking as insertBooking, listBookings as selectBookings } from '@casa/db/queries';
 import { authedRoute } from '@/lib/api/authed';
 import { getDb } from '@/lib/db';
 import { toBooking, toDate } from '@/lib/travel/serialize';

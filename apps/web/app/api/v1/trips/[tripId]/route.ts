@@ -1,8 +1,5 @@
 import { deleteTrip, getTrip, updateTrip } from '@casa/contracts';
-import {
-  deleteTrip as removeTrip,
-  updateTrip as patchTrip,
-} from '@casa/db/queries';
+import { deleteTrip as removeTrip, updateTrip as patchTrip } from '@casa/db/queries';
 import { authedRoute } from '@/lib/api/authed';
 import { getDb } from '@/lib/db';
 import { toTrip } from '@/lib/travel/serialize';

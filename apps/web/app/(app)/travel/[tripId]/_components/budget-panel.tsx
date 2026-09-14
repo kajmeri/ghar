@@ -1,10 +1,6 @@
 'use client';
 
-import {
-  listTransactions,
-  tagTransaction,
-  type TripTransaction,
-} from '@casa/contracts';
+import { listTransactions, tagTransaction, type TripTransaction } from '@casa/contracts';
 import { formatCalendarDate } from '@casa/core/dates';
 import { formatCents } from '@casa/core/money';
 import { tripBudget, type BudgetState } from '@casa/core/trips';
@@ -117,10 +113,7 @@ function TaggedTransactions({ budget }: { budget: Budget }) {
       ) : (
         <ul className="flex flex-col rounded-card border border-line bg-surface">
           {budget.transactions.map((transaction, index) => (
-            <li
-              key={transaction.id}
-              className={index === 0 ? '' : 'border-t border-line'}
-            >
+            <li key={transaction.id} className={index === 0 ? '' : 'border-t border-line'}>
               <div className="flex items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{transaction.description}</p>

@@ -1,8 +1,5 @@
 import { createTripIdea, listTripIdeas } from '@casa/contracts';
-import {
-  createTripIdea as insertIdea,
-  listTripIdeas as selectIdeas,
-} from '@casa/db/queries';
+import { createTripIdea as insertIdea, listTripIdeas as selectIdeas } from '@casa/db/queries';
 import { authedRoute } from '@/lib/api/authed';
 import { getDb } from '@/lib/db';
 import { toTripIdea } from '@/lib/travel/serialize';

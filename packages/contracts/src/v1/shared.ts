@@ -34,10 +34,7 @@ export const longTextSchema = z.string().trim().max(4000);
 export const httpUrlSchema = z
   .url({ protocol: /^https?$/ })
   .max(2000)
-  .refine(
-    (value) => /^https?:\/\//i.test(value),
-    'Links must start with http:// or https://',
-  );
+  .refine((value) => /^https?:\/\//i.test(value), 'Links must start with http:// or https://');
 
 export const tripStatusSchema = z.enum(['idea', 'planned', 'booked', 'past']);
 export type TripStatusValue = z.infer<typeof tripStatusSchema>;

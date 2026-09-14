@@ -13,11 +13,7 @@ export const metadata = { title: 'Travel mode · Casa' };
  * The server renders the first copy so it is there before any script runs; the view below
  * keeps its own copy so the page still works on a plane.
  */
-export default async function TravelModePage({
-  params,
-}: {
-  params: Promise<{ tripId: string }>;
-}) {
+export default async function TravelModePage({ params }: { params: Promise<{ tripId: string }> }) {
   const session = await requireSession();
   const { tripId } = await params;
 

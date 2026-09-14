@@ -50,7 +50,11 @@ function group<T extends PackingItemLike>(
 
   return [...groups.entries()]
     .sort(([a], [b]) => (a === null ? 1 : b === null ? -1 : 0))
-    .map(([key, groupItems]) => ({ key, items: groupItems, progress: packingProgress(groupItems) }));
+    .map(([key, groupItems]) => ({
+      key,
+      items: groupItems,
+      progress: packingProgress(groupItems),
+    }));
 }
 
 /** Who is carrying what. The null group is the household's to pick up. */

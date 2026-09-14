@@ -60,7 +60,10 @@ export const createItineraryItemBodySchema = coordinates
     url: httpUrlSchema.nullable().default(null),
     notes: longTextSchema.nullable().default(null),
   })
-  .refine(({ lat, lng }) => (lat === null) === (lng === null), 'Give both a latitude and a longitude')
+  .refine(
+    ({ lat, lng }) => (lat === null) === (lng === null),
+    'Give both a latitude and a longitude',
+  )
   .refine(
     ({ startsAt, endsAt }) => startsAt === null || endsAt === null || endsAt >= startsAt,
     'An item cannot end before it starts',

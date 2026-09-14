@@ -78,10 +78,7 @@ export function groupByDay<T extends Positioned>(
 }
 
 /** The items already on one day, in order. */
-export function itemsOnDay<T extends Positioned>(
-  items: readonly T[],
-  day: CalendarDate,
-): T[] {
+export function itemsOnDay<T extends Positioned>(items: readonly T[], day: CalendarDate): T[] {
   return items.filter((item) => item.day === day).sort(compareItems);
 }
 
@@ -89,10 +86,7 @@ export function itemsOnDay<T extends Positioned>(
  * Where a new item lands. A timed item slots in among the timed items on that day so it
  * reads in time order straight away; an untimed one goes to the end.
  */
-export function sortOrderForInsert(
-  dayItems: readonly Positioned[],
-  startsAt: Date | null,
-): number {
+export function sortOrderForInsert(dayItems: readonly Positioned[], startsAt: Date | null): number {
   const ordered = [...dayItems].sort(compareItems);
   const last = ordered.at(-1);
   if (startsAt === null) return (last?.sortOrder ?? 0) + SORT_ORDER_STEP;

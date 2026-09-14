@@ -130,10 +130,7 @@ export function PackingPanel({
 
                 <ul className="flex flex-col rounded-card border border-line bg-surface">
                   {group.items.map((item, index) => (
-                    <li
-                      key={item.id}
-                      className={index === 0 ? '' : 'border-t border-line'}
-                    >
+                    <li key={item.id} className={index === 0 ? '' : 'border-t border-line'}>
                       <div className="flex items-center gap-3 px-3 py-2">
                         <label className="flex min-h-tap flex-1 items-center gap-3">
                           <input
@@ -332,7 +329,13 @@ function TemplateBar({ tripId, hasItems }: { tripId: string; hasItems: boolean }
             if (name !== '') save.mutate(name);
           }}
         >
-          <Input name="name" required maxLength={200} placeholder="Beach week" className="md:w-64" />
+          <Input
+            name="name"
+            required
+            maxLength={200}
+            placeholder="Beach week"
+            className="md:w-64"
+          />
           <Button type="submit" variant="outline" disabled={save.pending}>
             {save.pending ? 'Saving…' : 'Save template'}
           </Button>

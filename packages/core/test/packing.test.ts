@@ -94,7 +94,9 @@ describe('draftsFromTemplate', () => {
 
   it('adds new items after what is already on the list', () => {
     const existing = [packingItem('1', 'Toothbrush', { sortOrder: 40 })];
-    expect(draftsFromTemplate(template, existing).map((draft) => draft.sortOrder)).toEqual([41, 42]);
+    expect(draftsFromTemplate(template, existing).map((draft) => draft.sortOrder)).toEqual([
+      41, 42,
+    ]);
   });
 
   it('drops blank labels', () => {

@@ -1,8 +1,5 @@
 import { createPackingItem, listPacking } from '@casa/contracts';
-import {
-  createPackingItem as insertItem,
-  listPackingItems,
-} from '@casa/db/queries';
+import { createPackingItem as insertItem, listPackingItems } from '@casa/db/queries';
 import { authedRoute } from '@/lib/api/authed';
 import { getDb } from '@/lib/db';
 import { toPackingItem } from '@/lib/travel/serialize';

@@ -202,10 +202,7 @@ export async function deleteItemsForBookings(
   const deleted = await db
     .delete(itineraryItems)
     .where(
-      and(
-        eq(itineraryItems.tripId, tripId),
-        inArray(itineraryItems.bookingId, [...bookingIds]),
-      ),
+      and(eq(itineraryItems.tripId, tripId), inArray(itineraryItems.bookingId, [...bookingIds])),
     )
     .returning({ id: itineraryItems.id });
   return deleted.length;

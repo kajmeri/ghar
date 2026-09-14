@@ -6,11 +6,7 @@ import { type BookingKind, itineraryDraftFromBooking } from '@casa/core/itinerar
 import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { Database } from '../index';
 import { bookings } from '../schema';
-import {
-  deleteItemsForBookings,
-  insertGeneratedItems,
-  type ItineraryItemRow,
-} from './itinerary';
+import { deleteItemsForBookings, insertGeneratedItems, type ItineraryItemRow } from './itinerary';
 import { requireTrip } from './scope';
 
 export type BookingRow = typeof bookings.$inferSelect;

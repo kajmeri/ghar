@@ -38,9 +38,7 @@ export function TripCard({
           <Pill tone={status === 'booked' ? 'positive' : 'neutral'}>{STATUS_LABEL[status]}</Pill>
         </div>
 
-        <p className="text-sm text-ink-muted">
-          {dates ? `${dates} · ${countdown}` : countdown}
-        </p>
+        <p className="text-sm text-ink-muted">{dates ? `${dates} · ${countdown}` : countdown}</p>
 
         <dl className="mt-auto flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-muted">
           <div className="flex gap-1">

@@ -151,4 +151,5 @@ export function toTripTransaction(row: TransactionRow): TripTransaction {
 }
 
 /** Contract instants are ISO strings; the columns behind them are timestamptz. */
-export const toDate = (value: string | null): Date | null => (value === null ? null : new Date(value));
+export const toDate = (value: string | null): Date | null =>
+  value === null ? null : new Date(value);

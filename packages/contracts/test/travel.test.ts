@@ -112,9 +112,9 @@ describe('createItineraryItemBodySchema', () => {
 
   it('refuses half a coordinate', () => {
     expect(createItineraryItemBodySchema.safeParse({ ...base, lat: 38.7 }).success).toBe(false);
-    expect(
-      createItineraryItemBodySchema.safeParse({ ...base, lat: 38.7, lng: -9.1 }).success,
-    ).toBe(true);
+    expect(createItineraryItemBodySchema.safeParse({ ...base, lat: 38.7, lng: -9.1 }).success).toBe(
+      true,
+    );
   });
 
   it('refuses an off-world coordinate', () => {
@@ -163,7 +163,8 @@ describe('reorderItineraryBodySchema', () => {
 
   it('refuses a negative index', () => {
     expect(
-      reorderItineraryBodySchema.safeParse({ itemId: UUID, day: '2026-03-03', toIndex: -1 }).success,
+      reorderItineraryBodySchema.safeParse({ itemId: UUID, day: '2026-03-03', toIndex: -1 })
+        .success,
     ).toBe(false);
   });
 
@@ -174,7 +175,9 @@ describe('reorderItineraryBodySchema', () => {
 
 describe('createBookingBodySchema', () => {
   it('leaves a booking unfiled by default', () => {
-    expect(createBookingBodySchema.parse({ kind: 'flight', title: 'EWR to LIS' }).tripId).toBeNull();
+    expect(
+      createBookingBodySchema.parse({ kind: 'flight', title: 'EWR to LIS' }).tripId,
+    ).toBeNull();
   });
 
   it('refuses a booking that ends before it starts', () => {

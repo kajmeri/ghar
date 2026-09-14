@@ -56,7 +56,10 @@ export const createBookingBodySchema = z
     /** File it under a trip straight away. Null leaves it on the hub's unfiled pile. */
     tripId: z.uuid().nullable().default(null),
   })
-  .refine(({ lat, lng }) => (lat === null) === (lng === null), 'Give both a latitude and a longitude')
+  .refine(
+    ({ lat, lng }) => (lat === null) === (lng === null),
+    'Give both a latitude and a longitude',
+  )
   .refine(
     ({ startsAt, endsAt }) => startsAt === null || endsAt === null || endsAt >= startsAt,
     'A booking cannot end before it starts',

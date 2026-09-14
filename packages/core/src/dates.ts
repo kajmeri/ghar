@@ -143,11 +143,7 @@ const WALL_CLOCK_TIME = /^(\d{2}):(\d{2})$/;
  * twice. As with startOfDayInTimeZone, the earliest instant that reads back as that time
  * wins, and a time that does not exist at all resolves to the moment the clocks jumped.
  */
-export function instantInTimeZone(
-  date: CalendarDate,
-  time: string,
-  timeZone: TimeZone,
-): Date {
+export function instantInTimeZone(date: CalendarDate, time: string, timeZone: TimeZone): Date {
   const parts = WALL_CLOCK_TIME.exec(time);
   const hour = Number(parts?.[1]);
   const minute = Number(parts?.[2]);
@@ -157,11 +153,7 @@ export function instantInTimeZone(
   assertCalendarDate(date);
 
   const wallClockAsUtc =
-    Date.UTC(
-      Number(date.slice(0, 4)),
-      Number(date.slice(5, 7)) - 1,
-      Number(date.slice(8, 10)),
-    ) +
+    Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10))) +
     hour * 3_600_000 +
     minute * 60_000;
 
