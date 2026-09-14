@@ -239,6 +239,12 @@ importers:
 
   packages/db:
     dependencies:
+      '@casa/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@casa/core':
+        specifier: workspace:*
+        version: link:../core
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(postgres@3.4.9)

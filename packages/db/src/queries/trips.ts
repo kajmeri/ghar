@@ -1,0 +1,225 @@
+import 'server-only';
+import type { RequestContext } from '@casa/contracts';
+import type { CalendarDate } from '@casa/core/dates';
+import type { TripStatus } from '@casa/core/trips';
+import { and, count, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import type { Database } from '../index';
+import { bookings, itineraryItems, packingItems, tripMembers, trips } from '../schema';
+import { requireTrip } from './scope';
+
+export type TripRow = typeof trips.$inferSelect;
+
+/** A trip with the counts its card shows, so a list does not cost one query per trip. */
+export interface TripWithCounts extends TripRow {
+  readonly memberUserIds: string[];
+  readonly itineraryItemCount: number;
+  readonly bookingCount: number;
+  readonly packedCount: number;
+  readonly packingItemCount: number;
+}
+
+export interface ListTripsOptions {
+  /** "upcoming" is everything that has not finished, undated ideas included. */
+  readonly phase?: 'upcoming' | 'past' | 'all';
+  readonly status?: TripStatus;
+  /** Today in the household's zone. The caller owns the clock; this layer does not. */
+  readonly today: CalendarDate;
+}
+
+export async function listTrips(
+  db: Database,
+  ctx: RequestContext,
+  { phase = 'all', status, today }: ListTripsOptions,
+): Promise<TripWithCounts[]> {
+  const phaseFilter =
+    phase === 'past'
+      ? lt(trips.endsOn, today)
+      : phase === 'upcoming'
+        ? or(isNull(trips.endsOn), gte(trips.endsOn, today))
+        : undefined;
+
+  const rows = await db
+    .select()
+    .from(trips)
+    .where(
+      and(
+        eq(trips.householdId, ctx.householdId),
+        phaseFilter,
+        status ? eq(trips.status, status) : undefined,
+      ),
+    )
+    .orderBy(sql`${trips.startsOn} asc nulls last`, trips.name);
+
+  return withCounts(db, rows);
+}
+
+export async function getTripWithCounts(
+  db: Database,
+  ctx: RequestContext,
+  tripId: string,
+): Promise<TripWithCounts> {
+  const trip = await requireTrip(db, ctx, tripId);
+  const [withCount] = await withCounts(db, [trip]);
+  if (!withCount) throw new Error('unreachable: a trip was dropped while counting');
+  return withCount;
+}
+
+export async function countPastTrips(
+  db: Database,
+  ctx: RequestContext,
+  today: CalendarDate,
+): Promise<number> {
+  const [row] = await db
+    .select({ value: count() })
+    .from(trips)
+    .where(and(eq(trips.householdId, ctx.householdId), lt(trips.endsOn, today)));
+  return row?.value ?? 0;
+}
+
+export interface CreateTripInput {
+  readonly name: string;
+  readonly destination: string | null;
+  readonly startsOn: CalendarDate | null;
+  readonly endsOn: CalendarDate | null;
+  readonly status: TripStatus;
+  readonly coverImageUrl: string | null;
+  readonly budgetCents: number | null;
+  readonly notes: string | null;
+  readonly memberUserIds: readonly string[];
+}
+
+/** Whoever creates a trip is on it; nobody plans a trip they are not going on by accident. */
+export async function createTrip(
+  db: Database,
+  ctx: RequestContext,
+  input: CreateTripInput,
+): Promise<TripWithCounts> {
+  return db.transaction(async (tx) => {
+    const [trip] = await tx
+      .insert(trips)
+      .values({
+        householdId: ctx.householdId,
+        name: input.name,
+        destination: input.destination,
+        startsOn: input.startsOn,
+        endsOn: input.endsOn,
+        status: input.status,
+        coverImageUrl: input.coverImageUrl,
+        budgetCents: input.budgetCents,
+        notes: input.notes,
+      })
+      .returning();
+    if (!trip) throw new Error('The trip was not created');
+
+    const userIds = [...new Set([ctx.userId, ...input.memberUserIds])];
+    await tx.insert(tripMembers).values(userIds.map((userId) => ({ tripId: trip.id, userId })));
+
+    return { ...trip, ...emptyCounts, memberUserIds: userIds };
+  });
+}
+
+export type UpdateTripInput = Partial<Omit<CreateTripInput, 'memberUserIds'>> & {
+  readonly memberUserIds?: readonly string[];
+};
+
+export async function updateTrip(
+  db: Database,
+  ctx: RequestContext,
+  tripId: string,
+  patch: UpdateTripInput,
+): Promise<TripWithCounts> {
+  await requireTrip(db, ctx, tripId);
+  const { memberUserIds, ...columns } = patch;
+
+  await db.transaction(async (tx) => {
+    if (Object.keys(columns).length > 0) {
+      await tx
+        .update(trips)
+        .set({ ...columns, updatedAt: new Date() })
+        .where(and(eq(trips.id, tripId), eq(trips.householdId, ctx.householdId)));
+    }
+    if (memberUserIds) {
+      // Replace the roster wholesale: a PATCH that sends members is stating who is going.
+      await tx.delete(tripMembers).where(eq(tripMembers.tripId, tripId));
+      const userIds = [...new Set(memberUserIds)];
+      if (userIds.length > 0) {
+        await tx.insert(tripMembers).values(userIds.map((userId) => ({ tripId, userId })));
+      }
+    }
+  });
+
+  return getTripWithCounts(db, ctx, tripId);
+}
+
+/**
+ * Deleting a trip takes its itinerary and packing with it, and releases what it organized:
+ * bookings and tagged transactions lose their trip but survive, because they are records
+ * of things that happened.
+ */
+export async function deleteTrip(
+  db: Database,
+  ctx: RequestContext,
+  tripId: string,
+): Promise<void> {
+  await requireTrip(db, ctx, tripId);
+  await db.delete(trips).where(and(eq(trips.id, tripId), eq(trips.householdId, ctx.householdId)));
+}
+
+const emptyCounts = {
+  itineraryItemCount: 0,
+  bookingCount: 0,
+  packedCount: 0,
+  packingItemCount: 0,
+} as const;
+
+async function withCounts(db: Database, rows: TripRow[]): Promise<TripWithCounts[]> {
+  if (rows.length === 0) return [];
+  const tripIds = rows.map((trip) => trip.id);
+
+  const [members, itineraryCounts, bookingCounts, packingCounts] = await Promise.all([
+    db
+      .select({ tripId: tripMembers.tripId, userId: tripMembers.userId })
+      .from(tripMembers)
+      .where(inArray(tripMembers.tripId, tripIds)),
+    db
+      .select({ tripId: itineraryItems.tripId, value: count() })
+      .from(itineraryItems)
+      .where(inArray(itineraryItems.tripId, tripIds))
+      .groupBy(itineraryItems.tripId),
+    db
+      .select({ tripId: bookings.tripId, value: count() })
+      .from(bookings)
+      .where(inArray(bookings.tripId, tripIds))
+      .groupBy(bookings.tripId),
+    db
+      .select({
+        tripId: packingItems.tripId,
+        value: count(),
+        packed: sql<number>`count(*) filter (where ${packingItems.isPacked})`.mapWith(Number),
+      })
+      .from(packingItems)
+      .where(inArray(packingItems.tripId, tripIds))
+      .groupBy(packingItems.tripId),
+  ]);
+
+  const memberIds = new Map<string, string[]>();
+  for (const { tripId, userId } of members) {
+    const existing = memberIds.get(tripId);
+    if (existing) existing.push(userId);
+    else memberIds.set(tripId, [userId]);
+  }
+  const itineraryByTrip = new Map(itineraryCounts.map((row) => [row.tripId, row.value]));
+  const bookingsByTrip = new Map(
+    bookingCounts.flatMap((row) => (row.tripId === null ? [] : [[row.tripId, row.value] as const])),
+  );
+  const packingByTrip = new Map(packingCounts.map((row) => [row.tripId, row]));
+
+  return rows.map((trip) => ({
+    ...trip,
+    memberUserIds: memberIds.get(trip.id) ?? [],
+    itineraryItemCount: itineraryByTrip.get(trip.id) ?? 0,
+    bookingCount: bookingsByTrip.get(trip.id) ?? 0,
+    packedCount: packingByTrip.get(trip.id)?.packed ?? 0,
+    packingItemCount: packingByTrip.get(trip.id)?.value ?? 0,
+  }));
+}
