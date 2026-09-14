@@ -14,7 +14,7 @@ import {
 } from '@ghar/core/calendar'
 import { addCalendarDays } from '@ghar/core/dates'
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@ghar/core/errors'
-import { and, asc, eq, inArray, isNotNull, lt, ne, notInArray, or, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, gte, inArray, isNotNull, lt, ne, notInArray, or, sql } from 'drizzle-orm'
 import { bookings, calendarLinks, eventAttendees, events, householdMembers } from '../schema'
 import { recordAudit } from './audit'
 import { authorize } from './authorize'
@@ -101,7 +101,7 @@ export async function listEventsInWindow(ctx: RequestContext, db: Db, window: Ca
       and(
         eq(events.householdId, ctx.householdId),
         lt(events.startsAt, end),
-        or(isNotNull(events.rrule), sql`${events.endsAt} > ${start}`, sql`${events.startsAt} >= ${start}`)
+        or(isNotNull(events.rrule), gt(events.endsAt, start), gte(events.startsAt, start))
       )
     )
     .orderBy(asc(events.startsAt), asc(events.id))
@@ -539,7 +539,7 @@ export async function applyCalendarSync(actor: Actor, db: Db, input: CalendarSyn
       const existing = await tx
         .select({ id: events.id, externalId: events.externalId })
         .from(events)
-        .where(and(eq(events.calendarLinkId, link.id), input.fullSyncFrom ? sql`${events.endsAt} >= ${input.fullSyncFrom}` : undefined))
+        .where(and(eq(events.calendarLinkId, link.id), input.fullSyncFrom ? gte(events.endsAt, input.fullSyncFrom) : undefined))
       const stale = existing.filter(row => row.externalId === null || !listed.has(row.externalId)).map(row => row.id)
       for (const chunk of chunks(stale, SYNC_CHUNK_SIZE)) {
         const rows = await tx.delete(events).where(inArray(events.id, chunk)).returning({ id: events.id })

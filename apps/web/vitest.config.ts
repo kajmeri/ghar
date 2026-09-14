@@ -14,5 +14,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.test.ts'],
+    // The job tests migrate a fresh PGlite database in beforeAll, which is slow while `turbo run`
+    // has typecheck and lint competing for the CPU.
+    hookTimeout: 60_000,
   },
 })

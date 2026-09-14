@@ -25,9 +25,21 @@ const SUPABASE_SHIM = `
 
 export const MIGRATIONS_FOLDER = resolve(import.meta.dirname, '../../drizzle')
 
+// PGlite turns a Date parameter into a timestamp on its own. Drizzle's postgres-js driver, which the
+// app runs on, switches that off and relies on the column to convert, so a Date in a raw sql`...`
+// template fails there and nowhere else. Fail here too.
+const refuseDate = (value: unknown): string => {
+  if (value instanceof Date) {
+    throw new TypeError('A Date reached the driver without a column to convert it. Compare against the column (gte, lt) instead of interpolating it into sql`...`.')
+  }
+  return String(value)
+}
+const DATE_TYPE_OIDS = [1082, 1083, 1114, 1184, 1266] // date, time, timestamp, timestamptz, timetz
+const serializers = Object.fromEntries(DATE_TYPE_OIDS.map(oid => [oid, refuseDate]))
+
 /** `migrationsFolder` lets a test stop at an older schema, to check what a later migration does to its data. */
 export async function createTestDatabase({ migrationsFolder = MIGRATIONS_FOLDER }: { migrationsFolder?: string } = {}) {
-  const client = new PGlite()
+  const client = new PGlite({ serializers })
   await client.exec(SUPABASE_SHIM)
   const db = drizzle({ client, schema, casing: 'snake_case' })
   await migrate(db, { migrationsFolder })
