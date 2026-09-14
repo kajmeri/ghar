@@ -21,7 +21,7 @@ export function Sidebar({ householdName, defaultCollapsed }: { householdName: st
 
   return (
     <aside
-      className={cn('sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line bg-surface md:flex', collapsed ? 'w-18' : 'w-60')}
+      className={cn('sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line bg-surface md:flex print:hidden', collapsed ? 'w-18' : 'w-60')}
     >
       <div className={cn('flex h-16 items-center gap-2 px-3', collapsed ? 'justify-center' : 'justify-between')}>
         {collapsed ? null : (

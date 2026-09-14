@@ -39,8 +39,33 @@ export const httpUrlSchema = z
 export const tripStatusSchema = z.enum(['idea', 'planned', 'booked', 'past'])
 export type TripStatusValue = z.infer<typeof tripStatusSchema>
 
-export const itineraryKindSchema = z.enum(['flight', 'lodging', 'activity', 'meal', 'transport', 'note'])
-export type ItineraryKindValue = z.infer<typeof itineraryKindSchema>
+export const slotBandSchema = z.enum(['early', 'morning', 'midday', 'afternoon', 'evening', 'night'])
+export type SlotBandValue = z.infer<typeof slotBandSchema>
+
+export const slotKindSchema = z.enum(['meal', 'activity', 'transport', 'lodging', 'downtime', 'note'])
+export type SlotKindValue = z.infer<typeof slotKindSchema>
+
+export const slotStatusSchema = z.enum(['open', 'decided', 'booked', 'skipped'])
+export type SlotStatusValue = z.infer<typeof slotStatusSchema>
+
+export const optionStatusSchema = z.enum(['candidate', 'chosen', 'rejected'])
+export type OptionStatusValue = z.infer<typeof optionStatusSchema>
+
+export const costBasisSchema = z.enum(['per_person', 'total'])
+export type CostBasisValue = z.infer<typeof costBasisSchema>
+
+export const optionSourceSchema = z.enum(['manual', 'link', 'idea_board', 'booking'])
+export type OptionSourceValue = z.infer<typeof optionSourceSchema>
+
+export const optionVoteSchema = z.enum(['yes', 'maybe', 'no'])
+export type OptionVoteValue = z.infer<typeof optionVoteSchema>
+
+/** How you get from one stop to the next. */
+export const journeyModeSchema = z.enum(['walk', 'transit', 'drive'])
+export type JourneyModeValue = z.infer<typeof journeyModeSchema>
+
+/** A wall-clock time, "HH:MM", 24-hour. */
+export const timeOfDaySchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use a 24-hour time, HH:MM')
 
 export const voteSchema = z.enum(['up', 'down'])
 export type VoteValue = z.infer<typeof voteSchema>

@@ -1,9 +1,15 @@
-import type { ItineraryItem } from '@ghar/contracts'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
+export interface MapStop {
+  id: string
+  title: string
+  lat: number
+  lng: number
+}
+
 /**
- * The trip's stops, plotted against each other.
+ * The trip's chosen stops, plotted against each other, in the order they happen.
  *
  * There are no map tiles here on purpose: tiles mean a third-party key, a request per pin
  * from every viewer, and something that goes blank in travel mode when there is no signal.
@@ -11,29 +17,23 @@ import { cn } from '@/lib/utils'
  * which needs relative positions and a scale bar, not streets. Each pin links out to a
  * real map for the times you want one.
  */
-export function StopMap({ items, className }: { items: readonly ItineraryItem[]; className?: string }) {
-  const stops = items.flatMap((item, index) =>
-    item.lat === null || item.lng === null ? [] : [{ id: item.id, title: item.title, lat: item.lat, lng: item.lng, number: index + 1 }]
-  )
+export function StopMap({ stops, className }: { stops: readonly MapStop[]; className?: string }) {
+  const numbered = stops.map((stop, index) => ({ ...stop, number: index + 1 }))
 
   return (
     <Card className={cn('p-4', className)}>
       <p className='text-sm font-medium'>Stops</p>
 
-      {stops.length === 0 ? (
-        <p className='mt-2 text-sm text-ink-muted'>Give an itinerary item a latitude and longitude and it lands on this map.</p>
+      {numbered.length === 0 ? (
+        <p className='mt-2 text-sm text-ink-muted'>Choose an option with a location and it lands on this map.</p>
       ) : (
-        <Plot stops={stops} />
+        <Plot stops={numbered} />
       )}
     </Card>
   )
 }
 
-interface Stop {
-  id: string
-  title: string
-  lat: number
-  lng: number
+interface Stop extends MapStop {
   number: number
 }
 

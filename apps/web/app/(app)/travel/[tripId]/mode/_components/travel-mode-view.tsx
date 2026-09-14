@@ -1,6 +1,6 @@
 'use client'
 
-import { getTravelMode, type ItineraryItem, type TravelMode } from '@ghar/contracts'
+import { getTravelMode, type ItineraryOption, type ItinerarySlot, type TravelMode } from '@ghar/contracts'
 import { addCalendarDays, formatCalendarDate, formatInstant } from '@ghar/core/dates'
 import { dayPlan } from '@ghar/core/itinerary'
 import { bookingTitle } from '@ghar/core/travel'
@@ -11,11 +11,13 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { api } from '@/lib/api/client'
+import { agendaFor, mapLink, positioned } from '@/lib/travel/itinerary-display'
 import { ConfirmationCode } from '../../_components/confirmation-code'
 import { cachedTravelMode, cacheTravelMode } from '../cache'
 
 /**
- * Everything for the day, in large type.
+ * Everything for the day, in large type. Only what has been settled: a dinner still being
+ * argued over is not something to walk to.
  *
  * The offline story is deliberate rather than magic. The whole trip is in the payload, so
  * moving between days needs no network. A copy goes into localStorage, and the page falls
@@ -66,17 +68,16 @@ export function TravelModeView({ initial }: { initial: TravelMode }) {
     })()
   }
 
-  const items = mode.items.map(item => ({
-    ...item,
-    startsAt: item.startsAt === null ? null : new Date(item.startsAt),
-    endsAt: item.endsAt === null ? null : new Date(item.endsAt),
-    iso: item,
-  }))
-  const plan = dayPlan(items, day, now)
+  const plan = dayPlan(
+    agendaFor(mode.slots, day).map(entry => ({ ...positioned(entry.slot), option: entry.option })),
+    day,
+    now
+  )
   const days = tripDays(mode.trip)
   const dayNumber = tripDayNumber(mode.trip, day)
 
-  const unlisted = mode.bookings.filter(booking => !mode.items.some(item => item.bookingId === booking.id))
+  const listed = new Set(mode.slots.flatMap(slot => slot.options.map(option => option.bookingId)))
+  const unlisted = mode.bookings.filter(booking => !listed.has(booking.id))
 
   return (
     <div className='flex flex-col gap-6 text-lg'>
@@ -130,14 +131,15 @@ export function TravelModeView({ initial }: { initial: TravelMode }) {
         ) : null}
       </header>
 
-      {plan.items.length === 0 ? (
-        <EmptyState title='Nothing planned for this day'>A free day. Add something from the trip page if that is not right.</EmptyState>
+      {plan.slots.length === 0 ? (
+        <EmptyState title='Nothing settled for this day'>Choose between the options on the trip page and they show up here.</EmptyState>
       ) : (
         <ol className='flex flex-col gap-3'>
-          {plan.items.map(entry => (
+          {plan.slots.map(entry => (
             <li key={entry.id}>
               <DayCard
-                item={entry.iso}
+                slot={entry.slot}
+                option={entry.option}
                 timeZone={mode.timeZone}
                 underway={plan.current.some(current => current.id === entry.id)}
                 next={plan.next?.id === entry.id}
@@ -166,33 +168,43 @@ export function TravelModeView({ initial }: { initial: TravelMode }) {
   )
 }
 
-function DayCard({ item, timeZone, underway, next }: { item: ItineraryItem; timeZone: string; underway: boolean; next: boolean }) {
+function DayCard({
+  slot,
+  option,
+  timeZone,
+  underway,
+  next,
+}: {
+  slot: ItinerarySlot
+  option: ItineraryOption
+  timeZone: string
+  underway: boolean
+  next: boolean
+}) {
   const time = (value: string | null) => (value === null ? null : formatInstant(new Date(value), timeZone, { timeStyle: 'short' }))
 
-  const starts = time(item.startsAt)
-  const ends = time(item.endsAt)
-  const map =
-    item.lat === null || item.lng === null
-      ? null
-      : `https://www.openstreetmap.org/?mlat=${item.lat}&mlon=${item.lng}#map=16/${item.lat}/${item.lng}`
+  const starts = time(slot.startsAt)
+  const ends = time(slot.endsAt)
+  const map = mapLink(option)
+  const link = option.bookingUrl ?? option.url
 
   return (
     <Card className={underway ? 'border-ink p-5' : 'p-5'}>
       <div className='flex flex-wrap items-baseline justify-between gap-2'>
-        <p className='amount text-2xl'>{starts ?? 'All day'}</p>
+        <p className='amount text-2xl'>{starts ?? slot.label}</p>
         {underway ? <p className='text-base text-ink-muted'>Now</p> : next ? <p className='text-base text-ink-muted'>Up next</p> : null}
       </div>
 
-      <p className='mt-1 text-xl font-semibold'>{item.title}</p>
+      <p className='mt-1 text-xl font-semibold'>{option.title}</p>
       {ends ? <p className='text-base text-ink-muted'>until {ends}</p> : null}
 
-      {(item.location ?? item.address) ? (
-        <p className='mt-1 text-base text-ink-muted'>{[item.location, item.address].filter(Boolean).join(' · ')}</p>
+      {(option.subtitle ?? option.address) ? (
+        <p className='mt-1 text-base text-ink-muted'>{[option.subtitle, option.address].filter(Boolean).join(' · ')}</p>
       ) : null}
 
-      {item.confirmationCode ? <ConfirmationCode code={item.confirmationCode} className='mt-3' /> : null}
+      {option.confirmationCode ? <ConfirmationCode code={option.confirmationCode} className='mt-3' /> : null}
 
-      {item.notes ? <p className='mt-3 text-base whitespace-pre-line'>{item.notes}</p> : null}
+      {option.notes ? <p className='mt-3 text-base whitespace-pre-line'>{option.notes}</p> : null}
 
       <div className='mt-3 flex flex-wrap gap-4 text-base'>
         {map ? (
@@ -200,9 +212,9 @@ function DayCard({ item, timeZone, underway, next }: { item: ItineraryItem; time
             Open in maps
           </a>
         ) : null}
-        {item.url ? (
-          <a href={item.url} target='_blank' rel='noreferrer noopener' className='underline underline-offset-4'>
-            Open the booking
+        {link ? (
+          <a href={link} target='_blank' rel='noreferrer noopener' className='underline underline-offset-4'>
+            {option.bookingUrl ? 'Open the booking' : 'Open the link'}
           </a>
         ) : null}
       </div>

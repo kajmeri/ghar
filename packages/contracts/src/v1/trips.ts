@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { householdRoleSchema } from '../context'
 import { defineEndpoint } from '../endpoint'
-import { itineraryItemSchema } from './itinerary'
+import { itinerarySlotSchema, itineraryViewSchema } from './itinerary'
 import { packingItemSchema } from './packing'
 import {
   calendarDateSchema,
@@ -50,7 +50,9 @@ export type Trip = z.infer<typeof tripSchema>
 
 /** A trip in a list: the trip, plus the counts a card shows without opening it. */
 export const tripSummarySchema = tripSchema.extend({
-  itineraryItemCount: z.int().nonnegative(),
+  slotCount: z.int().nonnegative(),
+  /** Slots still open: being debated, or waiting for a first option. */
+  openDecisionCount: z.int().nonnegative(),
   bookingCount: z.int().nonnegative(),
   packedCount: z.int().nonnegative(),
   packingItemCount: z.int().nonnegative(),
@@ -106,7 +108,7 @@ export const tripDetailSchema = z.object({
   today: calendarDateSchema,
   /** Everyone in the household, so a packing assignment can be shown as a name. */
   members: z.array(householdMemberSchema),
-  itinerary: z.array(itineraryItemSchema),
+  itinerary: itineraryViewSchema,
   bookings: z.array(bookingSchema),
   packing: z.array(packingItemSchema),
   /** Raw budget inputs. Clients call tripBudget in @ghar/core to get the state. */
@@ -160,9 +162,9 @@ export const deleteTrip = defineEndpoint({
 })
 
 /**
- * Filing a booking under a trip. `generateItineraryItem` is on by default because the
- * reason to link a booking is almost always to get it onto the timeline; turning it off
- * leaves the booking attached to the trip without adding a row to the day.
+ * Filing a booking under a trip. `addToItinerary` is on by default because the reason to
+ * link a booking is almost always to get it onto the itinerary, where it lands as a slot
+ * already booked. Turning it off leaves the booking attached to the trip and nothing more.
  */
 export const linkBookingToTrip = defineEndpoint({
   method: 'POST',
@@ -170,22 +172,22 @@ export const linkBookingToTrip = defineEndpoint({
   params: tripParamsSchema,
   body: z.object({
     bookingId: z.uuid(),
-    generateItineraryItem: z.boolean().default(true),
+    addToItinerary: z.boolean().default(true),
   }),
   response: z.object({
     booking: bookingSchema,
-    /** Null when the booking has no date to put it on, or generation was declined. */
-    itineraryItemId: z.uuid().nullable(),
+    /** Null when the booking has no date to put it on, or adding it was declined. */
+    slot: itinerarySlotSchema.nullable(),
   }),
 })
 
 /**
- * Taking a booking off a trip. The itinerary item generated from it goes too, because an
- * item that outlives its booking is a row nobody can explain.
+ * Taking a booking off a trip. Its option goes too, and its slot if nothing else was in it;
+ * a slot with other options stays, reopened.
  */
 export const unlinkBookingFromTrip = defineEndpoint({
   method: 'DELETE',
   path: '/api/v1/trips/:tripId/bookings/:bookingId',
   params: tripParamsSchema.extend({ bookingId: z.uuid() }),
-  response: z.object({ booking: bookingSchema, removedItineraryItemCount: z.int().nonnegative() }),
+  response: z.object({ booking: bookingSchema, removedOptionCount: z.int().nonnegative() }),
 })

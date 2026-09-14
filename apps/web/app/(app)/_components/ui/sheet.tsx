@@ -4,6 +4,7 @@ import { X } from 'lucide-react'
 import { Dialog } from 'radix-ui'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 /**
  * A panel for a focused task: add a bill, edit a trip. Rises from the bottom on a phone and
@@ -20,6 +21,7 @@ export function Sheet({
   open,
   defaultOpen,
   onOpenChange,
+  size = 'default',
 }: {
   trigger?: ReactNode
   title: string
@@ -29,6 +31,8 @@ export function Sheet({
   open?: boolean
   defaultOpen?: boolean
   onOpenChange?: (open: boolean) => void
+  /** `full` takes the whole phone screen, and more of a wide one, for work that needs the room. */
+  size?: 'default' | 'full'
 }) {
   return (
     <Dialog.Root open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
@@ -38,9 +42,14 @@ export function Sheet({
         <Dialog.Content
           // Radix warns without a description unless it is told there isn't one.
           {...(description ? {} : { 'aria-describedby': undefined })}
-          className='fixed inset-x-0 bottom-0 z-50 flex max-h-[90dvh] flex-col rounded-t-card border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] shadow-overlay focus:outline-none motion-safe:data-[state=closed]:animate-sink-out motion-safe:data-[state=open]:animate-rise-in md:top-0 md:left-auto md:max-h-none md:w-112 md:rounded-l-card md:rounded-tr-none md:border-t-0 md:border-l md:pb-0 motion-safe:md:data-[state=closed]:animate-slide-out-right motion-safe:md:data-[state=open]:animate-slide-in-right'
+          className={cn(
+            'fixed inset-x-0 bottom-0 z-50 flex flex-col border-line bg-surface pb-[env(safe-area-inset-bottom)] shadow-overlay focus:outline-none motion-safe:data-[state=closed]:animate-sink-out motion-safe:data-[state=open]:animate-rise-in md:top-0 md:left-auto md:max-h-none md:rounded-l-card md:rounded-tr-none md:border-t-0 md:border-l md:pb-0 motion-safe:md:data-[state=closed]:animate-slide-out-right motion-safe:md:data-[state=open]:animate-slide-in-right',
+            size === 'full'
+              ? 'top-0 pt-[env(safe-area-inset-top)] md:w-[min(56rem,calc(100vw-4rem))] md:pt-0'
+              : 'max-h-[90dvh] rounded-t-card border-t md:w-112'
+          )}
         >
-          <div aria-hidden className='mx-auto mt-2 h-1 w-10 shrink-0 rounded-pill bg-line md:hidden' />
+          {size === 'full' ? null : <div aria-hidden className='mx-auto mt-2 h-1 w-10 shrink-0 rounded-pill bg-line md:hidden' />}
           <div className='flex shrink-0 items-start justify-between gap-4 pt-2 pr-2 pl-4 md:pt-4 md:pl-6'>
             <div className='min-w-0 pt-2.5'>
               <Dialog.Title className='text-lg font-semibold break-words'>{title}</Dialog.Title>

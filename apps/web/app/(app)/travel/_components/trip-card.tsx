@@ -33,8 +33,14 @@ export function TripCard({ trip, countdown, status }: { trip: TripSummary; count
         <dl className='mt-auto flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-muted'>
           <div className='flex gap-1'>
             <dt>Itinerary</dt>
-            <dd className='text-ink'>{trip.itineraryItemCount}</dd>
+            <dd className='text-ink'>{trip.slotCount}</dd>
           </div>
+          {trip.openDecisionCount === 0 ? null : (
+            <div className='flex gap-1'>
+              <dt>To decide</dt>
+              <dd className='text-caution'>{trip.openDecisionCount}</dd>
+            </div>
+          )}
           <div className='flex gap-1'>
             <dt>Bookings</dt>
             <dd className='text-ink'>{trip.bookingCount}</dd>

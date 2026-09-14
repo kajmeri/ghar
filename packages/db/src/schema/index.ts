@@ -38,7 +38,7 @@ import {
   RATE_PLANS,
   type Cabin,
 } from '@ghar/core/travel'
-import { ITINERARY_KINDS } from '@ghar/core/itinerary'
+import { COST_BASES, OPTION_SOURCES, OPTION_STATUSES, OPTION_VOTES, SLOT_BANDS, SLOT_KINDS, SLOT_STATUSES } from '@ghar/core/itinerary'
 import { TRIP_STATUSES } from '@ghar/core/trips'
 import { sql, type SQL } from 'drizzle-orm'
 import {
@@ -89,7 +89,13 @@ export const calendarProvider = pgEnum('calendar_provider', CALENDAR_PROVIDERS)
 export const calendarLinkDirection = pgEnum('calendar_link_direction', LINK_DIRECTIONS)
 export const calendarLinkStatus = pgEnum('calendar_link_status', LINK_STATUSES)
 export const tripStatus = pgEnum('trip_status', TRIP_STATUSES)
-export const itineraryItemKind = pgEnum('itinerary_item_kind', ITINERARY_KINDS)
+export const itinerarySlotBand = pgEnum('itinerary_slot_band', SLOT_BANDS)
+export const itinerarySlotKind = pgEnum('itinerary_slot_kind', SLOT_KINDS)
+export const itinerarySlotStatus = pgEnum('itinerary_slot_status', SLOT_STATUSES)
+export const itineraryOptionStatus = pgEnum('itinerary_option_status', OPTION_STATUSES)
+export const itineraryCostBasis = pgEnum('itinerary_cost_basis', COST_BASES)
+export const itineraryOptionSource = pgEnum('itinerary_option_source', OPTION_SOURCES)
+export const optionVoteValue = pgEnum('option_vote', OPTION_VOTES)
 
 const timestamptz = () => timestamp({ withTimezone: true })
 const metadata = () =>
@@ -616,7 +622,7 @@ export const bookings = pgTable(
 
 /**
  * The organizing layer above bookings. A trip starts as an idea with no dates, gains dates when
- * it's planned, and collects bookings, itinerary items, packing and spend.
+ * it's planned, and collects bookings, an itinerary, packing and spend.
  */
 export const trips = pgTable(
   'trips',
@@ -664,42 +670,131 @@ export const tripMembers = pgTable(
 ).enableRLS()
 
 /**
- * One row on a day's timeline. `day` is stored rather than derived from `startsAt`, so a note can
- * sit on a day without a time and an overnight flight stays on the day you leave.
+ * A stretch of a day that needs filling: "Dinner", "Morning". It holds the options being weighed
+ * for it, and at most one of them is chosen. A band is enough while planning is rough, so the
+ * times stay empty until someone knows them.
  */
-export const itineraryItems = pgTable(
-  'itinerary_items',
+export const itinerarySlots = pgTable(
+  'itinerary_slots',
   {
     id: uuid().primaryKey().defaultRandom(),
     tripId: uuid()
       .notNull()
       .references(() => trips.id, { onDelete: 'cascade' }),
+    /** Stored rather than derived from `startsAt`, so an overnight flight stays on the day you leave. */
     day: date({ mode: 'string' }).notNull(),
+    band: itinerarySlotBand().notNull(),
+    kind: itinerarySlotKind().notNull(),
+    label: text().notNull(),
     startsAt: timestamptz(),
     endsAt: timestamptz(),
-    kind: itineraryItemKind().notNull(),
-    title: text().notNull(),
-    location: text(),
-    address: text(),
-    lat: doublePrecision(),
-    lng: doublePrecision(),
-    confirmationCode: text(),
-    costCents: cents(),
-    /** Set when the item was generated from a booking. Deleting the booking leaves the item. */
-    bookingId: uuid().references(() => bookings.id, { onDelete: 'set null' }),
-    url: text(),
-    notes: text(),
-    /** Position within a day. Gaps are intentional; see SORT_ORDER_STEP in @ghar/core. */
+    /** Position within a day and band. Gaps are intentional; see SORT_ORDER_STEP in @ghar/core. */
     sortOrder: integer().notNull().default(0),
+    status: itinerarySlotStatus().notNull().default('open'),
+    /** Always one of this slot's own options; the data access layer is what guarantees it. */
+    chosenOptionId: uuid().references((): AnyPgColumn => itineraryOptions.id, { onDelete: 'set null' }),
+    decideBy: date({ mode: 'string' }),
+    notes: text(),
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
   table => [
-    index('itinerary_items_trip_day_idx').on(table.tripId, table.day, table.sortOrder),
-    // Generating from bookings twice must not duplicate. Every null bookingId is distinct, so
-    // hand-written items are unaffected.
-    uniqueIndex('itinerary_items_trip_booking_idx').on(table.tripId, table.bookingId),
+    index('itinerary_slots_trip_day_idx').on(table.tripId, table.day, table.band, table.sortOrder),
+    check('itinerary_slots_label_length', sql`char_length(${table.label}) between 1 and 200`),
+    // Decided and booked are exactly the states that have a choice. Deleting a chosen option
+    // therefore fails here unless the slot was reopened first.
+    check('itinerary_slots_choice_matches_status', sql`(${table.status} in ('decided', 'booked')) = (${table.chosenOptionId} is not null)`),
   ]
+).enableRLS()
+
+/** One thing a slot could be. Rejected options are kept, so a reversed decision loses nothing. */
+export const itineraryOptions = pgTable(
+  'itinerary_options',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    slotId: uuid()
+      .notNull()
+      .references((): AnyPgColumn => itinerarySlots.id, { onDelete: 'cascade' }),
+    title: text().notNull(),
+    subtitle: text(),
+    url: text(),
+    imageUrl: text(),
+    address: text(),
+    lat: doublePrecision(),
+    lng: doublePrecision(),
+    /** Per person or for the party, as `costBasis` says. `optionTotalCents` in @ghar/core reads both. */
+    costCents: cents(),
+    costBasis: itineraryCostBasis().notNull().default('total'),
+    durationMinutes: integer(),
+    /** Wall-clock "HH:MM" where the place is. A close at or before the open runs past midnight. */
+    opensAt: text(),
+    closesAt: text(),
+    /** Days of the week it is shut, 0 for Sunday. */
+    closedDays: integer()
+      .array()
+      .notNull()
+      .default(sql`'{}'::integer[]`),
+    bookingRequired: boolean().notNull().default(false),
+    bookingUrl: text(),
+    bookingDeadline: date({ mode: 'string' }),
+    confirmationCode: text(),
+    tags: text()
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    source: itineraryOptionSource().notNull().default('manual'),
+    /** Set when the option came from a booking. Deleting the booking leaves the option. */
+    bookingId: uuid().references(() => bookings.id, { onDelete: 'set null' }),
+    status: itineraryOptionStatus().notNull().default('candidate'),
+    sortOrder: integer().notNull().default(0),
+    notes: text(),
+    createdByUserId: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('itinerary_options_slot_idx').on(table.slotId, table.sortOrder),
+    // A booking is on one trip's timeline once. Every null is distinct, so other options are unaffected.
+    uniqueIndex('itinerary_options_booking_idx').on(table.bookingId),
+    check(
+      'itinerary_options_hours',
+      sql`(${table.opensAt} is null) = (${table.closesAt} is null)
+        and ${table.opensAt} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and ${table.closesAt} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`
+    ),
+    check('itinerary_options_closed_days', sql`${table.closedDays} <@ '{0,1,2,3,4,5,6}'::integer[]`),
+    check('itinerary_options_duration_positive', sql`${table.durationMinutes} > 0`),
+  ]
+).enableRLS()
+
+/** One vote per member per option. Voting again replaces it. */
+export const optionVotes = pgTable(
+  'option_votes',
+  {
+    optionId: uuid()
+      .notNull()
+      .references(() => itineraryOptions.id, { onDelete: 'cascade' }),
+    userId: uuid()
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    vote: optionVoteValue().notNull(),
+    comment: text(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [primaryKey({ columns: [table.optionId, table.userId] }), index('option_votes_user_idx').on(table.userId)]
+).enableRLS()
+
+/** Days where someone said no to the breakfast-lunch-dinner skeleton, so it stops being offered. */
+export const itineraryScaffoldDismissals = pgTable(
+  'itinerary_scaffold_dismissals',
+  {
+    tripId: uuid()
+      .notNull()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    day: date({ mode: 'string' }).notNull(),
+    createdAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [primaryKey({ columns: [table.tripId, table.day] })]
 ).enableRLS()
 
 /** One vote per member, stored as a map so a second vote replaces the first. */

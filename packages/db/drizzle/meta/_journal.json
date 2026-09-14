@@ -36,6 +36,13 @@
       "when": 1789392852925,
       "tag": "0004_trips",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789395208943,
+      "tag": "0005_itinerary_slots",
+      "breakpoints": true
     }
   ]
 }

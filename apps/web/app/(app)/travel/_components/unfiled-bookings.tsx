@@ -51,7 +51,7 @@ function UnfiledBooking({ booking, trips, timeZone }: { booking: Booking; trips:
   const { mutate, pending, error } = useMutation((selected: string) =>
     api.request(linkBookingToTrip, {
       params: { tripId: selected },
-      body: { bookingId: booking.id, generateItineraryItem: true },
+      body: { bookingId: booking.id, addToItinerary: true },
     })
   )
 

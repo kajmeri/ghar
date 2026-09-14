@@ -2,7 +2,8 @@ import 'server-only'
 import type {
   Booking,
   HouseholdMember,
-  ItineraryItem,
+  ItineraryOption,
+  ItinerarySlot,
   PackingItem,
   PackingTemplate,
   Trip,
@@ -12,7 +13,8 @@ import type {
 } from '@ghar/contracts'
 import type {
   BookingRow,
-  ItineraryItemRow,
+  ItineraryOptionWithVotes,
+  ItinerarySlotWithOptions,
   MemberRow,
   PackingItemRow,
   PackingTemplateWithItems,
@@ -51,7 +53,8 @@ export function toTrip(row: TripWithCounts): Trip {
 export function toTripSummary(row: TripWithCounts): TripSummary {
   return {
     ...toTrip(row),
-    itineraryItemCount: row.itineraryItemCount,
+    slotCount: row.slotCount,
+    openDecisionCount: row.openDecisionCount,
     bookingCount: row.bookingCount,
     packedCount: row.packedCount,
     packingItemCount: row.packingItemCount,
@@ -63,25 +66,54 @@ export function toHouseholdMember(row: MemberRow): HouseholdMember {
   return { userId: row.userId, displayName: row.fullName, role: row.role }
 }
 
-export function toItineraryItem(row: ItineraryItemRow): ItineraryItem {
+export function toItineraryOption(row: ItineraryOptionWithVotes): ItineraryOption {
+  return {
+    id: row.id,
+    slotId: row.slotId,
+    title: row.title,
+    subtitle: row.subtitle,
+    url: row.url,
+    imageUrl: row.imageUrl,
+    address: row.address,
+    lat: row.lat,
+    lng: row.lng,
+    costCents: row.costCents,
+    costBasis: row.costBasis,
+    durationMinutes: row.durationMinutes,
+    opensAt: row.opensAt,
+    closesAt: row.closesAt,
+    closedDays: row.closedDays,
+    bookingRequired: row.bookingRequired,
+    bookingUrl: row.bookingUrl,
+    bookingDeadline: row.bookingDeadline,
+    confirmationCode: row.confirmationCode,
+    tags: row.tags,
+    source: row.source,
+    bookingId: row.bookingId,
+    status: row.status,
+    sortOrder: row.sortOrder,
+    notes: row.notes,
+    createdByUserId: row.createdByUserId,
+    votes: row.votes.map(vote => ({ userId: vote.userId, vote: vote.vote, comment: vote.comment })),
+  }
+}
+
+export function toItinerarySlot(row: ItinerarySlotWithOptions): ItinerarySlot {
   return {
     id: row.id,
     tripId: row.tripId,
     day: row.day,
+    band: row.band,
+    kind: row.kind,
+    label: row.label,
     startsAt: instant(row.startsAt),
     endsAt: instant(row.endsAt),
-    kind: row.kind,
-    title: row.title,
-    location: row.location,
-    address: row.address,
-    lat: row.lat,
-    lng: row.lng,
-    confirmationCode: row.confirmationCode,
-    costCents: row.costCents,
-    bookingId: row.bookingId,
-    url: row.url,
-    notes: row.notes,
     sortOrder: row.sortOrder,
+    status: row.status,
+    chosenOptionId: row.chosenOptionId,
+    decideBy: row.decideBy,
+    notes: row.notes,
+    options: row.options.map(toItineraryOption),
   }
 }
 

@@ -54,6 +54,14 @@ const envSchema = z.object({
   CALENDAR_PROVIDER: z.preprocess(unset, z.enum(['fake', 'google']).default('fake')),
   GOOGLE_CLIENT_ID: z.preprocess(unset, z.string().min(1).optional()),
   GOOGLE_CLIENT_SECRET: z.preprocess(unset, z.string().min(1).optional()),
+  /**
+   * Travel times between itinerary stops. `estimate` works them out from distance and needs
+   * nothing. `osrm` asks the OSRM server at OSRM_URL for walking and driving routes, and keeps
+   * the estimate for any leg it cannot answer.
+   */
+  ROUTING_PROVIDER: z.preprocess(unset, z.enum(['estimate', 'osrm']).default('estimate')),
+  /** An OSRM server's origin, for ROUTING_PROVIDER=osrm. It receives the trip's coordinates. */
+  OSRM_URL: z.preprocess(unset, z.url({ protocol: /^https?$/ }).optional()).transform(url => url?.replace(/\/+$/, '')),
 })
 
 export type Env = z.output<typeof envSchema>

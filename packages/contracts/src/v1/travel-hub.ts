@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
 import { bookingSchema } from './travel'
 import { tripIdeaSchema } from './ideas'
-import { itineraryItemSchema } from './itinerary'
+import { itinerarySlotSchema } from './itinerary'
 import { calendarDateSchema, centsSchema, instantSchema, queryBooleanSchema, shortTextSchema, tripParamsSchema } from './shared'
 import { tripSchema, tripSummarySchema } from './trips'
 
@@ -42,8 +42,9 @@ export const travelModeSchema = z.object({
   timeZone: z.string(),
   today: calendarDateSchema,
   generatedAt: instantSchema,
-  items: z.array(itineraryItemSchema),
-  /** Linked bookings, so a confirmation code is there even for a booking with no item. */
+  /** Every slot with its options. Travel mode and the day sheet show only what was chosen. */
+  slots: z.array(itinerarySlotSchema),
+  /** Linked bookings, so a confirmation code is there even for a booking not on the itinerary. */
   bookings: z.array(bookingSchema),
 })
 export type TravelMode = z.infer<typeof travelModeSchema>

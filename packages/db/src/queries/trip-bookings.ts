@@ -1,14 +1,14 @@
 import { requirePermission } from '@ghar/core/auth'
 import type { TimeZone } from '@ghar/core/dates'
 import { NotFoundError } from '@ghar/core/errors'
-import { itineraryDraftFromBooking } from '@ghar/core/itinerary'
+import { slotDraftFromBooking, type BookingSlotDraft } from '@ghar/core/itinerary'
 import { and, asc, eq, isNotNull, isNull, sql } from 'drizzle-orm'
-import { bookings, itineraryItems } from '../schema'
+import { bookings } from '../schema'
 import { recordAudit } from './audit'
-import { listItineraryItems, type ItineraryItemRow } from './itinerary'
+import { getSlot, listItinerary, type Itinerary, type ItinerarySlotWithOptions } from './itinerary'
 import { requireTrip } from './scope'
 import { bookingColumns, type BookingRow } from './travel'
-import { deleteItemsForBookings, insertGeneratedItems } from './trip-items'
+import { bookingsOnItinerary, deleteOptionsForBookings, insertBookingSlots } from './trip-items'
 import type { Db, RequestContext } from './types'
 
 // Filing bookings under trips. A booking exists before anyone decides which trip it belongs to,
@@ -42,36 +42,37 @@ export async function listTripBookings(
 }
 
 /**
- * Filing a booking under a trip, and putting it on the timeline while we are here. The item is
- * skipped when the booking is cancelled, or has no date on a trip with none either: there is no
- * day to hang it on, and guessing would be worse than leaving it linked but unlisted.
+ * Filing a booking under a trip, and putting it on the itinerary while we are here, as a slot
+ * already booked on it. The slot is skipped when the booking is cancelled, or has no date on a trip
+ * with none either: there is no day to hang it on, and guessing would be worse than leaving it
+ * linked but unlisted.
  *
- * Moving a booking from one trip to another takes its generated item off the old trip.
+ * Moving a booking from one trip to another takes its option off the old trip.
  */
 export async function linkBookingToTrip(
   ctx: RequestContext,
   db: Db,
   tripId: string,
   bookingId: string,
-  options: { timeZone: TimeZone; generateItineraryItem: boolean }
-): Promise<{ booking: BookingRow; item: ItineraryItemRow | null }> {
+  options: { timeZone: TimeZone; addToItinerary: boolean }
+): Promise<{ booking: BookingRow; slot: ItinerarySlotWithOptions | null }> {
   requirePermission(ctx, 'travel.manage')
   const trip = await requireTrip(ctx, db, tripId)
 
-  return db.transaction(async tx => {
+  const { booking, slotId } = await db.transaction(async tx => {
     const bookingKey = and(eq(bookings.id, bookingId), eq(bookings.householdId, ctx.householdId))
     const [previous] = await tx.select({ tripId: bookings.tripId }).from(bookings).where(bookingKey).limit(1).for('update')
     if (!previous) throw new NotFoundError(BOOKING_NOT_FOUND)
     if (previous.tripId !== null && previous.tripId !== trip.id) {
-      await deleteItemsForBookings(tx, previous.tripId, [bookingId])
+      await deleteOptionsForBookings(tx, previous.tripId, [bookingId])
     }
 
-    const [booking] = await tx
+    const [updated] = await tx
       .update(bookings)
       .set({ tripId: trip.id, updatedAt: sql`now()` })
       .where(bookingKey)
       .returning(bookingColumns)
-    if (!booking) throw new NotFoundError(BOOKING_NOT_FOUND)
+    if (!updated) throw new NotFoundError(BOOKING_NOT_FOUND)
     await recordAudit(ctx, tx, {
       action: 'booking.linked_to_trip',
       entity: 'booking',
@@ -79,27 +80,26 @@ export async function linkBookingToTrip(
       metadata: { tripId: trip.id },
     })
 
-    if (!options.generateItineraryItem || booking.status === 'cancelled') {
-      return { booking, item: null }
+    if (!options.addToItinerary || updated.status === 'cancelled') {
+      return { booking: updated, slotId: null }
     }
-    const draft = itineraryDraftFromBooking(booking, {
-      timeZone: options.timeZone,
-      fallbackDay: trip.startsOn,
-    })
-    if (!draft) return { booking, item: null }
+    const draft = slotDraftFromBooking(updated, { timeZone: options.timeZone, fallbackDay: trip.startsOn })
+    if (!draft) return { booking: updated, slotId: null }
 
-    const [item] = await insertGeneratedItems(tx, trip.id, [{ ...draft, notes: null }])
-    return { booking, item: item ?? null }
+    const [slot] = await insertBookingSlots(tx, trip.id, [draft])
+    return { booking: updated, slotId: slot?.id ?? null }
   })
+
+  return { booking, slot: slotId === null ? null : await getSlot(ctx, db, trip.id, slotId) }
 }
 
-/** Taking a booking off a trip. The item generated from it goes with it. */
+/** Taking a booking off a trip. Its option goes with it, and its slot if nothing else was in it. */
 export async function unlinkBookingFromTrip(
   ctx: RequestContext,
   db: Db,
   tripId: string,
   bookingId: string
-): Promise<{ booking: BookingRow; removedItineraryItemCount: number }> {
+): Promise<{ booking: BookingRow; removedOptionCount: number }> {
   requirePermission(ctx, 'travel.manage')
   await requireTrip(ctx, db, tripId)
 
@@ -111,69 +111,63 @@ export async function unlinkBookingFromTrip(
       .returning(bookingColumns)
     if (!booking) throw new NotFoundError('That booking is not on this trip.')
 
-    const removedItineraryItemCount = await deleteItemsForBookings(tx, tripId, [bookingId])
+    const removedOptionCount = await deleteOptionsForBookings(tx, tripId, [bookingId])
     await recordAudit(ctx, tx, {
       action: 'booking.unlinked_from_trip',
       entity: 'booking',
       entityId: bookingId,
       metadata: { tripId },
     })
-    return { booking, removedItineraryItemCount }
+    return { booking, removedOptionCount }
   })
 }
 
 /**
- * Fills the timeline in from the trip's linked bookings.
+ * Fills the itinerary in from the trip's linked bookings.
  *
- * Idempotent twice over: bookings that already have an item are filtered out here, and the
- * unique index on (trip_id, booking_id) catches anything that slips past a concurrent run.
- * Bookings with no date on a trip with no dates have nowhere to go, and come back as skipped
- * rather than being guessed at. Cancelled bookings are left off.
+ * Idempotent twice over: bookings already on a timeline are filtered out here, and the unique
+ * index on an option's booking id catches anything that slips past a concurrent run. Bookings with
+ * no date on a trip with no dates have nowhere to go, and come back as skipped rather than being
+ * guessed at. Cancelled bookings are left off.
  */
 export async function generateItineraryFromBookings(
   ctx: RequestContext,
   db: Db,
   tripId: string,
   options: { timeZone: TimeZone; bookingIds?: readonly string[] }
-): Promise<{ items: ItineraryItemRow[]; createdCount: number; skippedBookingIds: string[] }> {
+): Promise<{ itinerary: Itinerary; createdCount: number; skippedBookingIds: string[] }> {
   requirePermission(ctx, 'travel.manage')
   const trip = await requireTrip(ctx, db, tripId)
   const wanted = options.bookingIds ? new Set(options.bookingIds) : null
 
   const { createdCount, skippedBookingIds } = await db.transaction(async tx => {
-    const [linked, existing] = await Promise.all([
-      tx
-        .select(bookingColumns)
-        .from(bookings)
-        .where(and(eq(bookings.householdId, ctx.householdId), eq(bookings.tripId, trip.id)))
-        .orderBy(asc(bookingStart), asc(bookings.id)),
-      tx
-        .select({ bookingId: itineraryItems.bookingId })
-        .from(itineraryItems)
-        .where(and(eq(itineraryItems.tripId, trip.id), isNotNull(itineraryItems.bookingId))),
-    ])
-    const alreadyOnTimeline = new Set(existing.map(item => item.bookingId))
+    const linked = await tx
+      .select(bookingColumns)
+      .from(bookings)
+      .where(and(eq(bookings.householdId, ctx.householdId), eq(bookings.tripId, trip.id)))
+      .orderBy(asc(bookingStart), asc(bookings.id))
+    const alreadyOnItinerary = await bookingsOnItinerary(
+      tx,
+      linked.map(booking => booking.id)
+    )
 
     const skipped: string[] = []
-    const drafts = []
+    const drafts: BookingSlotDraft[] = []
     for (const booking of linked) {
-      if (alreadyOnTimeline.has(booking.id) || booking.status === 'cancelled') continue
+      if (alreadyOnItinerary.has(booking.id) || booking.status === 'cancelled') continue
       if (wanted && !wanted.has(booking.id)) continue
 
-      const draft = itineraryDraftFromBooking(booking, {
-        timeZone: options.timeZone,
-        fallbackDay: trip.startsOn,
-      })
-      if (draft) drafts.push({ ...draft, notes: null })
+      const draft = slotDraftFromBooking(booking, { timeZone: options.timeZone, fallbackDay: trip.startsOn })
+      if (draft) drafts.push(draft)
       else skipped.push(booking.id)
     }
 
-    const created = await insertGeneratedItems(tx, trip.id, drafts)
+    const created = await insertBookingSlots(tx, trip.id, drafts)
     return { createdCount: created.length, skippedBookingIds: skipped }
   })
 
   return {
-    items: await listItineraryItems(ctx, db, tripId),
+    itinerary: await listItinerary(ctx, db, tripId),
     createdCount,
     skippedBookingIds,
   }

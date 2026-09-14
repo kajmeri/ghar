@@ -2,26 +2,26 @@ import 'server-only'
 import type { TravelHub, TravelMode, TripDetail } from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
 import { todayInTimeZone } from '@ghar/core/dates'
-import { tripCommittedCents } from '@ghar/core/trips'
+import { plannedCents } from '@ghar/core/itinerary'
 import {
   countPastTrips,
   getTripWithCounts,
-  listItineraryItems,
+  listItinerary,
   listMembers,
   listPackingItems,
   listTripBookings,
   listTripIdeas,
   listTripTransactions,
   listTrips,
-  requireTrip,
   sumTripActualCents,
 } from '@ghar/db/queries'
 import type { Session } from '../api/authed'
 import { getDb } from '../db'
+import { decisionsFor, itineraryView, travelersOn } from './itinerary'
 import {
   toBooking,
   toHouseholdMember,
-  toItineraryItem,
+  toItinerarySlot,
   toPackingItem,
   toTrip,
   toTripIdea,
@@ -60,6 +60,12 @@ export async function loadTravelHub(session: Session): Promise<TravelHub> {
   }
 }
 
+/** The household's idea board, for promoting an idea into a slot's options. */
+export async function loadTripIdeas(session: Session) {
+  const ideas = await listTripIdeas(session.context, getDb())
+  return ideas.map(toTripIdea)
+}
+
 export async function loadTripDetail(session: Session, tripId: string): Promise<TripDetail> {
   const db = getDb()
   const { context, household } = session
@@ -67,10 +73,37 @@ export async function loadTripDetail(session: Session, tripId: string): Promise<
   const [trip, members, itinerary, bookings, packing, actualCents] = await Promise.all([
     getTripWithCounts(context, db, tripId),
     listMembers(context, db),
-    listItineraryItems(context, db, tripId),
+    listItinerary(context, db, tripId),
     listTripBookings(context, db, { tripId }),
     listPackingItems(context, db, tripId),
     sumTripActualCents(context, db, tripId),
+  ])
+  const travelers = travelersOn(trip)
+
+  return {
+    trip: toTrip(trip),
+    timeZone: household.timeZone,
+    today: todayInTimeZone(household.timeZone),
+    members: members.map(toHouseholdMember),
+    itinerary: await itineraryView(itinerary, travelers, household.timeZone),
+    bookings: bookings.map(toBooking),
+    packing: packing.map(toPackingItem),
+    actualCents,
+    // What the chosen options cost. Bookings show up through the options made from them, so
+    // counting both would double every linked booking.
+    committedCents: plannedCents(itinerary.slots, travelers),
+  }
+}
+
+/** The decisions page: the trip, who is on it, the itinerary, and its open slots in order. */
+export async function loadTripDecisions(session: Session, tripId: string) {
+  const db = getDb()
+  const { context, household } = session
+
+  const [trip, members, itinerary] = await Promise.all([
+    getTripWithCounts(context, db, tripId),
+    listMembers(context, db),
+    listItinerary(context, db, tripId),
   ])
 
   return {
@@ -78,13 +111,8 @@ export async function loadTripDetail(session: Session, tripId: string): Promise<
     timeZone: household.timeZone,
     today: todayInTimeZone(household.timeZone),
     members: members.map(toHouseholdMember),
-    itinerary: itinerary.map(toItineraryItem),
-    bookings: bookings.map(toBooking),
-    packing: packing.map(toPackingItem),
-    actualCents,
-    // What the plan expects to cost, from the itinerary. Bookings show up through the
-    // items generated from them, so counting both would double every linked booking.
-    committedCents: tripCommittedCents(itinerary),
+    itinerary: await itineraryView(itinerary, travelersOn(trip), household.timeZone),
+    decisions: decisionsFor(itinerary.slots, household.timeZone),
   }
 }
 
@@ -97,8 +125,8 @@ export async function loadTripBudget(session: Session, tripId: string) {
   const { context } = session
 
   const [trip, itinerary, actualCents, transactions] = await Promise.all([
-    requireTrip(context, db, tripId),
-    listItineraryItems(context, db, tripId),
+    getTripWithCounts(context, db, tripId),
+    listItinerary(context, db, tripId),
     sumTripActualCents(context, db, tripId),
     can(context.role, 'finances.view') ? listTripTransactions(context, db, { tripId, limit: 200 }) : Promise.resolve([]),
   ])
@@ -107,7 +135,7 @@ export async function loadTripBudget(session: Session, tripId: string) {
     tripId: trip.id,
     plannedCents: trip.budgetCents,
     actualCents,
-    committedCents: tripCommittedCents(itinerary),
+    committedCents: plannedCents(itinerary.slots, travelersOn(trip)),
     transactions: transactions.map(toTripTransaction),
   }
 }
@@ -121,9 +149,9 @@ export async function loadTravelMode(session: Session, tripId: string): Promise<
   const db = getDb()
   const { context, household } = session
 
-  const [trip, items, bookings] = await Promise.all([
+  const [trip, itinerary, bookings] = await Promise.all([
     getTripWithCounts(context, db, tripId),
-    listItineraryItems(context, db, tripId),
+    listItinerary(context, db, tripId),
     listTripBookings(context, db, { tripId }),
   ])
 
@@ -132,7 +160,7 @@ export async function loadTravelMode(session: Session, tripId: string): Promise<
     timeZone: household.timeZone,
     today: todayInTimeZone(household.timeZone),
     generatedAt: new Date().toISOString(),
-    items: items.map(toItineraryItem),
+    slots: itinerary.slots.map(toItinerarySlot),
     bookings: bookings.map(toBooking),
   }
 }

@@ -2,7 +2,7 @@ import { requirePermission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
 import type { TripStatus } from '@ghar/core/trips'
 import { and, count, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
-import { bookings, itineraryItems, packingItems, tripMembers, trips } from '../schema'
+import { bookings, itinerarySlots, packingItems, tripMembers, trips } from '../schema'
 import { recordAudit } from './audit'
 import { requireHouseholdMembers, requireTrip, type TripRow } from './scope'
 import type { Db, RequestContext } from './types'
@@ -12,7 +12,9 @@ import type { Db, RequestContext } from './types'
 /** A trip with the counts its card shows, so a list does not cost one query per trip. */
 export interface TripWithCounts extends TripRow {
   readonly memberUserIds: string[]
-  readonly itineraryItemCount: number
+  readonly slotCount: number
+  /** Slots still open: being debated, or waiting for a first option. */
+  readonly openDecisionCount: number
   readonly bookingCount: number
   readonly packedCount: number
   readonly packingItemCount: number
@@ -158,7 +160,8 @@ export async function deleteTrip(ctx: RequestContext, db: Db, tripId: string): P
 }
 
 const emptyCounts = {
-  itineraryItemCount: 0,
+  slotCount: 0,
+  openDecisionCount: 0,
   bookingCount: 0,
   packedCount: 0,
   packingItemCount: 0,
@@ -172,10 +175,14 @@ async function withCounts(db: Db, rows: TripRow[]): Promise<TripWithCounts[]> {
   const [members, itineraryCounts, bookingCounts, packingCounts] = await Promise.all([
     db.select({ tripId: tripMembers.tripId, userId: tripMembers.userId }).from(tripMembers).where(inArray(tripMembers.tripId, tripIds)),
     db
-      .select({ tripId: itineraryItems.tripId, value: count() })
-      .from(itineraryItems)
-      .where(inArray(itineraryItems.tripId, tripIds))
-      .groupBy(itineraryItems.tripId),
+      .select({
+        tripId: itinerarySlots.tripId,
+        value: count(),
+        open: sql<number>`count(*) filter (where ${itinerarySlots.status} = 'open')`.mapWith(Number),
+      })
+      .from(itinerarySlots)
+      .where(inArray(itinerarySlots.tripId, tripIds))
+      .groupBy(itinerarySlots.tripId),
     db.select({ tripId: bookings.tripId, value: count() }).from(bookings).where(inArray(bookings.tripId, tripIds)).groupBy(bookings.tripId),
     db
       .select({
@@ -194,14 +201,15 @@ async function withCounts(db: Db, rows: TripRow[]): Promise<TripWithCounts[]> {
     if (existing) existing.push(userId)
     else memberIds.set(tripId, [userId])
   }
-  const itineraryByTrip = new Map(itineraryCounts.map(row => [row.tripId, row.value]))
+  const itineraryByTrip = new Map(itineraryCounts.map(row => [row.tripId, row]))
   const bookingsByTrip = new Map(bookingCounts.flatMap(row => (row.tripId === null ? [] : [[row.tripId, row.value] as const])))
   const packingByTrip = new Map(packingCounts.map(row => [row.tripId, row]))
 
   return rows.map(trip => ({
     ...trip,
     memberUserIds: memberIds.get(trip.id) ?? [],
-    itineraryItemCount: itineraryByTrip.get(trip.id) ?? 0,
+    slotCount: itineraryByTrip.get(trip.id)?.value ?? 0,
+    openDecisionCount: itineraryByTrip.get(trip.id)?.open ?? 0,
     bookingCount: bookingsByTrip.get(trip.id) ?? 0,
     packedCount: packingByTrip.get(trip.id)?.packed ?? 0,
     packingItemCount: packingByTrip.get(trip.id)?.value ?? 0,

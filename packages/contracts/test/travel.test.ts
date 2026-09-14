@@ -1,8 +1,37 @@
-import { BOOKING_KINDS, BOOKING_SOURCES, BOOKING_STATUSES, CABINS, DROP_ACTIONS, PRICE_CONFIDENCES, RATE_PLANS } from '@ghar/core/travel'
+import { COST_BASES, OPTION_SOURCES, OPTION_STATUSES, OPTION_VOTES, SLOT_BANDS, SLOT_KINDS, SLOT_STATUSES } from '@ghar/core/itinerary'
+import {
+  BOOKING_KINDS,
+  BOOKING_SOURCES,
+  BOOKING_STATUSES,
+  CABINS,
+  DROP_ACTIONS,
+  PRICE_CONFIDENCES,
+  RATE_PLANS,
+  TRAVEL_MODES,
+} from '@ghar/core/travel'
 import { describe, expect, it } from 'vitest'
 import { promoteTripIdea } from '../src/v1/ideas'
-import { createItineraryItemBodySchema, reorderItineraryBodySchema, updateItineraryItemBodySchema } from '../src/v1/itinerary'
-import { calendarDateSchema, httpUrlSchema } from '../src/v1/shared'
+import {
+  createOptionBodySchema,
+  createSlotBodySchema,
+  moveSlotBodySchema,
+  updateOptionBodySchema,
+  updateSlotBodySchema,
+  voteOnOptionBodySchema,
+} from '../src/v1/itinerary'
+import {
+  calendarDateSchema,
+  costBasisSchema,
+  httpUrlSchema,
+  journeyModeSchema,
+  optionSourceSchema,
+  optionStatusSchema,
+  optionVoteSchema,
+  slotBandSchema,
+  slotKindSchema,
+  slotStatusSchema,
+  timeOfDaySchema,
+} from '../src/v1/shared'
 import {
   bookingBodySchema,
   bookingKindSchema,
@@ -27,6 +56,17 @@ describe('travel lists', () => {
     expect(cabinSchema.options).toEqual([...CABINS])
     expect(priceConfidenceSchema.options).toEqual([...PRICE_CONFIDENCES])
     expect(dropActionSchema.options).toEqual([...DROP_ACTIONS])
+  })
+
+  it('match @ghar/core/itinerary, in order', () => {
+    expect(slotBandSchema.options).toEqual([...SLOT_BANDS])
+    expect(slotKindSchema.options).toEqual([...SLOT_KINDS])
+    expect(slotStatusSchema.options).toEqual([...SLOT_STATUSES])
+    expect(optionStatusSchema.options).toEqual([...OPTION_STATUSES])
+    expect(costBasisSchema.options).toEqual([...COST_BASES])
+    expect(optionSourceSchema.options).toEqual([...OPTION_SOURCES])
+    expect(optionVoteSchema.options).toEqual([...OPTION_VOTES])
+    expect(journeyModeSchema.options).toEqual([...TRAVEL_MODES])
   })
 })
 
@@ -147,67 +187,100 @@ describe('updateTripBodySchema', () => {
 })
 
 describe('linkBookingToTrip', () => {
-  it('puts the booking on the timeline unless told not to', () => {
-    expect(linkBookingToTrip.body.parse({ bookingId: UUID }).generateItineraryItem).toBe(true)
+  it('puts the booking on the itinerary unless told not to', () => {
+    expect(linkBookingToTrip.body.parse({ bookingId: UUID }).addToItinerary).toBe(true)
   })
 })
 
-describe('createItineraryItemBodySchema', () => {
-  const base = { day: '2026-03-03', kind: 'activity', title: 'Tram 28' }
+describe('createSlotBodySchema', () => {
+  const base = { day: '2026-03-03', label: 'Dinner' }
 
-  it('takes an item with neither a time nor a place', () => {
-    expect(createItineraryItemBodySchema.safeParse(base).success).toBe(true)
+  it('takes a part of the day with no time', () => {
+    expect(createSlotBodySchema.parse({ ...base, band: 'evening' })).toMatchObject({ kind: 'activity', startsAt: null })
   })
 
-  it('refuses half a coordinate', () => {
-    expect(createItineraryItemBodySchema.safeParse({ ...base, lat: 38.7 }).success).toBe(false)
-    expect(createItineraryItemBodySchema.safeParse({ ...base, lat: 38.7, lng: -9.1 }).success).toBe(true)
+  it('takes a time with no part of the day, for the server to place', () => {
+    expect(createSlotBodySchema.safeParse({ ...base, startsAt: '2026-03-03T19:30:00Z' }).success).toBe(true)
   })
 
-  it('refuses an off-world coordinate', () => {
-    expect(createItineraryItemBodySchema.safeParse({ ...base, lat: 138.7, lng: -9.1 }).success).toBe(false)
+  it('refuses a slot with neither', () => {
+    expect(createSlotBodySchema.safeParse(base).success).toBe(false)
   })
 
-  it('refuses an item that ends before it starts', () => {
+  it('refuses a slot that ends before it starts', () => {
     expect(
-      createItineraryItemBodySchema.safeParse({
-        ...base,
-        startsAt: '2026-03-03T18:00:00Z',
-        endsAt: '2026-03-03T09:00:00Z',
-      }).success
+      createSlotBodySchema.safeParse({ ...base, band: 'evening', startsAt: '2026-03-03T18:00:00Z', endsAt: '2026-03-03T09:00:00Z' })
+        .success
     ).toBe(false)
   })
 
-  it('refuses a kind that is not on the timeline', () => {
-    expect(createItineraryItemBodySchema.safeParse({ ...base, kind: 'car' }).success).toBe(false)
+  it('refuses a band that is not a part of the day', () => {
+    expect(createSlotBodySchema.safeParse({ ...base, band: 'brunch' }).success).toBe(false)
   })
 })
 
-describe('updateItineraryItemBodySchema', () => {
+describe('updateSlotBodySchema', () => {
   it('refuses an empty patch', () => {
-    expect(updateItineraryItemBodySchema.safeParse({}).success).toBe(false)
-  })
-
-  it('refuses moving a latitude without its longitude', () => {
-    expect(updateItineraryItemBodySchema.safeParse({ lat: 38.7 }).success).toBe(false)
+    expect(updateSlotBodySchema.safeParse({}).success).toBe(false)
   })
 })
 
-describe('reorderItineraryBodySchema', () => {
-  it('takes a drop at an index', () => {
-    expect(reorderItineraryBodySchema.safeParse({ itemId: UUID, day: '2026-03-03', toIndex: 2 }).success).toBe(true)
+describe('createOptionBodySchema', () => {
+  it('needs only a title, and does not choose unless asked', () => {
+    expect(createOptionBodySchema.parse({ title: 'Ramiro' })).toEqual({ title: 'Ramiro', source: 'manual', choose: false })
   })
 
-  it('takes a move button', () => {
-    expect(reorderItineraryBodySchema.safeParse({ itemId: UUID, direction: 'up' }).success).toBe(true)
+  it('refuses half a coordinate, and an off-world one', () => {
+    expect(createOptionBodySchema.safeParse({ title: 'Ramiro', lat: 38.7 }).success).toBe(false)
+    expect(createOptionBodySchema.safeParse({ title: 'Ramiro', lat: 138.7, lng: -9.1 }).success).toBe(false)
+    expect(createOptionBodySchema.safeParse({ title: 'Ramiro', lat: 38.7, lng: -9.1 }).success).toBe(true)
   })
 
-  it('refuses a negative index', () => {
-    expect(reorderItineraryBodySchema.safeParse({ itemId: UUID, day: '2026-03-03', toIndex: -1 }).success).toBe(false)
+  it('takes hours that run past midnight, and refuses half of them', () => {
+    expect(createOptionBodySchema.safeParse({ title: 'Bar', opensAt: '18:00', closesAt: '02:00' }).success).toBe(true)
+    expect(createOptionBodySchema.safeParse({ title: 'Bar', opensAt: '18:00' }).success).toBe(false)
   })
 
-  it('refuses a move with neither', () => {
-    expect(reorderItineraryBodySchema.safeParse({ itemId: UUID }).success).toBe(false)
+  it('refuses a negative cost and a day of the week past Saturday', () => {
+    expect(createOptionBodySchema.safeParse({ title: 'Ramiro', costCents: -1 }).success).toBe(false)
+    expect(createOptionBodySchema.safeParse({ title: 'Ramiro', closedDays: [7] }).success).toBe(false)
+  })
+
+  it('leaves booking as a source to the server', () => {
+    expect(createOptionBodySchema.safeParse({ title: 'Ramiro', source: 'booking' }).success).toBe(false)
+  })
+})
+
+describe('updateOptionBodySchema', () => {
+  it('refuses an empty patch', () => {
+    expect(updateOptionBodySchema.safeParse({}).success).toBe(false)
+  })
+
+  it('refuses clearing a latitude without its longitude', () => {
+    expect(updateOptionBodySchema.safeParse({ lat: null }).success).toBe(false)
+    expect(updateOptionBodySchema.safeParse({ lat: null, lng: null }).success).toBe(true)
+  })
+})
+
+describe('timeOfDaySchema', () => {
+  it('takes a 24-hour time and nothing else', () => {
+    expect(timeOfDaySchema.safeParse('23:59').success).toBe(true)
+    expect(timeOfDaySchema.safeParse('24:00').success).toBe(false)
+    expect(timeOfDaySchema.safeParse('7:30').success).toBe(false)
+  })
+})
+
+describe('moveSlotBodySchema', () => {
+  it('lands at the end unless given an index', () => {
+    expect(moveSlotBodySchema.safeParse({ day: '2026-03-03', band: 'evening' }).success).toBe(true)
+    expect(moveSlotBodySchema.safeParse({ day: '2026-03-03', band: 'evening', toIndex: -1 }).success).toBe(false)
+  })
+})
+
+describe('voteOnOptionBodySchema', () => {
+  it('takes a vote back with null', () => {
+    expect(voteOnOptionBodySchema.safeParse({ vote: null }).success).toBe(true)
+    expect(voteOnOptionBodySchema.safeParse({ vote: 'up' }).success).toBe(false)
   })
 })
 

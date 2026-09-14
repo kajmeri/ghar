@@ -23,11 +23,14 @@ const SUPABASE_SHIM = `
   grant usage on schema auth, public to anon, authenticated, service_role;
 `
 
-export async function createTestDatabase() {
+export const MIGRATIONS_FOLDER = resolve(import.meta.dirname, '../../drizzle')
+
+/** `migrationsFolder` lets a test stop at an older schema, to check what a later migration does to its data. */
+export async function createTestDatabase({ migrationsFolder = MIGRATIONS_FOLDER }: { migrationsFolder?: string } = {}) {
   const client = new PGlite()
   await client.exec(SUPABASE_SHIM)
   const db = drizzle({ client, schema, casing: 'snake_case' })
-  await migrate(db, { migrationsFolder: resolve(import.meta.dirname, '../../drizzle') })
+  await migrate(db, { migrationsFolder })
   // Supabase grants these on every public table, leaving RLS as the only gate. Do the same so
   // the policies are what the tests exercise.
   await client.exec('grant select, insert, update, delete on all tables in schema public to anon, authenticated, service_role;')
