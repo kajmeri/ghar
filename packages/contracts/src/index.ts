@@ -4,6 +4,7 @@ export * from './endpoint';
 export * from './errors';
 export * from './v1/bookings';
 export * from './v1/health';
+export * from './v1/household';
 export * from './v1/ideas';
 export * from './v1/itinerary';
 export * from './v1/packing';

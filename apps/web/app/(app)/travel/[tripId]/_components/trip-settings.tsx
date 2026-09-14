@@ -1,8 +1,10 @@
 'use client';
 
-import { deleteTrip, updateTrip, type Trip } from '@casa/contracts';
+import { deleteTrip, updateTrip, type HouseholdMember, type Trip } from '@casa/contracts';
+import { compareMembers, memberLabel } from '@casa/core/household';
 import { parseMoneyInput } from '@casa/core/money';
 import { TRIP_STATUSES, type TripStatus } from '@casa/core/trips';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type SyntheticEvent } from 'react';
 import { Button } from '@/components/ui/button';
@@ -24,7 +26,15 @@ const STATUS_LABEL: Record<TripStatus, string> = {
  * Editing the trip itself. Mostly this is where an idea gets its dates, which is the
  * moment it stops being an idea, so the status follows along unless you set it yourself.
  */
-export function TripSettings({ trip }: { trip: Trip }) {
+export function TripSettings({
+  trip,
+  members,
+  currentUserId,
+}: {
+  trip: Trip;
+  members: HouseholdMember[];
+  currentUserId: string;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -38,6 +48,8 @@ export function TripSettings({ trip }: { trip: Trip }) {
     await api.request(updateTrip, {
       params: { tripId: trip.id },
       body: {
+        // Checkboxes send nothing when unticked, so the roster is whatever is ticked now.
+        memberUserIds: form.getAll('memberUserIds').filter((id) => typeof id === 'string'),
         name: formText(form, 'name'),
         destination: formText(form, 'destination') || null,
         status: formText(form, 'status') as TripStatus,
@@ -123,6 +135,30 @@ export function TripSettings({ trip }: { trip: Trip }) {
           <Field label="Notes" className="md:col-span-2">
             <Textarea name="notes" rows={3} maxLength={4000} defaultValue={trip.notes ?? ''} />
           </Field>
+
+          <fieldset className="md:col-span-2">
+            <legend className="text-sm font-medium">Who is going</legend>
+            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+              {[...members].sort(compareMembers(currentUserId)).map((member) => (
+                <label key={member.userId} className="flex min-h-tap items-center gap-2">
+                  <input
+                    type="checkbox"
+                    name="memberUserIds"
+                    value={member.userId}
+                    defaultChecked={trip.memberUserIds.includes(member.userId)}
+                    className="size-5 accent-ink"
+                  />
+                  {memberLabel(member, currentUserId)}
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-ink-muted">
+              Names come from your household.{' '}
+              <Link href="/household" className="underline underline-offset-4">
+                Change them
+              </Link>
+            </p>
+          </fieldset>
         </div>
 
         <FormError>{budgetError ?? save.error ?? remove.error}</FormError>

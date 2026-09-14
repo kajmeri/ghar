@@ -14,7 +14,8 @@ import { householdMembers, households, trips } from '../schema';
  * tables is a backstop; this layer is the boundary.
  */
 
-export interface Household {
+/** The slice of a household every request carries. Not the roster; see queries/household.ts. */
+export interface SessionHousehold {
   readonly id: string;
   readonly name: string;
   readonly timeZone: string;
@@ -24,7 +25,7 @@ export interface Household {
 export async function resolveContext(
   db: Database,
   userId: string,
-): Promise<{ context: RequestContext; household: Household } | null> {
+): Promise<{ context: RequestContext; household: SessionHousehold } | null> {
   const [row] = await db
     .select({
       householdId: households.id,
@@ -44,7 +45,10 @@ export async function resolveContext(
   };
 }
 
-export async function getHousehold(db: Database, ctx: RequestContext): Promise<Household> {
+export async function getSessionHousehold(
+  db: Database,
+  ctx: RequestContext,
+): Promise<SessionHousehold> {
   const [row] = await db
     .select({ id: households.id, name: households.name, timeZone: households.timeZone })
     .from(households)

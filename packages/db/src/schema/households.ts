@@ -21,6 +21,12 @@ export const householdMembers = pgTable(
       .notNull()
       .references(() => households.id, { onDelete: 'cascade' }),
     userId: uuid().notNull(),
+    /**
+     * What this household calls this person. Supabase owns the account and whatever name
+     * is on it; this is the one the family actually uses, and it is the only name the app
+     * ever reads, so nothing here has to touch auth.users to render a list.
+     */
+    displayName: text(),
     role: householdRole().notNull().default('member'),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },

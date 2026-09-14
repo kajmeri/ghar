@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { defineEndpoint } from '../endpoint';
 import { bookingSchema } from './bookings';
+import { householdMemberSchema } from './household';
 import { itineraryItemSchema } from './itinerary';
 import { packingItemSchema } from './packing';
 import {
@@ -101,6 +102,8 @@ export const tripDetailSchema = z.object({
   /** The household's zone. Times render in it, and it decides which day "today" is. */
   timeZone: z.string(),
   today: calendarDateSchema,
+  /** Everyone in the household, so a packing assignment can be shown as a name. */
+  members: z.array(householdMemberSchema),
   itinerary: z.array(itineraryItemSchema),
   bookings: z.array(bookingSchema),
   packing: z.array(packingItemSchema),

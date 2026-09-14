@@ -1,4 +1,5 @@
 import { formatCountdown, nextTrip, settleTripStatus } from '@casa/core/trips';
+import Link from 'next/link';
 import { EmptyState } from '@/components/ui/empty-state';
 import { requireSession } from '@/lib/auth';
 import { loadTravelHub } from '@/lib/travel/service';
@@ -32,7 +33,12 @@ export default async function TravelPage() {
                 }.`}
           </p>
         </div>
-        <NewTripForm />
+        <div className="flex flex-wrap items-center gap-4">
+          <Link href="/household" className="text-sm text-ink-muted underline underline-offset-4">
+            Household
+          </Link>
+          <NewTripForm />
+        </div>
       </header>
 
       {soonest ? <NextTripCountdown trip={soonest} today={hub.today} /> : null}

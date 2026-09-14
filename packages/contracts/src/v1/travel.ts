@@ -8,6 +8,7 @@ import {
   centsSchema,
   instantSchema,
   queryBooleanSchema,
+  shortTextSchema,
   tripParamsSchema,
 } from './shared';
 import { tripSchema, tripSummarySchema } from './trips';
@@ -104,6 +105,28 @@ export const listTransactions = defineEndpoint({
     limit: z.coerce.number().int().min(1).max(200).default(50),
   }),
   response: z.object({ transactions: z.array(tripTransactionSchema) }),
+});
+
+/**
+ * A charge typed in by hand.
+ *
+ * The finances feature will bring these in from a bank connection and from parsed
+ * receipts. Until it does, this is how a trip's actual spend gets anything to add up, and
+ * it is also how you log the cash dinner no card will ever tell you about.
+ *
+ * `amountCents` is negative for money out, as the column is. `tripId` tags it on the way in.
+ */
+export const createTransaction = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/transactions',
+  body: z.object({
+    postedOn: calendarDateSchema,
+    description: shortTextSchema,
+    merchant: shortTextSchema.nullable().default(null),
+    amountCents: centsSchema.refine((value) => value !== 0, 'An amount of nothing is not a charge'),
+    tripId: z.uuid().nullable().default(null),
+  }),
+  response: z.object({ transaction: tripTransactionSchema }),
 });
 
 /** The trip tag. Null takes a charge back off a trip. */

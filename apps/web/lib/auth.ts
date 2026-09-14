@@ -1,7 +1,7 @@
 import 'server-only';
 import type { RequestContext } from '@casa/contracts';
 import { UnauthorizedError } from '@casa/core/errors';
-import { resolveContext, type Household } from '@casa/db/queries';
+import { resolveContext, type SessionHousehold } from '@casa/db/queries';
 import { cookies, headers } from 'next/headers';
 import { getDb } from './db';
 import { getAuthProvider } from './providers/supabase-auth';
@@ -20,7 +20,7 @@ import { getAuthProvider } from './providers/supabase-auth';
 
 export interface Session {
   readonly context: RequestContext;
-  readonly household: Household;
+  readonly household: SessionHousehold;
 }
 
 /** Mobile sends a bearer token; the browser will send the cookie the sign-in flow sets. */

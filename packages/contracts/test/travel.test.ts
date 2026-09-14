@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createBookingBodySchema } from '../src/v1/bookings';
+import { updateHouseholdMember } from '../src/v1/household';
 import { promoteTripIdea } from '../src/v1/ideas';
 import {
   createItineraryItemBodySchema,
@@ -7,6 +8,7 @@ import {
   updateItineraryItemBodySchema,
 } from '../src/v1/itinerary';
 import { calendarDateSchema, httpUrlSchema } from '../src/v1/shared';
+import { createTransaction } from '../src/v1/travel';
 import { createTripBodySchema, updateTripBodySchema } from '../src/v1/trips';
 
 const UUID = '2a3fbc0e-1c2d-4f5a-8b6c-7d8e9f0a1b2c';
@@ -199,5 +201,74 @@ describe('promoteTripIdea', () => {
 
   it('refuses half a date range', () => {
     expect(promoteTripIdea.body.safeParse({ startsOn: '2026-03-03' }).success).toBe(false);
+  });
+});
+
+describe('createTransaction', () => {
+  it('takes a charge tagged to a trip', () => {
+    expect(
+      createTransaction.body.safeParse({
+        postedOn: '2026-03-05',
+        description: 'Dinner at Ramiro',
+        amountCents: -4250,
+        tripId: UUID,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('leaves a charge untagged by default', () => {
+    expect(
+      createTransaction.body.parse({
+        postedOn: '2026-03-05',
+        description: 'Groceries',
+        amountCents: -1200,
+      }).tripId,
+    ).toBeNull();
+  });
+
+  it('takes a refund, which is positive', () => {
+    expect(
+      createTransaction.body.safeParse({
+        postedOn: '2026-03-05',
+        description: 'Refunded seat fee',
+        amountCents: 3500,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('refuses an amount of nothing', () => {
+    expect(
+      createTransaction.body.safeParse({
+        postedOn: '2026-03-05',
+        description: 'Nothing',
+        amountCents: 0,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('refuses fractional cents', () => {
+    expect(
+      createTransaction.body.safeParse({
+        postedOn: '2026-03-05',
+        description: 'Coffee',
+        amountCents: -1.5,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('updateHouseholdMember', () => {
+  it('takes a name', () => {
+    expect(updateHouseholdMember.body.safeParse({ displayName: 'Ana' }).success).toBe(true);
+  });
+
+  it('takes null to clear one', () => {
+    expect(updateHouseholdMember.body.safeParse({ displayName: null }).success).toBe(true);
+  });
+
+  it('refuses a name nobody typed on purpose', () => {
+    expect(updateHouseholdMember.body.safeParse({ displayName: 'a'.repeat(101) }).success).toBe(
+      false,
+    );
   });
 });

@@ -13,6 +13,7 @@ import { Meter } from '@/components/ui/meter';
 import { Pill, type PillTone } from '@/components/ui/pill';
 import { useMutation } from '@/hooks/use-mutation';
 import { api, errorMessage } from '@/lib/api/client';
+import { NewExpenseForm } from './new-expense-form';
 
 interface Budget {
   tripId: string;
@@ -41,7 +42,15 @@ const HEADLINE: Record<BudgetState, string> = {
  * say, from transactions tagged to this trip. Committed is what the plan still expects to
  * cost and has not been paid yet, which is why it sits apart from both.
  */
-export function BudgetPanel({ budget, tripName }: { budget: Budget; tripName: string }) {
+export function BudgetPanel({
+  budget,
+  tripName,
+  today,
+}: {
+  budget: Budget;
+  tripName: string;
+  today: string;
+}) {
   const summary = tripBudget(budget);
   const tone = TONE[summary.state];
 
@@ -90,8 +99,17 @@ export function BudgetPanel({ budget, tripName }: { budget: Budget; tripName: st
         </dl>
       </Card>
 
+      <NewExpenseForm tripId={budget.tripId} today={today} />
       <TaggedTransactions budget={budget} />
-      <UntaggedTransactions tripId={budget.tripId} />
+      {/*
+        The untagged list is fetched by the browser, so it has no way to know a tag changed
+        on the server. Keying it on what is tagged now remounts it when that happens, which
+        is a lot less machinery than a shared cache for two lists on one page.
+      */}
+      <UntaggedTransactions
+        key={budget.transactions.map((transaction) => transaction.id).join(',')}
+        tripId={budget.tripId}
+      />
     </div>
   );
 }

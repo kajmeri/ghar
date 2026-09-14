@@ -1,6 +1,7 @@
 import 'server-only';
 import type {
   Booking,
+  HouseholdMember,
   ItineraryItem,
   PackingItem,
   PackingTemplate,
@@ -11,6 +12,7 @@ import type {
 } from '@casa/contracts';
 import type {
   BookingRow,
+  HouseholdMemberRow,
   ItineraryItemRow,
   PackingItemRow,
   PackingTemplateWithItems,
@@ -54,6 +56,10 @@ export function toTripSummary(row: TripWithCounts): TripSummary {
     packedCount: row.packedCount,
     packingItemCount: row.packingItemCount,
   };
+}
+
+export function toHouseholdMember(row: HouseholdMemberRow): HouseholdMember {
+  return { userId: row.userId, displayName: row.displayName, role: row.role };
 }
 
 export function toItineraryItem(row: ItineraryItemRow): ItineraryItem {

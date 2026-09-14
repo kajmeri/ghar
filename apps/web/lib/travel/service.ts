@@ -7,6 +7,7 @@ import {
   countPastTrips,
   insertGeneratedItems,
   listBookings,
+  listHouseholdMembers,
   listItineraryItems,
   listPackingItems,
   listTransactions,
@@ -21,6 +22,7 @@ import type { Session } from '../auth';
 import { getDb } from '../db';
 import {
   toBooking,
+  toHouseholdMember,
   toItineraryItem,
   toPackingItem,
   toTrip,
@@ -64,8 +66,9 @@ export async function loadTripDetail(session: Session, tripId: string): Promise<
   const db = getDb();
   const { context, household } = session;
 
-  const [trip, itinerary, bookings, packing, actualCents] = await Promise.all([
+  const [trip, members, itinerary, bookings, packing, actualCents] = await Promise.all([
     getTripWithCounts(db, context, tripId),
+    listHouseholdMembers(db, context),
     listItineraryItems(db, context, tripId),
     listBookings(db, context, { tripId }),
     listPackingItems(db, context, tripId),
@@ -76,6 +79,7 @@ export async function loadTripDetail(session: Session, tripId: string): Promise<
     trip: toTrip(trip),
     timeZone: household.timeZone,
     today: todayInTimeZone(household.timeZone),
+    members: members.map(toHouseholdMember),
     itinerary: itinerary.map(toItineraryItem),
     bookings: bookings.map(toBooking),
     packing: packing.map(toPackingItem),

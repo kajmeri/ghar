@@ -64,6 +64,38 @@ export async function sumTripActualCents(
   return -total;
 }
 
+export interface CreateTransactionInput {
+  readonly postedOn: CalendarDate;
+  readonly description: string;
+  readonly merchant: string | null;
+  /** Negative is money out. A refund is positive. */
+  readonly amountCents: number;
+  readonly tripId: string | null;
+}
+
+/**
+ * A charge typed in by hand.
+ *
+ * The finances feature will bring these in from a bank connection and from parsed
+ * receipts; until it does, this is how a trip's actual spend gets anything to add up. The
+ * sign is the caller's to get right, because only they know whether it was a refund.
+ */
+export async function createTransaction(
+  db: Database,
+  ctx: RequestContext,
+  input: CreateTransactionInput,
+): Promise<TransactionRow> {
+  // A trip id from a request body is never trusted on its own.
+  if (input.tripId) await requireTrip(db, ctx, input.tripId);
+
+  const [transaction] = await db
+    .insert(transactions)
+    .values({ householdId: ctx.householdId, ...input })
+    .returning();
+  if (!transaction) throw new Error('The transaction was not created');
+  return transaction;
+}
+
 /** The trip tag. Null takes a charge back off a trip. */
 export async function tagTransaction(
   db: Database,

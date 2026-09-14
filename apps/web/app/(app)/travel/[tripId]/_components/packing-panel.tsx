@@ -7,9 +7,11 @@ import {
   deletePackingItem,
   listPackingTemplates,
   updatePackingItem,
+  type HouseholdMember,
   type PackingItem,
   type PackingTemplate,
 } from '@casa/contracts';
+import { compareMembers, memberLabel, memberLabelFor } from '@casa/core/household';
 import { byAssignee, byCategory, packingProgress } from '@casa/core/packing';
 import { useEffect, useState, type SyntheticEvent } from 'react';
 import { Button } from '@/components/ui/button';
@@ -29,15 +31,22 @@ import { formText } from '@/lib/form';
 export function PackingPanel({
   tripId,
   items,
-  memberUserIds,
+  members,
+  travellingUserIds,
   currentUserId,
 }: {
   tripId: string;
   items: PackingItem[];
-  memberUserIds: string[];
+  /** Everyone in the household. Used to name an assignment, including a stale one. */
+  members: HouseholdMember[];
+  /** Who is going. Only these are offered, because only they can carry anything. */
+  travellingUserIds: string[];
   currentUserId: string;
 }) {
   const [grouping, setGrouping] = useState<'person' | 'category'>('person');
+  const roster = members
+    .filter((member) => travellingUserIds.includes(member.userId))
+    .sort(compareMembers(currentUserId));
   const progress = packingProgress(items);
   const groups = grouping === 'person' ? byAssignee(items) : byCategory(items);
 
@@ -80,7 +89,7 @@ export function PackingPanel({
         />
       </Card>
 
-      <AddItemForm tripId={tripId} memberUserIds={memberUserIds} currentUserId={currentUserId} />
+      <AddItemForm tripId={tripId} members={roster} currentUserId={currentUserId} />
       <TemplateBar tripId={tripId} hasItems={items.length > 0} />
 
       <FormError>{toggle.error ?? assign.error ?? remove.error}</FormError>
@@ -120,7 +129,7 @@ export function PackingPanel({
                     {grouping === 'person'
                       ? group.key === null
                         ? 'Nobody yet'
-                        : personLabel(group.key, currentUserId)
+                        : memberLabelFor(group.key, members, currentUserId)
                       : (group.key ?? 'Uncategorised')}
                   </h3>
                   <p className="text-xs text-ink-muted">
@@ -163,9 +172,9 @@ export function PackingPanel({
                           className="h-9 w-32 shrink-0 text-sm"
                         >
                           <option value="">Nobody</option>
-                          {memberUserIds.map((userId) => (
-                            <option key={userId} value={userId}>
-                              {personLabel(userId, currentUserId)}
+                          {roster.map((member) => (
+                            <option key={member.userId} value={member.userId}>
+                              {memberLabel(member, currentUserId)}
                             </option>
                           ))}
                         </Select>
@@ -194,21 +203,13 @@ export function PackingPanel({
   );
 }
 
-/**
- * Household members are user ids here. Names live in Supabase auth, which this feature has
- * no reason to read, so the person looking sees "You" and everyone else sees a short id.
- */
-function personLabel(userId: string, currentUserId: string): string {
-  return userId === currentUserId ? 'You' : userId.slice(0, 8);
-}
-
 function AddItemForm({
   tripId,
-  memberUserIds,
+  members,
   currentUserId,
 }: {
   tripId: string;
-  memberUserIds: string[];
+  members: HouseholdMember[];
   currentUserId: string;
 }) {
   const { mutate, pending, error } = useMutation(async (form: HTMLFormElement) => {
@@ -236,9 +237,9 @@ function AddItemForm({
       <Input name="category" maxLength={200} placeholder="Documents" className="md:w-40" />
       <Select name="assignedUserId" aria-label="Who packs it" className="md:w-36">
         <option value="">Nobody</option>
-        {memberUserIds.map((userId) => (
-          <option key={userId} value={userId}>
-            {personLabel(userId, currentUserId)}
+        {members.map((member) => (
+          <option key={member.userId} value={member.userId}>
+            {memberLabel(member, currentUserId)}
           </option>
         ))}
       </Select>

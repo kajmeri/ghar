@@ -5,6 +5,7 @@
  * Imported by apps/web only. See CLAUDE.md.
  */
 export * from './bookings';
+export * from './household';
 export * from './ideas';
 export * from './itinerary';
 export * from './packing';

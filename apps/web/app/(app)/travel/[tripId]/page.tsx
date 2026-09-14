@@ -64,7 +64,11 @@ export default async function TripPage({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <TripSettings trip={trip} />
+            <TripSettings
+              trip={trip}
+              members={detail.members}
+              currentUserId={session.context.userId}
+            />
             {phase === 'current' || phase === 'upcoming' ? (
               <Button asChild variant={phase === 'current' ? 'default' : 'outline'}>
                 <Link href={`/travel/${trip.id}/mode`}>Travel mode</Link>
@@ -82,11 +86,16 @@ export default async function TripPage({
         <PackingPanel
           tripId={trip.id}
           items={detail.packing}
-          memberUserIds={trip.memberUserIds}
+          members={detail.members}
+          travellingUserIds={trip.memberUserIds}
           currentUserId={session.context.userId}
         />
       ) : (
-        <BudgetPanel budget={await loadTripBudget(session, trip.id)} tripName={trip.name} />
+        <BudgetPanel
+          budget={await loadTripBudget(session, trip.id)}
+          tripName={trip.name}
+          today={today}
+        />
       )}
     </div>
   );
