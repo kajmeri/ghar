@@ -31,11 +31,6 @@ export function allDayLastDate(startsAt: Date, endsAt: Date): CalendarDate {
   return last < first ? first : last
 }
 
-/** Whole days between two dates, `to` minus `from`. */
-export function daysBetween(from: CalendarDate, to: CalendarDate): number {
-  return Math.round((allDayInstant(to).getTime() - allDayInstant(from).getTime()) / DAY_MS)
-}
-
 /** 0 for Sunday through 6 for Saturday. */
 export function weekdayIndex(date: CalendarDate): number {
   return allDayInstant(date).getUTCDay()

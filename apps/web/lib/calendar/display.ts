@@ -32,6 +32,7 @@ export const SOURCE_LABELS: Record<FeedSource, string> = {
   trips: 'Trips',
   bills: 'Bills',
   maintenance: 'Maintenance',
+  expiries: 'Expiries',
 }
 
 /** Color on an event says something about it, so the choices are named by meaning. */
@@ -204,8 +205,8 @@ export function isConnectStatus(value: unknown): value is ConnectStatus {
   return typeof value === 'string' && (CONNECT_STATUSES as readonly string[]).includes(value)
 }
 
-/** Where an item opens, or null for sources without a page yet. */
-export function itemHref(item: CalendarItem): string | null {
+/** Where an item opens. */
+export function itemHref(item: CalendarItem): string {
   switch (item.ref.kind) {
     case 'event':
       return item.recurring
@@ -213,8 +214,14 @@ export function itemHref(item: CalendarItem): string | null {
         : `/calendar/events/${item.ref.eventId}`
     case 'booking':
       return `/travel/bookings/${item.ref.bookingId}`
-    default:
-      return null
+    case 'bill':
+      return `/bills/${item.ref.billId}`
+    case 'maintenance':
+      return item.ref.assetId === null ? `/home/maintenance/${item.ref.taskId}` : `/home/assets/${item.ref.assetId}`
+    case 'document':
+      return `/documents/${item.ref.documentId}`
+    case 'asset':
+      return `/home/assets/${item.ref.assetId}`
   }
 }
 

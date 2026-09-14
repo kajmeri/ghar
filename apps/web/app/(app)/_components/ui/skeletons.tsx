@@ -57,6 +57,20 @@ export function PageHeaderSkeleton({ description = true, action = false }: { des
   )
 }
 
+/** Mirrors BackLink above a detail page's header. */
+export function BackLinkSkeleton() {
+  return (
+    <span className='mb-2 flex h-tap items-center'>
+      <span className='h-2.5 w-20 rounded-pill bg-line/60' />
+    </span>
+  )
+}
+
+/** Mirrors SearchField. */
+export function SearchFieldSkeleton() {
+  return <span className='block h-tap rounded-control border border-line bg-surface' />
+}
+
 export function SectionHeaderSkeleton({ description = false }: { description?: boolean }) {
   return (
     <div className='pb-3'>

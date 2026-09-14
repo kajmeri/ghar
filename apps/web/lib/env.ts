@@ -13,7 +13,11 @@ const envSchema = z.object({
   SUPABASE_URL: z.preprocess(unset, z.url()),
   /** The publishable key, or the legacy anon key. Safe to expose, but only the server uses it. */
   SUPABASE_PUBLISHABLE_KEY: z.preprocess(unset, z.string().min(1)),
-  /** Only the seed script needs it. Never import it into request code. */
+  /**
+   * Server only, never logged. The seed script uses it, and with STORAGE_PROVIDER=supabase the
+   * server signs document upload and file links with it. Nothing else may use it in request code
+   * that runs in production.
+   */
   SUPABASE_SECRET_KEY: z.preprocess(unset, z.string().min(1).optional()),
   /** Origin used in emailed links. No trailing slash. */
   APP_URL: z.preprocess(unset, z.url().default('http://localhost:3000')).transform(url => url.replace(/\/+$/, '')),
@@ -62,6 +66,12 @@ const envSchema = z.object({
   ROUTING_PROVIDER: z.preprocess(unset, z.enum(['estimate', 'osrm']).default('estimate')),
   /** An OSRM server's origin, for ROUTING_PROVIDER=osrm. It receives the trip's coordinates. */
   OSRM_URL: z.preprocess(unset, z.url({ protocol: /^https?$/ }).optional()).transform(url => url?.replace(/\/+$/, '')),
+  /**
+   * Where document files live. `fake` keeps them in the dev server's memory until it restarts;
+   * production refuses it. `supabase` uses the private `documents` bucket and needs
+   * SUPABASE_SECRET_KEY.
+   */
+  STORAGE_PROVIDER: z.preprocess(unset, z.enum(['fake', 'supabase']).default('fake')),
 })
 
 export type Env = z.output<typeof envSchema>

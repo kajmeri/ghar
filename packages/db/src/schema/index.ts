@@ -1,5 +1,6 @@
 import { HOUSEHOLD_ROLES } from '@ghar/core/auth'
 import { BANK_ENVIRONMENTS, BANK_ITEM_STATUSES } from '@ghar/core/banking'
+import { BILL_CADENCES, BILL_NAME_MAX_LENGTH, BILL_NOTES_MAX_LENGTH, BILL_PAYEE_MAX_LENGTH, MAX_BILL_CENTS } from '@ghar/core/bills'
 import {
   ATTENDEE_RESPONSES,
   CALENDAR_PROVIDERS,
@@ -13,6 +14,25 @@ import {
   type EventColorToken,
 } from '@ghar/core/calendar'
 import {
+  CONTACT_EMAIL_MAX_LENGTH,
+  CONTACT_NAME_MAX_LENGTH,
+  CONTACT_NOTES_MAX_LENGTH,
+  CONTACT_PHONE_MAX_LENGTH,
+  CONTACT_ROLE_MAX_LENGTH,
+  CONTACT_TAG_MAX_LENGTH,
+  MAX_CONTACT_TAGS,
+} from '@ghar/core/contacts'
+import {
+  DOCUMENT_FIELD_MAX_LENGTH,
+  DOCUMENT_KINDS,
+  DOCUMENT_MIME_TYPES,
+  DOCUMENT_NOTES_MAX_LENGTH,
+  DOCUMENT_TITLE_MAX_LENGTH,
+  EXPIRY_REMINDER_DAYS,
+  MAX_DOCUMENT_BYTES,
+  type DocumentMimeType,
+} from '@ghar/core/documents'
+import {
   BUDGET_PERIOD_TYPES,
   CATEGORY_COLOR_TOKENS,
   CATEGORY_KINDS,
@@ -23,6 +43,17 @@ import {
   type CategoryColorToken,
   type CategoryIcon,
 } from '@ghar/core/finances'
+import {
+  ASSET_FIELD_MAX_LENGTH,
+  ASSET_KINDS,
+  ASSET_NAME_MAX_LENGTH,
+  HOME_NOTES_MAX_LENGTH,
+  MAINTENANCE_TITLE_MAX_LENGTH,
+  MAX_ASSET_CENTS,
+  MAX_CADENCE_MILES,
+  MAX_CADENCE_MONTHS,
+  MAX_MAINTENANCE_COST_CENTS,
+} from '@ghar/core/home'
 import {
   BOOKING_KINDS,
   BOOKING_SOURCES,
@@ -96,6 +127,9 @@ export const itineraryOptionStatus = pgEnum('itinerary_option_status', OPTION_ST
 export const itineraryCostBasis = pgEnum('itinerary_cost_basis', COST_BASES)
 export const itineraryOptionSource = pgEnum('itinerary_option_source', OPTION_SOURCES)
 export const optionVoteValue = pgEnum('option_vote', OPTION_VOTES)
+export const documentKind = pgEnum('document_kind', DOCUMENT_KINDS)
+export const assetKind = pgEnum('asset_kind', ASSET_KINDS)
+export const billCadence = pgEnum('bill_cadence', BILL_CADENCES)
 
 const timestamptz = () => timestamp({ withTimezone: true })
 const metadata = () =>
@@ -1067,4 +1101,289 @@ export const eventAttendees = pgTable(
     response: attendeeResponse().notNull().default('needs_action'),
   },
   table => [primaryKey({ columns: [table.eventId, table.userId] }), index('event_attendees_user_idx').on(table.userId)]
+).enableRLS()
+
+/** The longest link httpUrlSchema in @ghar/contracts accepts. */
+const URL_MAX_LENGTH = 2000
+
+/** The people the household calls: the plumber, the pediatrician, the insurance agent. */
+export const contacts = pgTable(
+  'contacts',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    /** What they do for the household, in the household's words: "Plumber", "Pediatrician". */
+    role: text(),
+    phone: text(),
+    email: text(),
+    url: text(),
+    notes: text(),
+    /** Normalized by normalizeContactTags: lower case, no repeats. */
+    tags: text().array().notNull().default(sql`'{}'::text[]`),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('contacts_household_name_idx').on(table.householdId, sql`lower(${table.name})`),
+    check('contacts_name_length', sql`char_length(${table.name}) between 1 and ${sql.raw(String(CONTACT_NAME_MAX_LENGTH))}`),
+    check(
+      'contacts_text_lengths',
+      sql`char_length(${table.role}) <= ${sql.raw(String(CONTACT_ROLE_MAX_LENGTH))}
+        and char_length(${table.phone}) <= ${sql.raw(String(CONTACT_PHONE_MAX_LENGTH))}
+        and char_length(${table.email}) <= ${sql.raw(String(CONTACT_EMAIL_MAX_LENGTH))}
+        and char_length(${table.url}) <= ${sql.raw(String(URL_MAX_LENGTH))}
+        and char_length(${table.notes}) <= ${sql.raw(String(CONTACT_NOTES_MAX_LENGTH))}`
+    ),
+    check(
+      'contacts_tags',
+      sql`cardinality(${table.tags}) <= ${sql.raw(String(MAX_CONTACT_TAGS))}
+        and char_length(array_to_string(${table.tags}, '')) <= ${sql.raw(String(MAX_CONTACT_TAGS * CONTACT_TAG_MAX_LENGTH))}`
+    ),
+  ]
+).enableRLS()
+
+/** Something the household owns and looks after: the car, the furnace, the dishwasher. */
+export const assets = pgTable(
+  'assets',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    kind: assetKind().notNull().default('other'),
+    make: text(),
+    model: text(),
+    serialNumber: text(),
+    purchasedOn: date({ mode: 'string' }),
+    purchasePriceCents: cents(),
+    warrantyExpiresOn: date({ mode: 'string' }),
+    /** Where it is, so someone can find the shutoff: "Basement, north wall". */
+    location: text(),
+    notes: text(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('assets_household_name_idx').on(table.householdId, sql`lower(${table.name})`),
+    index('assets_household_warranty_idx')
+      .on(table.householdId, table.warrantyExpiresOn)
+      .where(sql`${table.warrantyExpiresOn} is not null`),
+    check('assets_name_length', sql`char_length(${table.name}) between 1 and ${sql.raw(String(ASSET_NAME_MAX_LENGTH))}`),
+    check(
+      'assets_text_lengths',
+      sql`char_length(${table.make}) <= ${sql.raw(String(ASSET_FIELD_MAX_LENGTH))}
+        and char_length(${table.model}) <= ${sql.raw(String(ASSET_FIELD_MAX_LENGTH))}
+        and char_length(${table.serialNumber}) <= ${sql.raw(String(ASSET_FIELD_MAX_LENGTH))}
+        and char_length(${table.location}) <= ${sql.raw(String(ASSET_FIELD_MAX_LENGTH))}
+        and char_length(${table.notes}) <= ${sql.raw(String(HOME_NOTES_MAX_LENGTH))}`
+    ),
+    check('assets_purchase_price', sql`${table.purchasePriceCents} between 0 and ${sql.raw(String(MAX_ASSET_CENTS))}`),
+  ]
+).enableRLS()
+
+/**
+ * A scanned or uploaded document. The file lives in the private `documents` Storage bucket and is
+ * only ever reached through a short-lived signed URL made after this row has been authorized.
+ * Sensitive documents are for owners and adults; the read policy says the same.
+ */
+export const documents = pgTable(
+  'documents',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    title: text().notNull(),
+    kind: documentKind().notNull().default('other'),
+    /** `<household id>/<random id>.<ext>` inside the bucket, from documentStoragePath. Never a URL. */
+    storagePath: text().notNull(),
+    mimeType: text().$type<DocumentMimeType>().notNull(),
+    sizeBytes: integer().notNull(),
+    issuedOn: date({ mode: 'string' }),
+    expiresOn: date({ mode: 'string' }),
+    issuer: text(),
+    referenceNumber: text(),
+    /** The thing it's about. Removing the asset keeps the paperwork. */
+    assetId: uuid().references(() => assets.id, { onDelete: 'set null' }),
+    notes: text(),
+    uploadedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    isSensitive: boolean().notNull().default(false),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('documents_storage_path_unique').on(table.storagePath),
+    index('documents_household_created_idx').on(table.householdId, table.createdAt.desc()),
+    index('documents_household_expires_idx')
+      .on(table.householdId, table.expiresOn)
+      .where(sql`${table.expiresOn} is not null`),
+    index('documents_asset_idx')
+      .on(table.assetId)
+      .where(sql`${table.assetId} is not null`),
+    check('documents_title_length', sql`char_length(${table.title}) between 1 and ${sql.raw(String(DOCUMENT_TITLE_MAX_LENGTH))}`),
+    check(
+      'documents_text_lengths',
+      sql`char_length(${table.issuer}) <= ${sql.raw(String(DOCUMENT_FIELD_MAX_LENGTH))}
+        and char_length(${table.referenceNumber}) <= ${sql.raw(String(DOCUMENT_FIELD_MAX_LENGTH))}
+        and char_length(${table.notes}) <= ${sql.raw(String(DOCUMENT_NOTES_MAX_LENGTH))}`
+    ),
+    check('documents_mime_type', inList(table.mimeType, DOCUMENT_MIME_TYPES)),
+    check('documents_size', sql`${table.sizeBytes} between 1 and ${sql.raw(String(MAX_DOCUMENT_BYTES))}`),
+    // A row can only ever point at its own household's folder.
+    check('documents_storage_path_household', sql`split_part(${table.storagePath}, '/', 1) = ${table.householdId}::text`),
+    check('documents_expires_after_issued', sql`${table.expiresOn} >= ${table.issuedOn}`),
+  ]
+).enableRLS()
+
+/**
+ * A recurring or one-off job. `nextDueOn` is stored rather than derived so the dashboard and the
+ * calendar can range over it; marking the job done rolls it forward. Deleting the asset deletes
+ * its jobs and their history.
+ */
+export const maintenance = pgTable(
+  'maintenance',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    /** Null for a job about the house in general, like clearing the gutters. */
+    assetId: uuid().references(() => assets.id, { onDelete: 'cascade' }),
+    title: text().notNull(),
+    /** Null for a one-off job. */
+    cadenceMonths: smallint(),
+    /** Shown alongside the months. Ghar doesn't know the odometer, so it never sets a due date. */
+    cadenceMiles: integer(),
+    lastDoneOn: date({ mode: 'string' }),
+    nextDueOn: date({ mode: 'string' }),
+    assignedUserId: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    instructions: text(),
+    vendorContactId: uuid().references(() => contacts.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('maintenance_household_due_idx').on(table.householdId, table.nextDueOn),
+    index('maintenance_asset_idx')
+      .on(table.assetId)
+      .where(sql`${table.assetId} is not null`),
+    index('maintenance_vendor_idx')
+      .on(table.vendorContactId)
+      .where(sql`${table.vendorContactId} is not null`),
+    check('maintenance_title_length', sql`char_length(${table.title}) between 1 and ${sql.raw(String(MAINTENANCE_TITLE_MAX_LENGTH))}`),
+    check('maintenance_instructions_length', sql`char_length(${table.instructions}) <= ${sql.raw(String(HOME_NOTES_MAX_LENGTH))}`),
+    check('maintenance_cadence_months', sql`${table.cadenceMonths} between 1 and ${sql.raw(String(MAX_CADENCE_MONTHS))}`),
+    check('maintenance_cadence_miles', sql`${table.cadenceMiles} between 1 and ${sql.raw(String(MAX_CADENCE_MILES))}`),
+  ]
+).enableRLS()
+
+/** Each time a job was done. The household comes from the job. */
+export const maintenanceLog = pgTable(
+  'maintenance_log',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    maintenanceId: uuid()
+      .notNull()
+      .references(() => maintenance.id, { onDelete: 'cascade' }),
+    completedOn: date({ mode: 'string' }).notNull(),
+    completedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    costCents: cents(),
+    notes: text(),
+    /** The receipt or invoice. */
+    documentId: uuid().references(() => documents.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('maintenance_log_task_completed_idx').on(table.maintenanceId, table.completedOn.desc()),
+    check('maintenance_log_cost', sql`${table.costCents} between 0 and ${sql.raw(String(MAX_MAINTENANCE_COST_CENTS))}`),
+    check('maintenance_log_notes_length', sql`char_length(${table.notes}) <= ${sql.raw(String(HOME_NOTES_MAX_LENGTH))}`),
+  ]
+).enableRLS()
+
+/**
+ * A bill that comes around on a schedule. Whether it's paid is never stored: the matcher in
+ * @ghar/core/bills pairs due dates with transactions each time it's read.
+ *
+ * `dueMonth` anchors quarterly and annual bills (see BillSchedule). Monthly bills have none.
+ */
+export const bills = pgTable(
+  'bills',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    /** Who is paid, as it shows up on a bank statement. The matcher reads this. */
+    payee: text().notNull(),
+    /** The usual amount. Null matches a payment of any size. */
+    amountCents: cents(),
+    isVariable: boolean().notNull().default(false),
+    cadence: billCadence().notNull().default('monthly'),
+    dueDay: smallint().notNull(),
+    dueMonth: smallint(),
+    autopay: boolean().notNull().default(false),
+    /** The account it's paid from. When set, other accounts' transactions can't pay it. */
+    accountId: uuid().references(() => accounts.id, { onDelete: 'set null' }),
+    categoryId: uuid().references(() => categories.id, { onDelete: 'set null' }),
+    url: text(),
+    notes: text(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('bills_household_idx').on(table.householdId),
+    check('bills_name_length', sql`char_length(${table.name}) between 1 and ${sql.raw(String(BILL_NAME_MAX_LENGTH))}`),
+    check('bills_payee_length', sql`char_length(${table.payee}) between 1 and ${sql.raw(String(BILL_PAYEE_MAX_LENGTH))}`),
+    check(
+      'bills_text_lengths',
+      sql`char_length(${table.url}) <= ${sql.raw(String(URL_MAX_LENGTH))}
+        and char_length(${table.notes}) <= ${sql.raw(String(BILL_NOTES_MAX_LENGTH))}`
+    ),
+    check('bills_amount', sql`${table.amountCents} between 1 and ${sql.raw(String(MAX_BILL_CENTS))}`),
+    check('bills_due_day', sql`${table.dueDay} between 1 and 31`),
+    check(
+      'bills_due_month',
+      sql`(${table.cadence} = 'monthly' and ${table.dueMonth} is null)
+        or (${table.cadence} <> 'monthly' and ${table.dueMonth} between 1 and 12)`
+    ),
+  ]
+).enableRLS()
+
+/**
+ * An expiry reminder email that went out. The row is claimed before sending, so two runs on the
+ * same day can't both send, and each tier goes once per expiry date: renewing a passport moves its
+ * date and the reminders start over.
+ *
+ * No RLS policy: only the cron job reads it.
+ */
+export const expiryReminders = pgTable(
+  'expiry_reminders',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    documentId: uuid().references(() => documents.id, { onDelete: 'cascade' }),
+    /** For a warranty. */
+    assetId: uuid().references(() => assets.id, { onDelete: 'cascade' }),
+    /** One of EXPIRY_REMINDER_DAYS. */
+    thresholdDays: smallint().notNull(),
+    expiresOn: date({ mode: 'string' }).notNull(),
+    sentAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    uniqueIndex('expiry_reminders_document_unique')
+      .on(table.documentId, table.thresholdDays, table.expiresOn)
+      .where(sql`${table.documentId} is not null`),
+    uniqueIndex('expiry_reminders_asset_unique')
+      .on(table.assetId, table.thresholdDays, table.expiresOn)
+      .where(sql`${table.assetId} is not null`),
+    check('expiry_reminders_one_subject', sql`num_nonnulls(${table.documentId}, ${table.assetId}) = 1`),
+    check('expiry_reminders_threshold', sql`${table.thresholdDays} in (${sql.raw(EXPIRY_REMINDER_DAYS.join(', '))})`),
+  ]
 ).enableRLS()

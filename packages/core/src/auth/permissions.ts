@@ -43,8 +43,15 @@ export const PERMISSIONS = {
   'travel.manage': CONTRIBUTORS,
   'documents.view': EVERYONE,
   'documents.manage': CONTRIBUTORS,
+  /**
+   * Documents marked sensitive: passports, medical records, tax returns. Without this a sensitive
+   * document is reported as missing, in lists, on the calendar, in reminders and by id.
+   */
+  'documents.viewSensitive': OWNERS_AND_ADULTS,
   'home.view': EVERYONE,
   'home.manage': CONTRIBUTORS,
+  'contacts.view': EVERYONE,
+  'contacts.manage': CONTRIBUTORS,
 } as const satisfies Record<string, readonly HouseholdRole[]>
 
 export type Permission = keyof typeof PERMISSIONS

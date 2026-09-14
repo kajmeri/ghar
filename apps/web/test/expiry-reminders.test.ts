@@ -1,0 +1,141 @@
+import type { PGlite } from '@electric-sql/pglite'
+import type { CalendarDate } from '@ghar/core/dates'
+import { documentStoragePath } from '@ghar/core/documents'
+import { createAsset, createDocument, createHousehold, type Db, type RequestContext } from '@ghar/db/queries'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
+import { runExpiryReminders } from '@/lib/documents/expiry-reminders'
+import { createMemoryProvider, EmailDeliveryError, type EmailProvider } from '@/lib/providers/email'
+
+// The whole reminder job against a real schema, with an in-memory inbox.
+
+let client: PGlite
+let db: Db
+
+beforeAll(async () => {
+  ;({ client, db } = await createTestDatabase())
+})
+
+let households = 0
+
+/** Each test gets its own household, and reminds only that. */
+async function household(): Promise<{ ctx: RequestContext; email: string }> {
+  households += 1
+  const email = `owner-${households}@example.com`
+  const userId = await createAuthUser(client, email)
+  const { household: row } = await createHousehold({ userId, email }, db, {
+    name: `Household ${households}`,
+    timezone: 'America/New_York',
+    currency: 'USD',
+  })
+  return { ctx: { userId, householdId: row.id, role: 'owner' }, email }
+}
+
+function addDocument(ctx: RequestContext, input: { title: string; expiresOn: CalendarDate; isSensitive?: boolean }) {
+  return createDocument(ctx, db, {
+    title: input.title,
+    kind: 'id',
+    issuedOn: null,
+    expiresOn: input.expiresOn,
+    issuer: null,
+    referenceNumber: 'X1234567',
+    assetId: null,
+    notes: null,
+    isSensitive: input.isSensitive ?? false,
+    storagePath: documentStoragePath(ctx.householdId, crypto.randomUUID(), 'application/pdf'),
+    mimeType: 'application/pdf',
+    sizeBytes: 2048,
+  })
+}
+
+/** Runs the job at 11am New York time on `today`. */
+function run(ctx: RequestContext, email: EmailProvider, today: CalendarDate) {
+  return runExpiryReminders(
+    { db, email, appUrl: 'https://ghar.test', now: new Date(`${today}T15:00:00Z`) },
+    { householdId: ctx.householdId }
+  )
+}
+
+describe('expiry reminders', () => {
+  it('sends one reminder at 60, 30 and 7 days, and never twice', async () => {
+    const { ctx, email } = await household()
+    const passport = await addDocument(ctx, { title: 'Passport', expiresOn: '2026-12-01' })
+    const inbox = createMemoryProvider()
+
+    await run(ctx, inbox, '2026-10-01')
+    expect(inbox.sent).toHaveLength(0)
+
+    const first = await run(ctx, inbox, '2026-10-02')
+    expect(first).toMatchObject({ subjects: 1, reminded: 1, emails: 1 })
+    const [reminder] = inbox.sent
+    expect(reminder?.to).toBe(email)
+    expect(reminder?.subject).toBe('Passport expires in 60 days')
+    expect(reminder?.text).toContain(`https://ghar.test/documents/${passport.id}`)
+    expect(reminder?.text).not.toContain('X1234567')
+    expect(reminder?.html).not.toContain('X1234567')
+
+    const again = await run(ctx, inbox, '2026-10-02')
+    expect(again).toMatchObject({ reminded: 0, skipped: 1 })
+    await run(ctx, inbox, '2026-10-15')
+    expect(inbox.sent).toHaveLength(1)
+
+    await run(ctx, inbox, '2026-11-01')
+    await run(ctx, inbox, '2026-11-02')
+    await run(ctx, inbox, '2026-11-24')
+    await run(ctx, inbox, '2026-12-02')
+    expect(inbox.sent.map(message => message.subject)).toEqual([
+      'Passport expires in 60 days',
+      'Passport expires in 30 days',
+      'Passport expires in 7 days',
+    ])
+  })
+
+  it('catches up a missed day with one reminder, not one per tier', async () => {
+    const { ctx } = await household()
+    await addDocument(ctx, { title: 'Car registration', expiresOn: '2026-10-20' })
+    const inbox = createMemoryProvider()
+
+    await run(ctx, inbox, '2026-10-15')
+    await run(ctx, inbox, '2026-10-16')
+    expect(inbox.sent.map(message => message.subject)).toEqual(['Car registration expires in 5 days'])
+  })
+
+  it('includes sensitive documents and warranties', async () => {
+    const { ctx } = await household()
+    await addDocument(ctx, { title: 'Birth certificate', expiresOn: '2026-10-14', isSensitive: true })
+    const dishwasher = await createAsset(ctx, db, {
+      name: 'Dishwasher',
+      kind: 'appliance',
+      make: 'Bosch',
+      model: null,
+      serialNumber: null,
+      purchasedOn: null,
+      purchasePriceCents: null,
+      warrantyExpiresOn: '2026-10-14',
+      location: 'Kitchen',
+      notes: null,
+    })
+    const inbox = createMemoryProvider()
+
+    await run(ctx, inbox, '2026-09-14')
+    expect(inbox.sent.map(message => message.subject)).toEqual([
+      'Birth certificate expires in 30 days',
+      'Dishwasher warranty expires in 30 days',
+    ])
+    expect(inbox.sent[1]?.text).toContain(`https://ghar.test/home/assets/${dishwasher.id}`)
+  })
+
+  it('gives the reminder back when the email fails, so the next run sends it', async () => {
+    const { ctx } = await household()
+    await addDocument(ctx, { title: 'Home insurance', expiresOn: '2026-09-21' })
+    const down: EmailProvider = { send: () => Promise.reject(new EmailDeliveryError('Resend is down')) }
+
+    const failed = await run(ctx, down, '2026-09-14')
+    expect(failed).toMatchObject({ reminded: 0, errors: 1 })
+
+    const inbox = createMemoryProvider()
+    const retried = await run(ctx, inbox, '2026-09-14')
+    expect(retried).toMatchObject({ reminded: 1, errors: 0 })
+    expect(inbox.sent.map(message => message.subject)).toEqual(['Home insurance expires in 7 days'])
+  })
+})

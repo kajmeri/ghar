@@ -244,3 +244,31 @@ export function addCalendarDays(date: CalendarDate, days: number): CalendarDate 
   }
   return format(addDays(parseISO(assertCalendarDate(date)), days), 'yyyy-MM-dd')
 }
+
+/** Days in a month, where month runs 1 to 12. */
+export function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate()
+}
+
+/**
+ * The same day of the month, `months` later. A day the target month doesn't have lands on its last
+ * day, so Jan 31 plus one month is Feb 28 (29 in a leap year), never Mar 3.
+ */
+export function addCalendarMonths(date: CalendarDate, months: number): CalendarDate {
+  if (!Number.isInteger(months)) {
+    throw new ValidationError('months must be a whole number', { details: { months } })
+  }
+  assertCalendarDate(date)
+  const total = Number(date.slice(0, 4)) * 12 + Number(date.slice(5, 7)) - 1 + months
+  const year = Math.floor(total / 12)
+  const month = total - year * 12 + 1
+  const day = Math.min(Number(date.slice(8, 10)), daysInMonth(year, month))
+  return `${pad(year, 4)}-${pad(month)}-${pad(day)}`
+}
+
+/** Whole days from one calendar date to another: positive when `to` is later. */
+export function daysBetween(from: CalendarDate, to: CalendarDate): number {
+  const utc = (date: CalendarDate) =>
+    Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10)))
+  return Math.round((utc(assertCalendarDate(to)) - utc(assertCalendarDate(from))) / DAY_MS)
+}

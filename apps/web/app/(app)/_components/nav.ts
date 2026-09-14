@@ -1,4 +1,4 @@
-import { CalendarDays, FileText, House, Plane, Settings, Wallet, Wrench, type LucideIcon } from 'lucide-react'
+import { BookUser, CalendarDays, FileText, House, Plane, Receipt, Settings, Wallet, Wrench, type LucideIcon } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -17,17 +17,19 @@ const CALENDAR: NavItem = { label: 'Calendar', href: '/calendar', icon: Calendar
 const TRAVEL: NavItem = { label: 'Travel', href: '/travel', icon: Plane }
 const DOCUMENTS: NavItem = { label: 'Documents', href: '/documents', icon: FileText }
 const HOUSE: NavItem = { label: 'House', href: '/home', icon: Wrench }
+const BILLS: NavItem = { label: 'Bills', href: '/bills', icon: Receipt }
+const CONTACTS: NavItem = { label: 'Contacts', href: '/contacts', icon: BookUser }
 export const SETTINGS: NavItem = { label: 'Settings', href: '/settings', icon: Settings }
 
 /** The phone's bottom bar. Four destinations plus More, which opens MORE_ITEMS. */
 export const TAB_ITEMS: NavItem[] = [HOME, MONEY, CALENDAR, TRAVEL]
-export const MORE_ITEMS: NavItem[] = [DOCUMENTS, HOUSE, SETTINGS]
+export const MORE_ITEMS: NavItem[] = [HOUSE, DOCUMENTS, CONTACTS, BILLS, SETTINGS]
 
 /** The desktop sidebar. Settings sits apart at the bottom. */
 export const SIDEBAR_GROUPS: NavGroup[] = [
   { items: [HOME] },
   { label: 'Everyday', items: [MONEY, CALENDAR, TRAVEL] },
-  { label: 'Records', items: [DOCUMENTS, HOUSE] },
+  { label: 'Records', items: [HOUSE, DOCUMENTS, CONTACTS, BILLS] },
 ]
 
 /** Remembers whether the desktop sidebar is collapsed, so the server renders it that way. */

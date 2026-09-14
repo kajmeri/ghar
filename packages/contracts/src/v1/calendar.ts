@@ -7,7 +7,7 @@ export const attendeeResponseSchema = z.enum(['needs_action', 'accepted', 'tenta
 export const calendarProviderSchema = z.enum(['google'])
 export const linkDirectionSchema = z.enum(['inbound', 'two_way'])
 export const linkStatusSchema = z.enum(['active', 'needs_reconnect', 'error'])
-export const feedSourceSchema = z.enum(['native', 'google', 'trips', 'bills', 'maintenance'])
+export const feedSourceSchema = z.enum(['native', 'google', 'trips', 'bills', 'maintenance', 'expiries'])
 export const eventColorTokenSchema = z.enum(['positive', 'caution', 'negative'])
 export const calendarToneSchema = z.enum(['default', 'positive', 'caution', 'negative'])
 
@@ -21,7 +21,9 @@ export const calendarItemRefSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('event'), eventId: z.uuid(), occurrenceStart: instantSchema }),
   z.object({ kind: z.literal('booking'), bookingId: z.uuid() }),
   z.object({ kind: z.literal('bill'), billId: z.uuid() }),
-  z.object({ kind: z.literal('maintenance'), taskId: z.uuid() }),
+  z.object({ kind: z.literal('maintenance'), taskId: z.uuid(), assetId: z.uuid().nullable() }),
+  z.object({ kind: z.literal('document'), documentId: z.uuid() }),
+  z.object({ kind: z.literal('asset'), assetId: z.uuid() }),
 ])
 export type CalendarItemRef = z.infer<typeof calendarItemRefSchema>
 

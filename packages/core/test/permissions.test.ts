@@ -33,8 +33,11 @@ const APPROVED = {
   'travel.manage': 'oam',
   'documents.view': 'oamv',
   'documents.manage': 'oam',
+  'documents.viewSensitive': 'oa',
   'home.view': 'oamv',
   'home.manage': 'oam',
+  'contacts.view': 'oamv',
+  'contacts.manage': 'oam',
 } satisfies Record<Permission, string>
 
 const LETTER = { owner: 'o', adult: 'a', member: 'm', viewer: 'v' } satisfies Record<HouseholdRole, string>

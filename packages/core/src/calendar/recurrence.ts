@@ -1,5 +1,6 @@
 import {
   addCalendarDays,
+  daysBetween,
   formatCalendarDate,
   instantFromWallClock,
   isCalendarDate,
@@ -9,7 +10,7 @@ import {
   type TimeZone,
 } from '../dates'
 import { ValidationError } from '../errors'
-import { allDayDate, allDayInstant, daysBetween, weekdayIndex } from './all-day'
+import { allDayDate, allDayInstant, weekdayIndex } from './all-day'
 import type { CalendarWindow } from './types'
 
 // RFC 5545 RRULEs for native events, expanded here without a dependency. The subset is what the

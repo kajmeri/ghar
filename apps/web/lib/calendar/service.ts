@@ -18,11 +18,14 @@ import {
   parseRecurrenceRule,
   windowForDates,
   type CalendarItem as CoreCalendarItem,
+  type ExpiryDue,
   type FeedSource,
+  type MaintenanceDue,
 } from '@ghar/core/calendar'
 import { todayInTimeZone, type CalendarDate, type TimeZone } from '@ghar/core/dates'
 import * as queries from '@ghar/db/queries'
 import type { CalendarLinkRow, EventDetail, EventInput } from '@ghar/db/queries'
+import { listBillDues } from '@/lib/bills/service'
 import { openSecret, sealSecret } from '@/lib/crypto'
 import { getDb } from '@/lib/db'
 import { getGoogleCalendarClient } from '@/lib/providers/google-calendar'
@@ -38,33 +41,57 @@ export async function getCalendarSettings(ctx: RequestContext): Promise<{ timezo
 }
 
 /**
- * The sources worth offering as filters: Google once anyone has linked a calendar, trips for
- * people who can see travel. Bills and maintenance join when they have tables.
+ * The sources worth offering as filters: Google once anyone has linked a calendar, then trips,
+ * bills, maintenance and expiries for the people who can see each.
  */
 export function availableFeedSources(ctx: RequestContext, links: readonly CalendarLink[]): FeedSource[] {
   const sources: FeedSource[] = ['native']
   if (links.length > 0) sources.push('google')
   if (can(ctx.role, 'travel.view')) sources.push('trips')
+  if (can(ctx.role, 'finances.view')) sources.push('bills')
+  if (can(ctx.role, 'home.view')) sources.push('maintenance')
+  if (can(ctx.role, 'documents.view')) sources.push('expiries')
   return sources
 }
 
 /**
- * Everything on the calendar for a range of days in the household's zone. Bills and maintenance
- * have no tables yet, so those sources are empty until they do.
+ * Everything on the calendar for a range of days in the household's zone: events, trips, each
+ * bill's due dates marked paid or not, maintenance at its next due date, and documents and
+ * warranties on the day they run out. Sensitive documents stay off for people who can't see them.
  */
 export async function getCalendarFeed(
   ctx: RequestContext,
   input: { from: CalendarDate; to: CalendarDate; sources: FeedSource[] }
 ): Promise<CalendarFeed> {
   const db = getDb()
-  const { timezone } = await getCalendarSettings(ctx)
+  const { timezone, currency } = await queries.getHousehold(ctx, db)
   const window = windowForDates(input.from, input.to, timezone)
   const wants = (source: FeedSource) => input.sources.includes(source)
+  const range = { from: input.from, to: input.to }
 
-  const [events, bookings] = await Promise.all([
+  const [events, bookings, bills, tasks, documents, warranties] = await Promise.all([
     wants('native') || wants('google') ? queries.listEventsInWindow(ctx, db, window) : [],
     wants('trips') && can(ctx.role, 'travel.view') ? queries.listTripBookingsInRange(ctx, db, input) : [],
+    wants('bills') && can(ctx.role, 'finances.view') ? listBillDues(ctx, db, { ...range, timeZone: timezone, currency }) : [],
+    wants('maintenance') && can(ctx.role, 'home.view') ? queries.listMaintenanceTasks(ctx, db) : [],
+    wants('expiries') && can(ctx.role, 'documents.view') ? queries.listDocumentExpiries(ctx, db, range) : [],
+    wants('expiries') && can(ctx.role, 'home.view') ? queries.listWarrantyExpiries(ctx, db, range) : [],
   ])
+
+  const maintenance: MaintenanceDue[] = tasks.flatMap(task =>
+    task.nextDueOn !== null && task.nextDueOn >= input.from && task.nextDueOn <= input.to
+      ? [{ id: task.id, title: task.title, dueOn: task.nextDueOn, done: false, assetId: task.assetId }]
+      : []
+  )
+  const expiries: ExpiryDue[] = [
+    ...documents.map(document => ({ kind: 'document' as const, id: document.id, title: document.title, expiresOn: document.expiresOn })),
+    ...warranties.map(asset => ({
+      kind: 'asset' as const,
+      id: asset.id,
+      title: `${asset.name} warranty`,
+      expiresOn: asset.warrantyExpiresOn,
+    })),
+  ]
 
   const items = buildCalendarFeed({
     window,
@@ -72,8 +99,9 @@ export async function getCalendarFeed(
     today: todayInTimeZone(timezone),
     events,
     bookings,
-    bills: [],
-    maintenance: [],
+    bills,
+    maintenance,
+    expiries,
     sources: input.sources,
   })
   return {

@@ -167,7 +167,11 @@ const september: CalendarFeedInput = {
     }),
   ],
   bills,
-  maintenance: [{ id: 'm-filter', title: 'Replace HVAC filter', dueOn: '2026-09-22', done: false }],
+  maintenance: [{ id: 'm-filter', title: 'Replace HVAC filter', dueOn: '2026-09-22', done: false, assetId: 'a-hvac' }],
+  expiries: [
+    { kind: 'document', id: 'd-passport', title: 'Passport', expiresOn: '2026-09-25' },
+    { kind: 'asset', id: 'a-dishwasher', title: 'Dishwasher warranty', expiresOn: '2026-09-03' },
+  ],
 }
 
 describe('buildCalendarFeed', () => {
@@ -175,7 +179,7 @@ describe('buildCalendarFeed', () => {
   const titles = (date: string) => feed.filter(item => item.startDate === date).map(item => item.title)
 
   it('merges native, synced and derived items for the window', () => {
-    expect(new Set(feed.map(item => item.source))).toEqual(new Set(['native', 'google', 'trips', 'bills', 'maintenance']))
+    expect(new Set(feed.map(item => item.source))).toEqual(new Set(['native', 'google', 'trips', 'bills', 'maintenance', 'expiries']))
     expect(feed.map(item => item.title)).not.toContain('Next month')
   })
 
@@ -221,12 +225,38 @@ describe('buildCalendarFeed', () => {
   })
 
   it('tones bills by how close they are to due', () => {
-    const tone = (id: string) => feed.find(item => item.id === `bills:${id}`)?.tone
+    const tone = (id: string) => feed.find(item => item.ref.kind === 'bill' && item.ref.billId === id)?.tone
     expect(tone('b-late')).toBe('negative')
     expect(tone('b-soon')).toBe('caution')
     expect(tone('b-later')).toBe('default')
     expect(tone('b-paid')).toBe('default')
-    expect(feed.find(item => item.id === 'bills:b-paid')?.title).toBe('Mortgage (paid)')
+    expect(feed.find(item => item.id === 'bills:b-paid:2026-09-05')?.title).toBe('Mortgage (paid)')
+  })
+
+  it('keeps each due date of a bill as its own item', () => {
+    const twice = buildCalendarFeed({
+      ...september,
+      sources: ['bills'],
+      bills: [
+        { id: 'b-weekly', name: 'Lawn', dueOn: '2026-09-07', amountCents: null, currency: null, paid: true },
+        { id: 'b-weekly', name: 'Lawn', dueOn: '2026-09-21', amountCents: null, currency: null, paid: false },
+      ],
+    })
+    expect(twice.map(item => item.startDate)).toEqual(['2026-09-07', '2026-09-21'])
+  })
+
+  it('links maintenance to its asset and tones expiries', () => {
+    expect(feed.find(item => item.source === 'maintenance')?.ref).toEqual({ kind: 'maintenance', taskId: 'm-filter', assetId: 'a-hvac' })
+    expect(feed.find(item => item.id === 'expiries:document:d-passport')).toMatchObject({
+      title: 'Passport expires',
+      tone: 'caution',
+      ref: { kind: 'document', documentId: 'd-passport' },
+    })
+    expect(feed.find(item => item.id === 'expiries:asset:a-dishwasher')).toMatchObject({
+      title: 'Dishwasher warranty expired',
+      tone: 'negative',
+      ref: { kind: 'asset', assetId: 'a-dishwasher' },
+    })
   })
 
   it('includes only the sources asked for', () => {
@@ -248,7 +278,7 @@ describe('parseFeedSources', () => {
   })
 
   it('falls back to every source', () => {
-    expect(parseFeedSources(undefined)).toEqual(['native', 'google', 'trips', 'bills', 'maintenance'])
-    expect(parseFeedSources('nope')).toHaveLength(5)
+    expect(parseFeedSources(undefined)).toEqual(['native', 'google', 'trips', 'bills', 'maintenance', 'expiries'])
+    expect(parseFeedSources('nope')).toHaveLength(6)
   })
 })

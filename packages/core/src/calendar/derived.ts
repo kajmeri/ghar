@@ -15,10 +15,7 @@ export type TripBooking = Pick<
   'kind' | 'status' | 'origin' | 'destination' | 'propertyName' | 'providerName' | 'checkIn' | 'checkOut' | 'departAt' | 'returnAt'
 > & { id: string }
 
-/**
- * A bill that falls due. Bills don't have a table yet; when they do, their query maps rows to this
- * and the calendar shows them with no other change.
- */
+/** One due date of a bill. A monthly bill appears once for each month in the window. */
 export interface BillDue {
   id: string
   name: string
@@ -28,13 +25,26 @@ export interface BillDue {
   paid: boolean
 }
 
-/** A home maintenance task that falls due. Like bills, the table comes later. */
+/** A home maintenance task at its next due date. */
 export interface MaintenanceDue {
   id: string
   title: string
   dueOn: CalendarDate
   done: boolean
+  /** The asset it's for, so the item opens that asset's page. */
+  assetId: string | null
 }
+
+/** Something that runs out: a document's expiry date, or an asset's warranty. */
+export interface ExpiryDue {
+  kind: 'document' | 'asset'
+  id: string
+  title: string
+  expiresOn: CalendarDate
+}
+
+/** Days before an expiry that its calendar item turns to caution. */
+export const EXPIRY_CAUTION_DAYS = 30
 
 /** Days before a due date that an unpaid bill or open task turns to caution. */
 export const DUE_SOON_DAYS = 3
@@ -100,7 +110,7 @@ export function tripItems(bookings: readonly TripBooking[]): CalendarItemInput[]
 
 export function billItems(bills: readonly BillDue[], today: CalendarDate): CalendarItemInput[] {
   return bills.map(bill => ({
-    id: `bills:${bill.id}`,
+    id: `bills:${bill.id}:${bill.dueOn}`,
     source: 'bills',
     title: bill.paid ? `${bill.name} (paid)` : `${bill.name} due`,
     location: null,
@@ -124,6 +134,24 @@ export function maintenanceItems(tasks: readonly MaintenanceDue[], today: Calend
     category: 'maintenance',
     tone: dueTone(task.dueOn, task.done, today),
     recurring: false,
-    ref: { kind: 'maintenance', taskId: task.id },
+    ref: { kind: 'maintenance', taskId: task.id, assetId: task.assetId },
   }))
+}
+
+export function expiryItems(expiries: readonly ExpiryDue[], today: CalendarDate): CalendarItemInput[] {
+  return expiries.map(expiry => {
+    const lapsed = expiry.expiresOn < today
+    return {
+      id: `expiries:${expiry.kind}:${expiry.id}`,
+      source: 'expiries',
+      title: `${expiry.title} ${lapsed ? 'expired' : 'expires'}`,
+      location: null,
+      ...allDayRange(expiry.expiresOn, expiry.expiresOn),
+      allDay: true,
+      category: 'household',
+      tone: lapsed ? 'negative' : expiry.expiresOn <= addCalendarDays(today, EXPIRY_CAUTION_DAYS) ? 'caution' : 'default',
+      recurring: false,
+      ref: expiry.kind === 'document' ? { kind: 'document', documentId: expiry.id } : { kind: 'asset', assetId: expiry.id },
+    }
+  })
 }

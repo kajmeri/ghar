@@ -1,6 +1,15 @@
 import { startOfDayInTimeZone, toCalendarDate, type CalendarDate, type TimeZone } from '../dates'
 import { allDayDate, allDayLastDate } from './all-day'
-import { billItems, maintenanceItems, tripItems, type BillDue, type MaintenanceDue, type TripBooking } from './derived'
+import {
+  billItems,
+  expiryItems,
+  maintenanceItems,
+  tripItems,
+  type BillDue,
+  type ExpiryDue,
+  type MaintenanceDue,
+  type TripBooking,
+} from './derived'
 import { expandOccurrences, parseRecurrenceRule } from './recurrence'
 import {
   FEED_SOURCES,
@@ -13,15 +22,18 @@ import {
 } from './types'
 
 // The one place calendar items come together: native events (with their repeats expanded),
-// events synced from linked calendars, and items derived from trips, bills and maintenance. The
-// API and every calendar view read this, so they can't disagree about what's on a day.
+// events synced from linked calendars, and items derived from trips, bills, maintenance and
+// expiry dates. The API and every calendar view read this, so they can't disagree about what's on
+// a day.
 
 /** What an item opens. The web app turns these into links. */
 export type CalendarItemRef =
   | { kind: 'event'; eventId: string; occurrenceStart: Date }
   | { kind: 'booking'; bookingId: string }
   | { kind: 'bill'; billId: string }
-  | { kind: 'maintenance'; taskId: string }
+  | { kind: 'maintenance'; taskId: string; assetId: string | null }
+  | { kind: 'document'; documentId: string }
+  | { kind: 'asset'; assetId: string }
 
 export interface CalendarItem {
   /** Stable across reads, so it can key a list. Unique within one feed. */
@@ -69,6 +81,7 @@ export interface CalendarFeedInput {
   bookings?: readonly TripBooking[]
   bills?: readonly BillDue[]
   maintenance?: readonly MaintenanceDue[]
+  expiries?: readonly ExpiryDue[]
   /** Which sources to include. Everything when omitted. */
   sources?: readonly FeedSource[]
 }
@@ -176,6 +189,7 @@ export function buildCalendarFeed(input: CalendarFeedInput): CalendarItem[] {
   if (wanted.has('trips')) raw.push(...tripItems(input.bookings ?? []))
   if (wanted.has('bills')) raw.push(...billItems(input.bills ?? [], input.today))
   if (wanted.has('maintenance')) raw.push(...maintenanceItems(input.maintenance ?? [], input.today))
+  if (wanted.has('expiries')) raw.push(...expiryItems(input.expiries ?? [], input.today))
 
   const seen = new Set<string>()
   const items: CalendarItem[] = []
