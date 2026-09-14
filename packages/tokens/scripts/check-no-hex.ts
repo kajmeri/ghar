@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 // Fails when a hex color appears anywhere in the current workspace outside tokens.json.
-// oxlint's ghar/no-hex catches hex in TS/JS string literals; this also covers CSS, JSON and SVG.
 import { readdirSync, readFileSync } from 'node:fs'
 import { extname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'

@@ -40,8 +40,6 @@
     "@ghar/config": "workspace:*",
     "typescript": "6.0.3",
     "vite": "^8.0.0",
-    "vitest": "5.0.0",
-    "oxlint": "1.82.0",
-    "oxlint-tsgolint": "7.0.2001"
+    "vitest": "5.0.0"
   }
 }

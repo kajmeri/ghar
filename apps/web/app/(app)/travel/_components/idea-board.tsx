@@ -135,7 +135,6 @@ function IdeaForm() {
 
         {preview?.imageUrl ? (
           <div className='flex items-center gap-3 rounded-control border border-line p-2'>
-            {/* eslint-disable-next-line @next/next/no-img-element -- an arbitrary remote host, not an asset we ship */}
             <img src={preview.imageUrl} alt='' className='size-16 shrink-0 rounded-control object-cover' />
             <p className='min-w-0 text-sm text-ink-muted'>{preview.siteName ?? 'Found a picture for this one.'}</p>
           </div>
@@ -183,10 +182,7 @@ function IdeaCard({ idea, currentUserId }: { idea: TripIdea; currentUserId: stri
 
   return (
     <Card className='flex h-full flex-col overflow-hidden'>
-      {idea.imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- an arbitrary remote host, not an asset we ship
-        <img src={idea.imageUrl} alt='' className='h-32 w-full object-cover' />
-      ) : null}
+      {idea.imageUrl ? <img src={idea.imageUrl} alt='' className='h-32 w-full object-cover' /> : null}
 
       <div className='flex flex-1 flex-col gap-3 p-4 md:p-5'>
         <div>

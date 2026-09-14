@@ -1,0 +1,70 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react"],
+  "categories": { "correctness": "error" },
+  "options": { "typeAware": true, "reportUnusedDisableDirectives": "error" },
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "react/rules-of-hooks": "error",
+    // Also flags plain string sorts, and oxlint ignores its ignoreStringArrays option.
+    "typescript/require-array-sort-compare": "off"
+  },
+  "overrides": [
+    {
+      "files": ["packages/core/src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["*", "!.", "!..", "!./**", "!../**", "!date-fns", "!date-fns/**", "!zod", "!zod/**"],
+                "message": "core imports only date-fns, zod and its own files. Node, Next, React, @ghar/db and SDKs belong in apps/web (see CLAUDE.md)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/contracts/src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["*", "!.", "!..", "!./**", "!../**", "!zod", "!zod/**"],
+                "message": "contracts imports only zod and its own files. Node, Next, React, @ghar/db and SDKs belong in apps/web (see CLAUDE.md)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/mobile/src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@ghar/db", "@ghar/db/**", "node:*", "next", "next/**", "server-only"],
+                "message": "Mobile is a client of the API. Reach the server through @ghar/contracts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/web/**"],
+      "plugins": ["nextjs"],
+      "rules": {
+        // Trip idea images come from arbitrary remote hosts, which next/image can't optimize.
+        "nextjs/no-img-element": "off"
+      }
+    }
+  ]
+}
