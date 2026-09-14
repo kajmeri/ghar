@@ -1,17 +1,10 @@
-import { z } from 'zod';
-import { defineEndpoint } from '../endpoint';
-import { bookingSchema } from './travel';
-import { tripIdeaSchema } from './ideas';
-import { itineraryItemSchema } from './itinerary';
-import {
-  calendarDateSchema,
-  centsSchema,
-  instantSchema,
-  queryBooleanSchema,
-  shortTextSchema,
-  tripParamsSchema,
-} from './shared';
-import { tripSchema, tripSummarySchema } from './trips';
+import { z } from 'zod'
+import { defineEndpoint } from '../endpoint'
+import { bookingSchema } from './travel'
+import { tripIdeaSchema } from './ideas'
+import { itineraryItemSchema } from './itinerary'
+import { calendarDateSchema, centsSchema, instantSchema, queryBooleanSchema, shortTextSchema, tripParamsSchema } from './shared'
+import { tripSchema, tripSummarySchema } from './trips'
 
 /**
  * Everything /travel shows, in one request: the trips that have not happened yet, the
@@ -30,14 +23,14 @@ export const travelHubSchema = z.object({
   /** Bookings with no trip. The hub's one piece of unfinished business. */
   unlinkedBookings: z.array(bookingSchema),
   ideas: z.array(tripIdeaSchema),
-});
-export type TravelHub = z.infer<typeof travelHubSchema>;
+})
+export type TravelHub = z.infer<typeof travelHubSchema>
 
 export const getTravelHub = defineEndpoint({
   method: 'GET',
   path: '/api/v1/travel',
   response: travelHubSchema,
-});
+})
 
 /**
  * Travel mode. The whole trip comes back rather than just today, so a client that caches
@@ -52,15 +45,15 @@ export const travelModeSchema = z.object({
   items: z.array(itineraryItemSchema),
   /** Linked bookings, so a confirmation code is there even for a booking with no item. */
   bookings: z.array(bookingSchema),
-});
-export type TravelMode = z.infer<typeof travelModeSchema>;
+})
+export type TravelMode = z.infer<typeof travelModeSchema>
 
 export const getTravelMode = defineEndpoint({
   method: 'GET',
   path: '/api/v1/trips/:tripId/travel-mode',
   params: tripParamsSchema,
   response: travelModeSchema,
-});
+})
 
 export const tripTransactionSchema = z.object({
   id: z.uuid(),
@@ -70,8 +63,8 @@ export const tripTransactionSchema = z.object({
   /** Negative is money out. `tripActualCents` in @ghar/core turns a list of these into spend. */
   amountCents: centsSchema,
   tripId: z.uuid().nullable(),
-});
-export type TripTransaction = z.infer<typeof tripTransactionSchema>;
+})
+export type TripTransaction = z.infer<typeof tripTransactionSchema>
 
 /**
  * Planned against actual. The server sends the numbers and the transactions behind them;
@@ -83,14 +76,14 @@ export const tripBudgetSchema = z.object({
   actualCents: centsSchema,
   committedCents: centsSchema,
   transactions: z.array(tripTransactionSchema),
-});
+})
 
 export const getTripBudget = defineEndpoint({
   method: 'GET',
   path: '/api/v1/trips/:tripId/budget',
   params: tripParamsSchema,
   response: tripBudgetSchema,
-});
+})
 
 /** Everyday spending, so a charge can be found and tagged to a trip. */
 export const listTransactions = defineEndpoint({
@@ -105,7 +98,7 @@ export const listTransactions = defineEndpoint({
     limit: z.coerce.number().int().min(1).max(200).default(50),
   }),
   response: z.object({ transactions: z.array(tripTransactionSchema) }),
-});
+})
 
 /**
  * A charge typed in by hand.
@@ -123,11 +116,11 @@ export const createTransaction = defineEndpoint({
     postedOn: calendarDateSchema,
     description: shortTextSchema,
     merchant: shortTextSchema.nullable().default(null),
-    amountCents: centsSchema.refine((value) => value !== 0, 'An amount of nothing is not a charge'),
+    amountCents: centsSchema.refine(value => value !== 0, 'An amount of nothing is not a charge'),
     tripId: z.uuid().nullable().default(null),
   }),
   response: z.object({ transaction: tripTransactionSchema }),
-});
+})
 
 /** The trip tag. Null takes a charge back off a trip. */
 export const tagTransaction = defineEndpoint({
@@ -136,4 +129,4 @@ export const tagTransaction = defineEndpoint({
   params: z.object({ transactionId: z.uuid() }),
   body: z.object({ tripId: z.uuid().nullable() }),
   response: z.object({ transaction: tripTransactionSchema }),
-});
+})

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod'
 
 export const apiErrorCodeSchema = z.enum([
   'validation_error',
@@ -8,8 +8,8 @@ export const apiErrorCodeSchema = z.enum([
   'conflict',
   'rate_limited',
   'internal_error',
-]);
-export type ApiErrorCode = z.infer<typeof apiErrorCodeSchema>;
+])
+export type ApiErrorCode = z.infer<typeof apiErrorCodeSchema>
 
 /** The body of every non-2xx response from app/api/v1. */
 export const apiErrorResponseSchema = z.object({
@@ -22,5 +22,5 @@ export const apiErrorResponseSchema = z.object({
     /** Matches the x-request-id response header and the server log line. */
     requestId: z.string().optional(),
   }),
-});
-export type ApiErrorResponse = z.infer<typeof apiErrorResponseSchema>;
+})
+export type ApiErrorResponse = z.infer<typeof apiErrorResponseSchema>

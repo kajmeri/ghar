@@ -1,11 +1,11 @@
-import type { RequestContext } from '@ghar/contracts';
-import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
-import type * as schema from '../schema';
+import type { RequestContext } from '@ghar/contracts'
+import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core'
+import type * as schema from '../schema'
 
 /** Any Drizzle client over this schema: postgres-js in the app, PGlite in tests, or a transaction. */
-export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
+export type Db = PgDatabase<PgQueryResultHKT, typeof schema>
 
-export type { RequestContext };
+export type { RequestContext }
 
 /**
  * A signed-in person who may not belong to a household yet. Only session.ts accepts one,
@@ -13,9 +13,9 @@ export type { RequestContext };
  * creating a household, and reading or accepting an invitation.
  */
 export interface SessionContext {
-  readonly userId: string;
+  readonly userId: string
   /** From the verified session, never from a request body. */
-  readonly email: string | null;
+  readonly email: string | null
 }
 
 /**
@@ -24,8 +24,8 @@ export interface SessionContext {
  * Actor take one.
  */
 export interface SystemContext {
-  readonly householdId: string;
-  readonly userId: null;
+  readonly householdId: string
+  readonly userId: null
 }
 
-export type Actor = RequestContext | SystemContext;
+export type Actor = RequestContext | SystemContext

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest'
 
 import {
   allDayRange,
@@ -9,13 +9,11 @@ import {
   type CalendarFeedInput,
   type FeedEvent,
   type TripBooking,
-} from '../src/calendar';
+} from '../src/calendar'
 
-const NY = 'America/New_York';
+const NY = 'America/New_York'
 
-function event(
-  overrides: Partial<FeedEvent> & Pick<FeedEvent, 'id' | 'title' | 'startsAt' | 'endsAt'>,
-): FeedEvent {
+function event(overrides: Partial<FeedEvent> & Pick<FeedEvent, 'id' | 'title' | 'startsAt' | 'endsAt'>): FeedEvent {
   return {
     location: null,
     allDay: false,
@@ -25,7 +23,7 @@ function event(
     externalSource: null,
     externalId: null,
     ...overrides,
-  };
+  }
 }
 
 function booking(overrides: Partial<TripBooking> & Pick<TripBooking, 'id' | 'kind'>): TripBooking {
@@ -40,7 +38,7 @@ function booking(overrides: Partial<TripBooking> & Pick<TripBooking, 'id' | 'kin
     departAt: null,
     returnAt: null,
     ...overrides,
-  };
+  }
 }
 
 const bills: BillDue[] = [
@@ -76,7 +74,7 @@ const bills: BillDue[] = [
     currency: 'USD',
     paid: true,
   },
-];
+]
 
 const september: CalendarFeedInput = {
   window: windowForDates('2026-09-01', '2026-09-30', NY),
@@ -170,102 +168,87 @@ const september: CalendarFeedInput = {
   ],
   bills,
   maintenance: [{ id: 'm-filter', title: 'Replace HVAC filter', dueOn: '2026-09-22', done: false }],
-};
+}
 
 describe('buildCalendarFeed', () => {
-  const feed = buildCalendarFeed(september);
-  const titles = (date: string) =>
-    feed.filter((item) => item.startDate === date).map((item) => item.title);
+  const feed = buildCalendarFeed(september)
+  const titles = (date: string) => feed.filter(item => item.startDate === date).map(item => item.title)
 
   it('merges native, synced and derived items for the window', () => {
-    expect(new Set(feed.map((item) => item.source))).toEqual(
-      new Set(['native', 'google', 'trips', 'bills', 'maintenance']),
-    );
-    expect(feed.map((item) => item.title)).not.toContain('Next month');
-  });
+    expect(new Set(feed.map(item => item.source))).toEqual(new Set(['native', 'google', 'trips', 'bills', 'maintenance']))
+    expect(feed.map(item => item.title)).not.toContain('Next month')
+  })
 
   it('uses the household’s days, not UTC, at the edges of the window', () => {
-    expect(titles('2026-09-01')).toContain('First of the month');
-    expect(feed.map((item) => item.title)).not.toContain('Labor Day weekend');
-  });
+    expect(titles('2026-09-01')).toContain('First of the month')
+    expect(feed.map(item => item.title)).not.toContain('Labor Day weekend')
+  })
 
   it('expands repeats with a distinct id per occurrence', () => {
-    const piano = feed.filter((item) => item.title === 'Piano');
-    expect(piano.map((item) => item.startDate)).toEqual([
-      '2026-09-02',
-      '2026-09-09',
-      '2026-09-16',
-      '2026-09-23',
-      '2026-09-30',
-    ]);
-    expect(new Set(piano.map((item) => item.id)).size).toBe(5);
-    expect(piano.every((item) => item.recurring)).toBe(true);
-  });
+    const piano = feed.filter(item => item.title === 'Piano')
+    expect(piano.map(item => item.startDate)).toEqual(['2026-09-02', '2026-09-09', '2026-09-16', '2026-09-23', '2026-09-30'])
+    expect(new Set(piano.map(item => item.id)).size).toBe(5)
+    expect(piano.every(item => item.recurring)).toBe(true)
+  })
 
   it('shows a Google event two members share once', () => {
-    const dentist = feed.filter((item) => item.title === 'Dentist');
-    expect(dentist).toHaveLength(1);
-    expect(dentist[0]?.tone).toBe('caution');
-  });
+    const dentist = feed.filter(item => item.title === 'Dentist')
+    expect(dentist).toHaveLength(1)
+    expect(dentist[0]?.tone).toBe('caution')
+  })
 
   it('keeps an event that ends at midnight on its own day', () => {
-    const movie = feed.find((item) => item.title === 'Movie');
-    expect(movie).toMatchObject({ startDate: '2026-09-05', endDate: '2026-09-05' });
-  });
+    const movie = feed.find(item => item.title === 'Movie')
+    expect(movie).toMatchObject({ startDate: '2026-09-05', endDate: '2026-09-05' })
+  })
 
   it('turns bookings into trip items, and leaves out cancelled ones', () => {
-    expect(feed.filter((item) => item.source === 'trips').map((item) => item.title)).toEqual([
+    expect(feed.filter(item => item.source === 'trips').map(item => item.title)).toEqual([
       'Stay at Hotel Figueroa',
       'Flight JFK to LAX',
       'Flight LAX to JFK',
-    ]);
-    expect(feed.find((item) => item.title === 'Stay at Hotel Figueroa')).toMatchObject({
+    ])
+    expect(feed.find(item => item.title === 'Stay at Hotel Figueroa')).toMatchObject({
       allDay: true,
       startDate: '2026-09-18',
       endDate: '2026-09-20',
       ref: { kind: 'booking', bookingId: 'hotel' },
-    });
-  });
+    })
+  })
 
   it('puts all-day items first on a day', () => {
-    expect(titles('2026-09-18')).toEqual(['Stay at Hotel Figueroa', 'Flight JFK to LAX']);
-  });
+    expect(titles('2026-09-18')).toEqual(['Stay at Hotel Figueroa', 'Flight JFK to LAX'])
+  })
 
   it('tones bills by how close they are to due', () => {
-    const tone = (id: string) => feed.find((item) => item.id === `bills:${id}`)?.tone;
-    expect(tone('b-late')).toBe('negative');
-    expect(tone('b-soon')).toBe('caution');
-    expect(tone('b-later')).toBe('default');
-    expect(tone('b-paid')).toBe('default');
-    expect(feed.find((item) => item.id === 'bills:b-paid')?.title).toBe('Mortgage (paid)');
-  });
+    const tone = (id: string) => feed.find(item => item.id === `bills:${id}`)?.tone
+    expect(tone('b-late')).toBe('negative')
+    expect(tone('b-soon')).toBe('caution')
+    expect(tone('b-later')).toBe('default')
+    expect(tone('b-paid')).toBe('default')
+    expect(feed.find(item => item.id === 'bills:b-paid')?.title).toBe('Mortgage (paid)')
+  })
 
   it('includes only the sources asked for', () => {
-    const onlyBills = buildCalendarFeed({ ...september, sources: ['bills'] });
-    expect(onlyBills).toHaveLength(4);
-    expect(onlyBills.every((item) => item.source === 'bills')).toBe(true);
-  });
+    const onlyBills = buildCalendarFeed({ ...september, sources: ['bills'] })
+    expect(onlyBills).toHaveLength(4)
+    expect(onlyBills.every(item => item.source === 'bills')).toBe(true)
+  })
 
   it('sorts soonest first', () => {
-    const starts = feed.map((item) => item.startDate);
-    expect(starts).toEqual(starts.toSorted());
-  });
-});
+    const starts = feed.map(item => item.startDate)
+    expect(starts).toEqual(starts.toSorted())
+  })
+})
 
 describe('parseFeedSources', () => {
   it('reads comma lists and repeated values in a fixed order', () => {
-    expect(parseFeedSources('bills,trips')).toEqual(['trips', 'bills']);
-    expect(parseFeedSources(['native', 'nope'])).toEqual(['native']);
-  });
+    expect(parseFeedSources('bills,trips')).toEqual(['trips', 'bills'])
+    expect(parseFeedSources(['native', 'nope'])).toEqual(['native'])
+  })
 
   it('falls back to every source', () => {
-    expect(parseFeedSources(undefined)).toEqual([
-      'native',
-      'google',
-      'trips',
-      'bills',
-      'maintenance',
-    ]);
-    expect(parseFeedSources('nope')).toHaveLength(5);
-  });
-});
+    expect(parseFeedSources(undefined)).toEqual(['native', 'google', 'trips', 'bills', 'maintenance'])
+    expect(parseFeedSources('nope')).toHaveLength(5)
+  })
+})

@@ -1,11 +1,11 @@
-import type { CategoryColorToken, CategoryIcon, CategoryKind } from './types';
+import type { CategoryColorToken, CategoryIcon, CategoryKind } from './types'
 
 interface DefaultCategoryGroup {
-  key: string;
-  name: string;
-  kind: CategoryKind;
-  icon: CategoryIcon;
-  children: readonly { key: string; name: string; icon: CategoryIcon }[];
+  key: string
+  name: string
+  kind: CategoryKind
+  icon: CategoryIcon
+  children: readonly { key: string; name: string; icon: CategoryIcon }[]
 }
 
 // Two levels at most. Names are unique across the whole tree, because a household's category
@@ -147,48 +147,46 @@ const TREE = [
       { key: 'cash', name: 'Cash and ATM', icon: 'banknote' },
     ],
   },
-] as const satisfies readonly DefaultCategoryGroup[];
+] as const satisfies readonly DefaultCategoryGroup[]
 
-type Group = (typeof TREE)[number];
+type Group = (typeof TREE)[number]
 
 /** Ties a seeded category to Plaid's categories, so renaming it keeps the mapping. */
-export type DefaultCategoryKey = Group['key'] | Group['children'][number]['key'];
+export type DefaultCategoryKey = Group['key'] | Group['children'][number]['key']
 
 export interface DefaultCategory {
-  key: DefaultCategoryKey;
-  name: string;
-  parentKey: DefaultCategoryKey | null;
-  kind: CategoryKind;
-  icon: CategoryIcon;
-  colorToken: CategoryColorToken;
+  key: DefaultCategoryKey
+  name: string
+  parentKey: DefaultCategoryKey | null
+  kind: CategoryKind
+  icon: CategoryIcon
+  colorToken: CategoryColorToken
   /** Position among its siblings. */
-  sortOrder: number;
+  sortOrder: number
 }
 
 export function defaultColorToken(kind: CategoryKind): CategoryColorToken {
-  return kind === 'income' ? 'positive' : 'ink-muted';
+  return kind === 'income' ? 'positive' : 'ink-muted'
 }
 
 /** The tree every household starts with, parents before their children. */
-export const DEFAULT_CATEGORIES: readonly DefaultCategory[] = TREE.flatMap(
-  (group: Group, groupIndex): DefaultCategory[] => [
-    {
-      key: group.key,
-      name: group.name,
-      parentKey: null,
-      kind: group.kind,
-      icon: group.icon,
-      colorToken: defaultColorToken(group.kind),
-      sortOrder: groupIndex,
-    },
-    ...group.children.map((child: Group['children'][number], childIndex): DefaultCategory => ({
-      key: child.key,
-      name: child.name,
-      parentKey: group.key,
-      kind: group.kind,
-      icon: child.icon,
-      colorToken: defaultColorToken(group.kind),
-      sortOrder: childIndex,
-    })),
-  ],
-);
+export const DEFAULT_CATEGORIES: readonly DefaultCategory[] = TREE.flatMap((group: Group, groupIndex): DefaultCategory[] => [
+  {
+    key: group.key,
+    name: group.name,
+    parentKey: null,
+    kind: group.kind,
+    icon: group.icon,
+    colorToken: defaultColorToken(group.kind),
+    sortOrder: groupIndex,
+  },
+  ...group.children.map((child: Group['children'][number], childIndex): DefaultCategory => ({
+    key: child.key,
+    name: child.name,
+    parentKey: group.key,
+    kind: group.kind,
+    icon: child.icon,
+    colorToken: defaultColorToken(group.kind),
+    sortOrder: childIndex,
+  })),
+])

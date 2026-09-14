@@ -1,16 +1,9 @@
-import { z } from 'zod';
-import { defineEndpoint } from '../endpoint';
-import {
-  calendarDateSchema,
-  httpUrlSchema,
-  instantSchema,
-  longTextSchema,
-  shortTextSchema,
-  voteSchema,
-} from './shared';
+import { z } from 'zod'
+import { defineEndpoint } from '../endpoint'
+import { calendarDateSchema, httpUrlSchema, instantSchema, longTextSchema, shortTextSchema, voteSchema } from './shared'
 
 /** One vote per member, keyed by user id, so a second vote replaces the first. */
-export const votesSchema = z.record(z.uuid(), voteSchema);
+export const votesSchema = z.record(z.uuid(), voteSchema)
 
 export const tripIdeaSchema = z.object({
   id: z.uuid(),
@@ -22,8 +15,8 @@ export const tripIdeaSchema = z.object({
   votes: votesSchema,
   createdByUserId: z.uuid().nullable(),
   createdAt: instantSchema,
-});
-export type TripIdea = z.infer<typeof tripIdeaSchema>;
+})
+export type TripIdea = z.infer<typeof tripIdeaSchema>
 
 /**
  * What a pasted link turned out to be. Everything is optional because a page may carry no
@@ -35,8 +28,8 @@ export const linkPreviewSchema = z.object({
   description: z.string().nullable(),
   imageUrl: z.string().nullable(),
   siteName: z.string().nullable(),
-});
-export type LinkPreview = z.infer<typeof linkPreviewSchema>;
+})
+export type LinkPreview = z.infer<typeof linkPreviewSchema>
 
 /**
  * Reads the OpenGraph tags on a page and nothing else. Not a scraper: it does not follow
@@ -47,13 +40,13 @@ export const previewLink = defineEndpoint({
   path: '/api/v1/link-preview',
   body: z.object({ url: httpUrlSchema }),
   response: z.object({ preview: linkPreviewSchema }),
-});
+})
 
 export const listTripIdeas = defineEndpoint({
   method: 'GET',
   path: '/api/v1/trip-ideas',
   response: z.object({ ideas: z.array(tripIdeaSchema) }),
-});
+})
 
 export const createTripIdea = defineEndpoint({
   method: 'POST',
@@ -66,14 +59,14 @@ export const createTripIdea = defineEndpoint({
     imageUrl: httpUrlSchema.nullable().default(null),
   }),
   response: z.object({ idea: tripIdeaSchema }),
-});
+})
 
 export const deleteTripIdea = defineEndpoint({
   method: 'DELETE',
   path: '/api/v1/trip-ideas/:ideaId',
   params: z.object({ ideaId: z.uuid() }),
   response: z.object({ deleted: z.literal(true) }),
-});
+})
 
 /** Sending the vote already cast takes it back, so one tap is both vote and un-vote. */
 export const voteOnTripIdea = defineEndpoint({
@@ -82,7 +75,7 @@ export const voteOnTripIdea = defineEndpoint({
   params: z.object({ ideaId: z.uuid() }),
   body: z.object({ vote: voteSchema.nullable() }),
   response: z.object({ idea: tripIdeaSchema }),
-});
+})
 
 /**
  * Turning an idea into a trip. The idea is removed: it has served its purpose, and leaving
@@ -98,13 +91,7 @@ export const promoteTripIdea = defineEndpoint({
       startsOn: calendarDateSchema.nullable().default(null),
       endsOn: calendarDateSchema.nullable().default(null),
     })
-    .refine(
-      ({ startsOn, endsOn }) => (startsOn === null) === (endsOn === null),
-      'Give a trip both dates or neither',
-    )
-    .refine(
-      ({ startsOn, endsOn }) => startsOn === null || endsOn === null || endsOn >= startsOn,
-      'A trip cannot end before it starts',
-    ),
+    .refine(({ startsOn, endsOn }) => (startsOn === null) === (endsOn === null), 'Give a trip both dates or neither')
+    .refine(({ startsOn, endsOn }) => startsOn === null || endsOn === null || endsOn >= startsOn, 'A trip cannot end before it starts'),
   response: z.object({ tripId: z.uuid() }),
-});
+})

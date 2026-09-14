@@ -1,6 +1,6 @@
-import { radius } from '@ghar/tokens';
-import { clsx, type ClassValue } from 'clsx';
-import { extendTailwindMerge } from 'tailwind-merge';
+import { radius } from '@ghar/tokens'
+import { clsx, type ClassValue } from 'clsx'
+import { extendTailwindMerge } from 'tailwind-merge'
 
 // Teach tailwind-merge Ghar's token names so `rounded-control` and `rounded-card` conflict.
 const twMerge = extendTailwindMerge({
@@ -12,8 +12,8 @@ const twMerge = extendTailwindMerge({
       container: ['content'],
     },
   },
-});
+})
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+  return twMerge(clsx(inputs))
 }

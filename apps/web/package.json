@@ -10,7 +10,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint . && ghar-no-hex",
+    "lint": "oxlint && ghar-no-hex",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "db:seed": "tsx --conditions=react-server scripts/seed.ts"
@@ -40,11 +40,12 @@
     "@types/node": "24.13.4",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
-    "eslint": "9.39.5",
     "tailwindcss": "4.3.3",
     "tsx": "^4.23.13",
     "typescript": "6.0.3",
     "vite": "^8.3.0",
-    "vitest": "5.0.0"
+    "vitest": "5.0.0",
+    "oxlint": "1.82.0",
+    "oxlint-tsgolint": "7.0.2001"
   }
 }

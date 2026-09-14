@@ -1,15 +1,12 @@
-import { join } from 'node:path';
-import { GENERATED_DIR, loadTokens, rem, writeGenerated, type Tokens } from './tokens.ts';
+import { join } from 'node:path'
+import { GENERATED_DIR, loadTokens, rem, writeGenerated, type Tokens } from './tokens.ts'
 
-const HEADER =
-  '/* Generated from packages/tokens/tokens.json by scripts/build-css.ts. Do not edit. */';
+const HEADER = '/* Generated from packages/tokens/tokens.json by scripts/build-css.ts. Do not edit. */'
 
 /** Custom properties for every color, named as in CLAUDE.md (--paper, --ink-muted, ...). */
 export function renderTokensCss(tokens: Tokens): string {
-  const colors = Object.entries(tokens.color).map(
-    ([name, { value, description }]) => `  --${name}: ${value}; /* ${description} */`,
-  );
-  return [HEADER, '', ':root {', ...colors, '}', ''].join('\n');
+  const colors = Object.entries(tokens.color).map(([name, { value, description }]) => `  --${name}: ${value}; /* ${description} */`)
+  return [HEADER, '', ':root {', ...colors, '}', ''].join('\n')
 }
 
 /**
@@ -17,12 +14,12 @@ export function renderTokensCss(tokens: Tokens): string {
  * produce utilities: `bg-paper`, `text-ink-muted`, `rounded-card`, `max-w-content`, `amount`.
  */
 export function renderTailwindCss(tokens: Tokens): string {
-  const { font, amount, typeScale, radius, space, layout, shadow, motion } = tokens;
-  const sans = [`var(${font.sans.cssVariable})`, `"${font.sans.family}"`, ...font.sans.fallback];
+  const { font, amount, typeScale, radius, space, layout, shadow, motion } = tokens
+  const sans = [`var(${font.sans.cssVariable})`, `"${font.sans.family}"`, ...font.sans.fallback]
 
   const inline = [
     '  --color-*: initial;',
-    ...Object.keys(tokens.color).map((name) => `  --color-${name}: var(--${name});`),
+    ...Object.keys(tokens.color).map(name => `  --color-${name}: var(--${name});`),
     '',
     '  --font-*: initial;',
     `  --font-sans: ${sans.join(', ')};`,
@@ -32,7 +29,7 @@ export function renderTailwindCss(tokens: Tokens): string {
     '  --drop-shadow-*: initial;',
     '  --text-shadow-*: initial;',
     `  --shadow-overlay: 0 ${shadow.overlay.offsetY}px ${shadow.overlay.blur}px color-mix(in srgb, var(--${shadow.overlay.color}) ${Math.round(shadow.overlay.opacity * 100)}%, transparent);`,
-  ];
+  ]
 
   const values = [
     '  --text-*: initial;',
@@ -53,11 +50,9 @@ export function renderTailwindCss(tokens: Tokens): string {
     // Cleared so nothing pulses, pings or bounces on its own. Overlay animations live in the app.
     '  --animate-*: initial;',
     '  --ease-*: initial;',
-    ...Object.entries(motion.easing).map(
-      ([name, points]) => `  --ease-${name}: cubic-bezier(${points.join(', ')});`,
-    ),
+    ...Object.entries(motion.easing).map(([name, points]) => `  --ease-${name}: cubic-bezier(${points.join(', ')});`),
     ...Object.entries(motion.duration).map(([name, ms]) => `  --duration-${name}: ${ms}ms;`),
-  ];
+  ]
 
   return [
     HEADER,
@@ -84,23 +79,21 @@ export function renderTailwindCss(tokens: Tokens): string {
     '  }',
     '}',
     '',
-  ].join('\n');
+  ].join('\n')
 }
 
 export function buildCss(tokens = loadTokens()): string[] {
-  const written: string[] = [];
+  const written: string[] = []
   for (const [file, content] of [
     ['tokens.css', renderTokensCss(tokens)],
     ['tailwind.css', renderTailwindCss(tokens)],
   ] as const) {
-    if (writeGenerated(join(GENERATED_DIR, file), content)) written.push(file);
+    if (writeGenerated(join(GENERATED_DIR, file), content)) written.push(file)
   }
-  return written;
+  return written
 }
 
 if (import.meta.main) {
-  const written = buildCss();
-  console.log(
-    written.length > 0 ? `tokens: wrote ${written.join(', ')}` : 'tokens: CSS up to date',
-  );
+  const written = buildCss()
+  console.log(written.length > 0 ? `tokens: wrote ${written.join(', ')}` : 'tokens: CSS up to date')
 }

@@ -1,9 +1,9 @@
-'use client';
+'use client'
 
-import type { CalendarItem } from '@ghar/contracts';
-import type { CalendarDate } from '@ghar/core/dates';
-import { Popover } from 'radix-ui';
-import { CalendarItemChip } from './calendar-item-chip';
+import type { CalendarItem } from '@ghar/contracts'
+import type { CalendarDate } from '@ghar/core/dates'
+import { Popover } from 'radix-ui'
+import { CalendarItemChip } from './calendar-item-chip'
 
 /** "+3 more" in a crowded month cell, opening everything on that day. */
 export function DayOverflow({
@@ -13,32 +13,32 @@ export function DayOverflow({
   date,
   timeZone,
 }: {
-  count: number;
-  label: string;
-  items: CalendarItem[];
-  date: CalendarDate;
-  timeZone: string;
+  count: number
+  label: string
+  items: CalendarItem[]
+  date: CalendarDate
+  timeZone: string
 }) {
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
         <button
-          type="button"
-          className="mt-0.5 w-full rounded-control px-1.5 py-0.5 text-left text-sm font-medium text-ink-muted outline-none hover:bg-line/60 hover:text-ink focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          type='button'
+          className='mt-0.5 w-full rounded-control px-1.5 py-0.5 text-left text-sm font-medium text-ink-muted outline-none hover:bg-line/60 hover:text-ink focus-visible:ring-[3px] focus-visible:ring-ring/50'
         >
-          {count} more<span className="sr-only"> on {label}</span>
+          {count} more<span className='sr-only'> on {label}</span>
         </button>
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
-          align="start"
+          align='start'
           sideOffset={4}
           collisionPadding={16}
-          className="z-50 w-72 rounded-card border border-line bg-surface p-3 shadow-overlay outline-none motion-safe:animate-fade-in"
+          className='z-50 w-72 rounded-card border border-line bg-surface p-3 shadow-overlay outline-none motion-safe:animate-fade-in'
         >
-          <p className="px-1.5 pb-2 font-semibold">{label}</p>
-          <ul className="flex flex-col gap-0.5">
-            {items.map((item) => (
+          <p className='px-1.5 pb-2 font-semibold'>{label}</p>
+          <ul className='flex flex-col gap-0.5'>
+            {items.map(item => (
               <li key={item.id}>
                 <CalendarItemChip item={item} date={date} timeZone={timeZone} />
               </li>
@@ -47,5 +47,5 @@ export function DayOverflow({
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
-  );
+  )
 }

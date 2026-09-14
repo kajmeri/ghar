@@ -1,13 +1,13 @@
-import { formatCents } from '@ghar/core/money';
-import { amount, colors, numeric, radius, space, typeScale } from '@ghar/tokens';
-import { StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { formatCents } from '@ghar/core/money'
+import { amount, colors, numeric, radius, space, typeScale } from '@ghar/tokens'
+import { StyleSheet, Text, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 const FIGURES = [
   { label: 'Income this month', cents: 842_500, color: colors.positive, sign: 'always' },
   { label: 'Groceries left, 88% spent', cents: 6_150, color: colors.caution, sign: 'auto' },
   { label: 'Dining out, over budget', cents: -12_840, color: colors.negative, sign: 'auto' },
-] as const;
+] as const
 
 export default function MoneyScreen() {
   return (
@@ -16,14 +16,12 @@ export default function MoneyScreen() {
         {FIGURES.map(({ label, cents, color, sign }, index) => (
           <View key={label} style={[styles.row, index > 0 && styles.divider]}>
             <Text style={styles.label}>{label}</Text>
-            <Text style={[styles.amount, { color }]}>
-              {formatCents(cents, { signDisplay: sign })}
-            </Text>
+            <Text style={[styles.amount, { color }]}>{formatCents(cents, { signDisplay: sign })}</Text>
           </View>
         ))}
       </View>
     </SafeAreaView>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -52,4 +50,4 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
   },
   amount: amount['3xl'],
-});
+})

@@ -1,5 +1,5 @@
-import { getTravelHub } from '@ghar/contracts';
-import { authedRoute } from '@/lib/api/authed';
-import { loadTravelHub } from '@/lib/travel/trips';
+import { getTravelHub } from '@ghar/contracts'
+import { authedRoute } from '@/lib/api/authed'
+import { loadTravelHub } from '@/lib/travel/trips'
 
-export const GET = authedRoute(getTravelHub, (_input, session) => loadTravelHub(session));
+export const GET = authedRoute(getTravelHub, (_input, session) => loadTravelHub(session))

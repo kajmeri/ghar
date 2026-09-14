@@ -1,11 +1,11 @@
-import { requirePermission } from '@ghar/core/auth';
-import type { CalendarDate } from '@ghar/core/dates';
-import { NotFoundError } from '@ghar/core/errors';
-import { and, desc, eq, gte, isNull, lte, sql, sum } from 'drizzle-orm';
-import { transactions } from '../schema';
-import { recordAudit } from './audit';
-import { requireTrip } from './scope';
-import type { Db, RequestContext } from './types';
+import { requirePermission } from '@ghar/core/auth'
+import type { CalendarDate } from '@ghar/core/dates'
+import { NotFoundError } from '@ghar/core/errors'
+import { and, desc, eq, gte, isNull, lte, sql, sum } from 'drizzle-orm'
+import { transactions } from '../schema'
+import { recordAudit } from './audit'
+import { requireTrip } from './scope'
+import type { Db, RequestContext } from './types'
 
 // Charges as a trip sees them: what a trip cost, the trip tag, and charges typed in by hand.
 // Bank-synced transactions arrive through banking.ts and are categorized in finances.ts.
@@ -16,7 +16,7 @@ import type { Db, RequestContext } from './types';
 export type TripTransactionRow = Pick<
   typeof transactions.$inferSelect,
   'id' | 'date' | 'name' | 'merchantName' | 'amountCents' | 'tripId' | 'createdAt'
->;
+>
 
 const tripTransactionColumns = {
   id: transactions.id,
@@ -26,25 +26,25 @@ const tripTransactionColumns = {
   amountCents: transactions.amountCents,
   tripId: transactions.tripId,
   createdAt: transactions.createdAt,
-};
+}
 
 export interface ListTripTransactionsOptions {
-  readonly tripId?: string;
+  readonly tripId?: string
   /** Only charges not tagged to any trip. What the "tag a charge" picker shows. */
-  readonly untagged?: boolean;
-  readonly from?: CalendarDate;
-  readonly to?: CalendarDate;
-  readonly limit?: number;
+  readonly untagged?: boolean
+  readonly from?: CalendarDate
+  readonly to?: CalendarDate
+  readonly limit?: number
 }
 
 export async function listTripTransactions(
   ctx: RequestContext,
   db: Db,
-  options: ListTripTransactionsOptions = {},
+  options: ListTripTransactionsOptions = {}
 ): Promise<TripTransactionRow[]> {
-  requirePermission(ctx, 'finances.view');
-  const { tripId, untagged, from, to, limit = 50 } = options;
-  if (tripId) await requireTrip(ctx, db, tripId);
+  requirePermission(ctx, 'finances.view')
+  const { tripId, untagged, from, to, limit = 50 } = options
+  if (tripId) await requireTrip(ctx, db, tripId)
 
   return db
     .select(tripTransactionColumns)
@@ -55,11 +55,11 @@ export async function listTripTransactions(
         tripId ? eq(transactions.tripId, tripId) : undefined,
         untagged ? isNull(transactions.tripId) : undefined,
         from ? gte(transactions.date, from) : undefined,
-        to ? lte(transactions.date, to) : undefined,
-      ),
+        to ? lte(transactions.date, to) : undefined
+      )
     )
     .orderBy(desc(transactions.date), desc(transactions.createdAt), desc(transactions.id))
-    .limit(limit);
+    .limit(limit)
 }
 
 /**
@@ -70,37 +70,27 @@ export async function listTripTransactions(
  * spending stay out. bigint sums come back as a string from the driver, which is why this parses
  * rather than trusting the type.
  */
-export async function sumTripActualCents(
-  ctx: RequestContext,
-  db: Db,
-  tripId: string,
-): Promise<number> {
-  await requireTrip(ctx, db, tripId);
+export async function sumTripActualCents(ctx: RequestContext, db: Db, tripId: string): Promise<number> {
+  await requireTrip(ctx, db, tripId)
   const [row] = await db
     .select({ total: sum(transactions.amountCents) })
     .from(transactions)
-    .where(
-      and(
-        eq(transactions.householdId, ctx.householdId),
-        eq(transactions.tripId, tripId),
-        eq(transactions.isExcluded, false),
-      ),
-    );
+    .where(and(eq(transactions.householdId, ctx.householdId), eq(transactions.tripId, tripId), eq(transactions.isExcluded, false)))
 
-  const total = Number(row?.total ?? 0);
+  const total = Number(row?.total ?? 0)
   if (!Number.isSafeInteger(total)) {
-    throw new Error(`Trip ${tripId} has a spend total outside the safe integer range`);
+    throw new Error(`Trip ${tripId} has a spend total outside the safe integer range`)
   }
-  return total === 0 ? 0 : -total;
+  return total === 0 ? 0 : -total
 }
 
 export interface ManualTransactionInput {
-  readonly date: CalendarDate;
-  readonly name: string;
-  readonly merchantName: string | null;
+  readonly date: CalendarDate
+  readonly name: string
+  readonly merchantName: string | null
   /** Negative is money out. A refund is positive. */
-  readonly amountCents: number;
-  readonly tripId: string | null;
+  readonly amountCents: number
+  readonly tripId: string | null
 }
 
 /**
@@ -108,16 +98,12 @@ export interface ManualTransactionInput {
  * no Plaid id, which is how the rest of finances tells it from a synced one. The sign is the
  * caller's to get right, because only they know whether it was a refund.
  */
-export async function createManualTransaction(
-  ctx: RequestContext,
-  db: Db,
-  input: ManualTransactionInput,
-): Promise<TripTransactionRow> {
-  requirePermission(ctx, 'finances.manage');
+export async function createManualTransaction(ctx: RequestContext, db: Db, input: ManualTransactionInput): Promise<TripTransactionRow> {
+  requirePermission(ctx, 'finances.manage')
   // A trip id from a request body is never trusted on its own.
-  if (input.tripId) await requireTrip(ctx, db, input.tripId);
+  if (input.tripId) await requireTrip(ctx, db, input.tripId)
 
-  return db.transaction(async (tx) => {
+  return db.transaction(async tx => {
     const [transaction] = await tx
       .insert(transactions)
       .values({
@@ -130,17 +116,17 @@ export async function createManualTransaction(
         amountCents: input.amountCents,
         tripId: input.tripId,
       })
-      .returning(tripTransactionColumns);
-    if (!transaction) throw new Error('The transaction was not created');
+      .returning(tripTransactionColumns)
+    if (!transaction) throw new Error('The transaction was not created')
 
     await recordAudit(ctx, tx, {
       action: 'transaction.created',
       entity: 'transaction',
       entityId: transaction.id,
       metadata: { tripId: input.tripId },
-    });
-    return transaction;
-  });
+    })
+    return transaction
+  })
 }
 
 /** The trip tag. Null takes a charge back off a trip. */
@@ -148,28 +134,26 @@ export async function tagTransactionTrip(
   ctx: RequestContext,
   db: Db,
   transactionId: string,
-  tripId: string | null,
+  tripId: string | null
 ): Promise<TripTransactionRow> {
-  requirePermission(ctx, 'finances.manage');
+  requirePermission(ctx, 'finances.manage')
   // A trip id from a request body is never trusted on its own.
-  if (tripId) await requireTrip(ctx, db, tripId);
+  if (tripId) await requireTrip(ctx, db, tripId)
 
-  return db.transaction(async (tx) => {
+  return db.transaction(async tx => {
     const [transaction] = await tx
       .update(transactions)
       .set({ tripId, updatedAt: sql`now()` })
-      .where(
-        and(eq(transactions.id, transactionId), eq(transactions.householdId, ctx.householdId)),
-      )
-      .returning(tripTransactionColumns);
-    if (!transaction) throw new NotFoundError('That transaction no longer exists.');
+      .where(and(eq(transactions.id, transactionId), eq(transactions.householdId, ctx.householdId)))
+      .returning(tripTransactionColumns)
+    if (!transaction) throw new NotFoundError('That transaction no longer exists.')
 
     await recordAudit(ctx, tx, {
       action: 'transaction.trip_tagged',
       entity: 'transaction',
       entityId: transactionId,
       metadata: { tripId },
-    });
-    return transaction;
-  });
+    })
+    return transaction
+  })
 }

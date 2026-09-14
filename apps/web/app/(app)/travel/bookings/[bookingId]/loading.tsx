@@ -4,13 +4,13 @@ import {
   PageHeaderSkeleton,
   SectionHeaderSkeleton,
   StatGroupSkeleton,
-} from '@/app/(app)/_components/ui/skeletons';
+} from '@/app/(app)/_components/ui/skeletons'
 
 export default function Loading() {
   return (
-    <LoadingRegion label="Loading booking…">
+    <LoadingRegion label='Loading booking…'>
       <PageHeaderSkeleton action />
-      <div className="flex flex-col gap-10">
+      <div className='flex flex-col gap-10'>
         <StatGroupSkeleton count={4} />
         <div>
           <SectionHeaderSkeleton />
@@ -22,5 +22,5 @@ export default function Loading() {
         </div>
       </div>
     </LoadingRegion>
-  );
+  )
 }

@@ -19,14 +19,14 @@ no billing, no marketing pages.
 
 ## Workspace layout and package boundaries
 
-apps/web Next.js. UI, API routes, cron, all I/O and integrations. apps/mobile Expo. A client of apps/web's API. Nothing else. packages/contracts Zod schemas + inferred types + typed fetch client. Isomorphic. packages/core Pure domain logic. No I/O, no Node APIs, no React. Isomorphic. packages/db Drizzle schema, migrations, query functions. SERVER ONLY. packages/tokens Design tokens, one JSON source, emits CSS vars and a JS object. packages/config Shared tsconfig / eslint / prettier bases.
+apps/web Next.js. UI, API routes, cron, all I/O and integrations. apps/mobile Expo. A client of apps/web's API. Nothing else. packages/contracts Zod schemas + inferred types + typed fetch client. Isomorphic. packages/core Pure domain logic. No I/O, no Node APIs, no React. Isomorphic. packages/db Drizzle schema, migrations, query functions. SERVER ONLY. packages/tokens Design tokens, one JSON source, emits CSS vars and a JS object. packages/config Shared tsconfig and oxlint bases, plus the local oxlint plugin.
 
 Rules about these boundaries, in priority order:
 
 - `@ghar/core` and `@ghar/contracts` must import nothing from `node:*`, `next/*`,
   `react`, `@ghar/db`, or any SDK. If you reach for one of those, the code belongs in
-  `apps/web` instead. This is enforced by an eslint `no-restricted-imports` rule. Do
-  not disable the rule; move the code.
+  `apps/web` instead. This is enforced by the oxlint `ghar/isomorphic-imports` rule
+  (packages/config/oxlint/plugin.ts). Do not disable the rule; move the code.
 - `@ghar/db` is imported by `apps/web` only. Never by mobile, never by core.
 - Decide placement by purity, not by topic. The price-drop threshold math and the
   `isActionable` fare-rule table are pure, so they go in `core`. The Travelpayouts

@@ -14,7 +14,7 @@
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "lint": "eslint .",
+    "lint": "oxlint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -30,9 +30,10 @@
     "@electric-sql/pglite": "^0.5.8",
     "@types/node": "24.13.4",
     "drizzle-kit": "^0.31.10",
-    "eslint": "9.39.5",
     "typescript": "6.0.3",
     "vite": "^8.3.0",
-    "vitest": "5.0.0"
+    "vitest": "5.0.0",
+    "oxlint": "1.82.0",
+    "oxlint-tsgolint": "7.0.2001"
   }
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest'
 import {
   ConflictError,
   ForbiddenError,
@@ -7,7 +7,7 @@ import {
   UnauthorizedError,
   ValidationError,
   describeError,
-} from '../src/errors';
+} from '../src/errors'
 
 describe('describeError', () => {
   it.each([
@@ -23,16 +23,16 @@ describe('describeError', () => {
       message: error.message,
       details: error.details,
       expected: true,
-    });
-  });
+    })
+  })
 
   it('never describes an unexpected error to the client', () => {
-    const described = describeError(new Error('connection string postgres://secret'));
+    const described = describeError(new Error('connection string postgres://secret'))
     expect(described).toEqual({
       status: 500,
       code: 'internal_error',
       message: INTERNAL_ERROR_MESSAGE,
       expected: false,
-    });
-  });
-});
+    })
+  })
+})

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { safeRedirectPath } from '../src/redirects';
+import { describe, expect, it } from 'vitest'
+import { safeRedirectPath } from '../src/redirects'
 
 describe('safeRedirectPath', () => {
   it.each([
@@ -10,8 +10,8 @@ describe('safeRedirectPath', () => {
     ['/settings/../finances', '/finances'],
     ['/travel/.', '/travel/'],
   ])('keeps %s', (value, expected) => {
-    expect(safeRedirectPath(value)).toBe(expected);
-  });
+    expect(safeRedirectPath(value)).toBe(expected)
+  })
 
   it.each([
     null,
@@ -28,11 +28,11 @@ describe('safeRedirectPath', () => {
     '/a/../..//evil.example',
     '/\n/evil.example',
     'javascript:alert(1)',
-  ])('refuses %j', (value) => {
-    expect(safeRedirectPath(value)).toBe('/');
-  });
+  ])('refuses %j', value => {
+    expect(safeRedirectPath(value)).toBe('/')
+  })
 
   it('uses the fallback it is given', () => {
-    expect(safeRedirectPath('//evil.example', '/onboarding')).toBe('/onboarding');
-  });
-});
+    expect(safeRedirectPath('//evil.example', '/onboarding')).toBe('/onboarding')
+  })
+})

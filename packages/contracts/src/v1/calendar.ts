@@ -1,36 +1,29 @@
-import { z } from 'zod';
-import { defineEndpoint } from '../endpoint';
+import { z } from 'zod'
+import { defineEndpoint } from '../endpoint'
 
 // These lists mirror @ghar/core/calendar. A test keeps them equal.
-export const eventCategorySchema = z.enum([
-  'household',
-  'school',
-  'travel',
-  'bill',
-  'maintenance',
-  'personal',
-]);
-export const attendeeResponseSchema = z.enum(['needs_action', 'accepted', 'tentative', 'declined']);
-export const calendarProviderSchema = z.enum(['google']);
-export const linkDirectionSchema = z.enum(['inbound', 'two_way']);
-export const linkStatusSchema = z.enum(['active', 'needs_reconnect', 'error']);
-export const feedSourceSchema = z.enum(['native', 'google', 'trips', 'bills', 'maintenance']);
-export const eventColorTokenSchema = z.enum(['positive', 'caution', 'negative']);
-export const calendarToneSchema = z.enum(['default', 'positive', 'caution', 'negative']);
+export const eventCategorySchema = z.enum(['household', 'school', 'travel', 'bill', 'maintenance', 'personal'])
+export const attendeeResponseSchema = z.enum(['needs_action', 'accepted', 'tentative', 'declined'])
+export const calendarProviderSchema = z.enum(['google'])
+export const linkDirectionSchema = z.enum(['inbound', 'two_way'])
+export const linkStatusSchema = z.enum(['active', 'needs_reconnect', 'error'])
+export const feedSourceSchema = z.enum(['native', 'google', 'trips', 'bills', 'maintenance'])
+export const eventColorTokenSchema = z.enum(['positive', 'caution', 'negative'])
+export const calendarToneSchema = z.enum(['default', 'positive', 'caution', 'negative'])
 
-const calendarDateSchema = z.iso.date();
-const instantSchema = z.iso.datetime({ offset: true });
+const calendarDateSchema = z.iso.date()
+const instantSchema = z.iso.datetime({ offset: true })
 
 /** The longest range one feed request may cover: a month grid's six weeks, with room to spare. */
-export const MAX_FEED_DAYS = 93;
+export const MAX_FEED_DAYS = 93
 
 export const calendarItemRefSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('event'), eventId: z.uuid(), occurrenceStart: instantSchema }),
   z.object({ kind: z.literal('booking'), bookingId: z.uuid() }),
   z.object({ kind: z.literal('bill'), billId: z.uuid() }),
   z.object({ kind: z.literal('maintenance'), taskId: z.uuid() }),
-]);
-export type CalendarItemRef = z.infer<typeof calendarItemRefSchema>;
+])
+export type CalendarItemRef = z.infer<typeof calendarItemRefSchema>
 
 /** One thing on the calendar, from any source. A repeating event appears once per occurrence. */
 export const calendarItemSchema = z.object({
@@ -49,20 +42,18 @@ export const calendarItemSchema = z.object({
   tone: calendarToneSchema,
   recurring: z.boolean(),
   ref: calendarItemRefSchema,
-});
-export type CalendarItem = z.infer<typeof calendarItemSchema>;
+})
+export type CalendarItem = z.infer<typeof calendarItemSchema>
 
 /** A comma-separated list or repeated keys. Leaving it out, or naming nothing valid, means every source. */
 const feedSourcesQuerySchema = z
   .union([z.string(), z.array(z.string())])
   .optional()
-  .transform((value) => {
-    const names = (Array.isArray(value) ? value : (value ?? '').split(','))
-      .map((name) => name.trim())
-      .filter(Boolean);
-    const valid = feedSourceSchema.options.filter((source) => names.includes(source));
-    return valid.length > 0 ? valid : [...feedSourceSchema.options];
-  });
+  .transform(value => {
+    const names = (Array.isArray(value) ? value : (value ?? '').split(',')).map(name => name.trim()).filter(Boolean)
+    const valid = feedSourceSchema.options.filter(source => names.includes(source))
+    return valid.length > 0 ? valid : [...feedSourceSchema.options]
+  })
 
 export const calendarFeedQuerySchema = z
   .object({
@@ -70,16 +61,14 @@ export const calendarFeedQuerySchema = z
     to: calendarDateSchema,
     sources: feedSourcesQuerySchema,
   })
-  .refine((query) => query.from <= query.to, {
+  .refine(query => query.from <= query.to, {
     message: '`to` must be on or after `from`',
     path: ['to'],
   })
-  .refine(
-    (query) =>
-      (Date.parse(`${query.to}T00:00:00Z`) - Date.parse(`${query.from}T00:00:00Z`)) / 86_400_000 <
-      MAX_FEED_DAYS,
-    { message: `Ask for ${String(MAX_FEED_DAYS)} days or fewer at a time`, path: ['to'] },
-  );
+  .refine(query => (Date.parse(`${query.to}T00:00:00Z`) - Date.parse(`${query.from}T00:00:00Z`)) / 86_400_000 < MAX_FEED_DAYS, {
+    message: `Ask for ${String(MAX_FEED_DAYS)} days or fewer at a time`,
+    path: ['to'],
+  })
 
 export const calendarFeedSchema = z.object({
   /** The household's IANA zone, which every date here is in. */
@@ -89,14 +78,14 @@ export const calendarFeedSchema = z.object({
   sources: z.array(feedSourceSchema),
   /** Soonest first; all-day items lead their day. */
   items: z.array(calendarItemSchema),
-});
-export type CalendarFeed = z.infer<typeof calendarFeedSchema>;
+})
+export type CalendarFeed = z.infer<typeof calendarFeedSchema>
 
 export const eventAttendeeSchema = z.object({
   userId: z.uuid(),
   response: attendeeResponseSchema,
-});
-export type EventAttendee = z.infer<typeof eventAttendeeSchema>;
+})
+export type EventAttendee = z.infer<typeof eventAttendeeSchema>
 
 export const eventSchema = z.object({
   id: z.uuid(),
@@ -124,8 +113,8 @@ export const eventSchema = z.object({
   attendees: z.array(eventAttendeeSchema),
   createdAt: instantSchema,
   updatedAt: instantSchema,
-});
-export type CalendarEvent = z.infer<typeof eventSchema>;
+})
+export type CalendarEvent = z.infer<typeof eventSchema>
 
 const eventCommonBodySchema = z.object({
   title: z.string().max(200),
@@ -136,7 +125,7 @@ const eventCommonBodySchema = z.object({
   colorToken: eventColorTokenSchema.nullable().default(null),
   /** Household members on the event. Replaces the list on update; answers are kept for those who stay. */
   attendeeIds: z.array(z.uuid()).max(50).default([]),
-});
+})
 
 /**
  * What a client sends to create or replace an event. An all-day event names its days, both
@@ -153,10 +142,10 @@ export const eventBodySchema = z.discriminatedUnion('allDay', [
     startsAt: instantSchema,
     endsAt: instantSchema,
   }),
-]);
-export type EventBody = z.output<typeof eventBodySchema>;
+])
+export type EventBody = z.output<typeof eventBodySchema>
 
-export const eventParamsSchema = z.object({ eventId: z.uuid() });
+export const eventParamsSchema = z.object({ eventId: z.uuid() })
 
 export const calendarLinkSchema = z.object({
   id: z.uuid(),
@@ -173,13 +162,13 @@ export const calendarLinkSchema = z.object({
   createdAt: instantSchema,
   /** Whether it belongs to the signed-in person. */
   mine: z.boolean(),
-});
-export type CalendarLink = z.infer<typeof calendarLinkSchema>;
+})
+export type CalendarLink = z.infer<typeof calendarLinkSchema>
 
-export const calendarLinkParamsSchema = z.object({ linkId: z.uuid() });
+export const calendarLinkParamsSchema = z.object({ linkId: z.uuid() })
 
-export const calendarSyncOutcomeSchema = z.enum(['synced', 'needs_reconnect', 'error', 'skipped']);
-export type CalendarSyncOutcome = z.infer<typeof calendarSyncOutcomeSchema>;
+export const calendarSyncOutcomeSchema = z.enum(['synced', 'needs_reconnect', 'error', 'skipped'])
+export type CalendarSyncOutcome = z.infer<typeof calendarSyncOutcomeSchema>
 
 export const calendarSyncResultSchema = z.object({
   linkId: z.uuid(),
@@ -188,8 +177,8 @@ export const calendarSyncResultSchema = z.object({
   fullSync: z.boolean(),
   upserted: z.number().int(),
   removed: z.number().int(),
-});
-export type CalendarSyncResult = z.infer<typeof calendarSyncResultSchema>;
+})
+export type CalendarSyncResult = z.infer<typeof calendarSyncResultSchema>
 
 /** Every item from every requested source for a range of days in the household's zone. */
 export const getCalendarFeed = defineEndpoint({
@@ -197,14 +186,14 @@ export const getCalendarFeed = defineEndpoint({
   path: '/api/v1/calendar/feed',
   query: calendarFeedQuerySchema,
   response: calendarFeedSchema,
-});
+})
 
 export const getEvent = defineEndpoint({
   method: 'GET',
   path: '/api/v1/calendar/events/:eventId',
   params: eventParamsSchema,
   response: z.object({ event: eventSchema }),
-});
+})
 
 /** Owners, adults and members. */
 export const createEvent = defineEndpoint({
@@ -212,7 +201,7 @@ export const createEvent = defineEndpoint({
   path: '/api/v1/calendar/events',
   body: eventBodySchema,
   response: z.object({ event: eventSchema }),
-});
+})
 
 /** Replaces every field of a native event. Synced events answer 403. */
 export const updateEvent = defineEndpoint({
@@ -221,7 +210,7 @@ export const updateEvent = defineEndpoint({
   params: eventParamsSchema,
   body: eventBodySchema,
   response: z.object({ event: eventSchema }),
-});
+})
 
 /** Deletes a native event, every occurrence of it. Synced events answer 403. */
 export const deleteEvent = defineEndpoint({
@@ -229,7 +218,7 @@ export const deleteEvent = defineEndpoint({
   path: '/api/v1/calendar/events/:eventId',
   params: eventParamsSchema,
   response: z.object({ eventId: z.uuid() }),
-});
+})
 
 /** The signed-in person's answer to an event they're on. */
 export const respondToEvent = defineEndpoint({
@@ -238,7 +227,7 @@ export const respondToEvent = defineEndpoint({
   params: eventParamsSchema,
   body: z.object({ response: attendeeResponseSchema }),
   response: z.object({ event: eventSchema }),
-});
+})
 
 /**
  * Every calendar linked in the household. Linking happens in a browser: open
@@ -248,7 +237,7 @@ export const listCalendarLinks = defineEndpoint({
   method: 'GET',
   path: '/api/v1/calendar/links',
   response: z.object({ links: z.array(calendarLinkSchema) }),
-});
+})
 
 /** Unlinks a calendar and removes what it synced. Your own, or anyone's if you're an owner. */
 export const deleteCalendarLink = defineEndpoint({
@@ -256,11 +245,11 @@ export const deleteCalendarLink = defineEndpoint({
   path: '/api/v1/calendar/links/:linkId',
   params: calendarLinkParamsSchema,
   response: z.object({ linkId: z.uuid() }),
-});
+})
 
 /** Syncs the household's linked calendars now, skipping any that need reconnecting. */
 export const syncCalendars = defineEndpoint({
   method: 'POST',
   path: '/api/v1/calendar/sync',
   response: z.object({ results: z.array(calendarSyncResultSchema) }),
-});
+})

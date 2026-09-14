@@ -1,6 +1,6 @@
-import { z } from 'zod';
-import { defineEndpoint } from '../endpoint';
-import { shortTextSchema, tripParamsSchema } from './shared';
+import { z } from 'zod'
+import { defineEndpoint } from '../endpoint'
+import { shortTextSchema, tripParamsSchema } from './shared'
 
 export const packingItemSchema = z.object({
   id: z.uuid(),
@@ -11,8 +11,8 @@ export const packingItemSchema = z.object({
   isPacked: z.boolean(),
   category: z.string().nullable(),
   sortOrder: z.int(),
-});
-export type PackingItem = z.infer<typeof packingItemSchema>;
+})
+export type PackingItem = z.infer<typeof packingItemSchema>
 
 export const packingTemplateSchema = z.object({
   id: z.uuid(),
@@ -23,19 +23,19 @@ export const packingTemplateSchema = z.object({
       label: z.string(),
       category: z.string().nullable(),
       sortOrder: z.int(),
-    }),
+    })
   ),
-});
-export type PackingTemplate = z.infer<typeof packingTemplateSchema>;
+})
+export type PackingTemplate = z.infer<typeof packingTemplateSchema>
 
-const itemParamsSchema = tripParamsSchema.extend({ itemId: z.uuid() });
+const itemParamsSchema = tripParamsSchema.extend({ itemId: z.uuid() })
 
 export const listPacking = defineEndpoint({
   method: 'GET',
   path: '/api/v1/trips/:tripId/packing',
   params: tripParamsSchema,
   response: z.object({ items: z.array(packingItemSchema) }),
-});
+})
 
 export const createPackingItem = defineEndpoint({
   method: 'POST',
@@ -47,7 +47,7 @@ export const createPackingItem = defineEndpoint({
     category: shortTextSchema.nullable().default(null),
   }),
   response: z.object({ item: packingItemSchema }),
-});
+})
 
 export const updatePackingItem = defineEndpoint({
   method: 'PATCH',
@@ -60,22 +60,22 @@ export const updatePackingItem = defineEndpoint({
       isPacked: z.boolean().optional(),
       category: shortTextSchema.nullable().optional(),
     })
-    .refine((body) => Object.keys(body).length > 0, 'Send at least one field to change'),
+    .refine(body => Object.keys(body).length > 0, 'Send at least one field to change'),
   response: z.object({ item: packingItemSchema }),
-});
+})
 
 export const deletePackingItem = defineEndpoint({
   method: 'DELETE',
   path: '/api/v1/trips/:tripId/packing/:itemId',
   params: itemParamsSchema,
   response: z.object({ deleted: z.literal(true) }),
-});
+})
 
 export const listPackingTemplates = defineEndpoint({
   method: 'GET',
   path: '/api/v1/packing-templates',
   response: z.object({ templates: z.array(packingTemplateSchema) }),
-});
+})
 
 /**
  * Saving a trip's list for next time. Packed state and who was carrying what are dropped:
@@ -89,21 +89,19 @@ export const createPackingTemplate = defineEndpoint({
     /** Copy the list from this trip. Omit to send `items` directly. */
     fromTripId: z.uuid().optional(),
     items: z
-      .array(
-        z.object({ label: shortTextSchema, category: shortTextSchema.nullable().default(null) }),
-      )
+      .array(z.object({ label: shortTextSchema, category: shortTextSchema.nullable().default(null) }))
       .max(200)
       .optional(),
   }),
   response: z.object({ template: packingTemplateSchema }),
-});
+})
 
 export const deletePackingTemplate = defineEndpoint({
   method: 'DELETE',
   path: '/api/v1/packing-templates/:templateId',
   params: z.object({ templateId: z.uuid() }),
   response: z.object({ deleted: z.literal(true) }),
-});
+})
 
 /**
  * Applying a template to a trip. Items the list already holds are skipped rather than
@@ -115,4 +113,4 @@ export const applyPackingTemplate = defineEndpoint({
   params: tripParamsSchema,
   body: z.object({ templateId: z.uuid() }),
   response: z.object({ items: z.array(packingItemSchema), addedCount: z.int().nonnegative() }),
-});
+})

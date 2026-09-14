@@ -1,4 +1,4 @@
-import { requirePermission } from '@ghar/core/auth';
+import { requirePermission } from '@ghar/core/auth'
 import {
   assertCanCreateBankItem,
   isTransferTransaction,
@@ -11,53 +11,39 @@ import {
   type StoredTransaction,
   type TransactionChanges,
   type TransactionListCursor,
-} from '@ghar/core/banking';
-import { ConflictError, NotFoundError, ValidationError } from '@ghar/core/errors';
-import type { CategorySource } from '@ghar/core/finances';
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  gte,
-  ilike,
-  inArray,
-  isNull,
-  lt,
-  lte,
-  or,
-  sql,
-} from 'drizzle-orm';
-import { accounts, categories, plaidItems, transactionEdits, transactions } from '../schema';
-import { recordAudit } from './audit';
-import { authorize } from './authorize';
-import { isUniqueViolation } from './pg-errors';
-import type { Actor, Db, RequestContext } from './types';
+} from '@ghar/core/banking'
+import { ConflictError, NotFoundError, ValidationError } from '@ghar/core/errors'
+import type { CategorySource } from '@ghar/core/finances'
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm'
+import { accounts, categories, plaidItems, transactionEdits, transactions } from '../schema'
+import { recordAudit } from './audit'
+import { authorize } from './authorize'
+import { isUniqueViolation } from './pg-errors'
+import type { Actor, Db, RequestContext } from './types'
 
 // Bank connections, accounts and transactions. People reach these with a RequestContext. A cron
 // sync or a verified webhook has no person, so the sync functions also take a SystemContext
 // built from the stored item. Three functions read across households and take no context:
 // countBankItemsByEnvironment, listBankItemsForSync and findBankItemByPlaidItemId.
 
-const CHUNK = 500;
+const CHUNK = 500
 
 // ---------------------------------------------------------------------------------------------
 // Connections
 
 /** A connection as the app sees it. Never carries the access token or the sync cursor. */
 export interface BankItemRow {
-  id: string;
-  householdId: string;
-  environment: BankEnvironment;
-  plaidItemId: string;
-  institutionId: string | null;
-  institutionName: string | null;
-  status: BankItemState['status'];
-  errorCode: string | null;
-  consentExpiresAt: Date | null;
-  lastSyncedAt: Date | null;
-  createdAt: Date;
+  id: string
+  householdId: string
+  environment: BankEnvironment
+  plaidItemId: string
+  institutionId: string | null
+  institutionName: string | null
+  status: BankItemState['status']
+  errorCode: string | null
+  consentExpiresAt: Date | null
+  lastSyncedAt: Date | null
+  createdAt: Date
 }
 
 const bankItemColumns = {
@@ -72,45 +58,37 @@ const bankItemColumns = {
   consentExpiresAt: plaidItems.consentExpiresAt,
   lastSyncedAt: plaidItems.lastSyncedAt,
   createdAt: plaidItems.createdAt,
-};
+}
 
-const ITEM_NOT_FOUND = 'That bank connection no longer exists.';
+const ITEM_NOT_FOUND = 'That bank connection no longer exists.'
 
 function itemKey(actor: Actor, itemId: string) {
-  return and(eq(plaidItems.id, itemId), eq(plaidItems.householdId, actor.householdId));
+  return and(eq(plaidItems.id, itemId), eq(plaidItems.householdId, actor.householdId))
 }
 
 export async function listBankItems(ctx: RequestContext, db: Db): Promise<BankItemRow[]> {
-  requirePermission(ctx, 'finances.view');
+  requirePermission(ctx, 'finances.view')
   return db
     .select(bankItemColumns)
     .from(plaidItems)
     .where(eq(plaidItems.householdId, ctx.householdId))
-    .orderBy(asc(plaidItems.createdAt), asc(plaidItems.id));
+    .orderBy(asc(plaidItems.createdAt), asc(plaidItems.id))
 }
 
-export async function getBankItem(
-  ctx: RequestContext,
-  db: Db,
-  input: { itemId: string },
-): Promise<BankItemRow> {
-  requirePermission(ctx, 'finances.view');
-  const [item] = await db
-    .select(bankItemColumns)
-    .from(plaidItems)
-    .where(itemKey(ctx, input.itemId))
-    .limit(1);
-  if (!item) throw new NotFoundError(ITEM_NOT_FOUND);
-  return item;
+export async function getBankItem(ctx: RequestContext, db: Db, input: { itemId: string }): Promise<BankItemRow> {
+  requirePermission(ctx, 'finances.view')
+  const [item] = await db.select(bankItemColumns).from(plaidItems).where(itemKey(ctx, input.itemId)).limit(1)
+  if (!item) throw new NotFoundError(ITEM_NOT_FOUND)
+  return item
 }
 
 /** What a sync or update-mode Link needs. The token is still encrypted. */
 export async function getBankItemCredentials(
   actor: Actor,
   db: Db,
-  input: { itemId: string },
+  input: { itemId: string }
 ): Promise<{ item: BankItemRow; accessTokenEncrypted: string; cursor: string | null }> {
-  authorize(actor, 'finances.manage');
+  authorize(actor, 'finances.manage')
   const [row] = await db
     .select({
       item: bankItemColumns,
@@ -119,106 +97,93 @@ export async function getBankItemCredentials(
     })
     .from(plaidItems)
     .where(itemKey(actor, input.itemId))
-    .limit(1);
-  if (!row) throw new NotFoundError(ITEM_NOT_FOUND);
-  return row;
+    .limit(1)
+  if (!row) throw new NotFoundError(ITEM_NOT_FOUND)
+  return row
 }
 
 /**
  * Every Item ever stored in an environment, across households, including disconnected ones.
  * Production Items are a lifetime allowance, so nothing here is ever subtracted.
  */
-export async function countBankItemsByEnvironment(
-  db: Db,
-  environment: BankEnvironment,
-): Promise<number> {
-  const [row] = await db
-    .select({ total: count() })
-    .from(plaidItems)
-    .where(eq(plaidItems.environment, environment));
-  return row?.total ?? 0;
+export async function countBankItemsByEnvironment(db: Db, environment: BankEnvironment): Promise<number> {
+  const [row] = await db.select({ total: count() }).from(plaidItems).where(eq(plaidItems.environment, environment))
+  return row?.total ?? 0
 }
 
 /** For the cron sync: every connection in every household, oldest first. */
 export async function listBankItemsForSync(db: Db): Promise<BankItemRow[]> {
-  return db.select(bankItemColumns).from(plaidItems).orderBy(asc(plaidItems.createdAt));
+  return db.select(bankItemColumns).from(plaidItems).orderBy(asc(plaidItems.createdAt))
 }
 
 /** For webhooks, which name Plaid's Item ID. The household comes from the row found. */
-export async function findBankItemByPlaidItemId(
-  db: Db,
-  plaidItemId: string,
-): Promise<BankItemRow | null> {
-  const [item] = await db
-    .select(bankItemColumns)
-    .from(plaidItems)
-    .where(eq(plaidItems.plaidItemId, plaidItemId))
-    .limit(1);
-  return item ?? null;
+export async function findBankItemByPlaidItemId(db: Db, plaidItemId: string): Promise<BankItemRow | null> {
+  const [item] = await db.select(bankItemColumns).from(plaidItems).where(eq(plaidItems.plaidItemId, plaidItemId)).limit(1)
+  return item ?? null
 }
 
 // Serializes connection creation so two Links finishing at once can't both take the last slot.
-const CREATE_ITEM_LOCK = sql`select pg_advisory_xact_lock(hashtext('ghar.plaid_items.create'))`;
+const CREATE_ITEM_LOCK = sql`select pg_advisory_xact_lock(hashtext('ghar.plaid_items.create'))`
 
 export async function createBankItem(
   ctx: RequestContext,
   db: Db,
   input: {
-    environment: BankEnvironment;
-    plaidItemId: string;
-    institutionId: string | null;
-    institutionName: string | null;
-    accessTokenEncrypted: string;
-  },
+    environment: BankEnvironment
+    plaidItemId: string
+    institutionId: string | null
+    institutionName: string | null
+    accessTokenEncrypted: string
+  }
 ): Promise<BankItemRow> {
-  requirePermission(ctx, 'finances.manage');
+  requirePermission(ctx, 'finances.manage')
   try {
-    return await db.transaction(async (tx) => {
-      await tx.execute(CREATE_ITEM_LOCK);
+    return await db.transaction(async tx => {
+      await tx.execute(CREATE_ITEM_LOCK)
       assertCanCreateBankItem({
         environment: input.environment,
         productionItemsCreated: await countBankItemsByEnvironment(tx, 'production'),
-      });
+      })
 
       const [item] = await tx
         .insert(plaidItems)
         .values({ householdId: ctx.householdId, ...input })
-        .returning(bankItemColumns);
-      if (!item) throw new Error('Bank connection insert returned no row');
+        .returning(bankItemColumns)
+      if (!item) throw new Error('Bank connection insert returned no row')
 
       await recordAudit(ctx, tx, {
         action: 'bank.connected',
         entity: 'plaid_item',
         entityId: item.id,
         metadata: { institutionName: input.institutionName, environment: input.environment },
-      });
-      return item;
-    });
+      })
+      return item
+    })
   } catch (error) {
     if (isUniqueViolation(error, 'plaid_items_plaid_item_id_unique')) {
-      throw new ConflictError('That bank connection is already saved.');
+      throw new ConflictError('That bank connection is already saved.')
     }
-    throw error;
+    throw error
   }
 }
 
-export type BankItemStateChange = 'webhook' | 'sync_failed' | 'reconnected';
+export type BankItemStateChange = 'webhook' | 'sync_failed' | 'reconnected'
 
 /** Sets a connection's status. Audited when the status or error actually changes. */
 export async function setBankItemState(
   actor: Actor,
   db: Db,
-  input: { itemId: string; state: BankItemState; change: BankItemStateChange },
+  input: { itemId: string; state: BankItemState; change: BankItemStateChange }
 ): Promise<BankItemRow> {
-  authorize(actor, 'finances.manage');
-  return db.transaction(async (tx) => {
+  authorize(actor, 'finances.manage')
+  return db.transaction(async tx => {
     const [current] = await tx
       .select({ status: plaidItems.status, errorCode: plaidItems.errorCode })
       .from(plaidItems)
       .where(itemKey(actor, input.itemId))
       .limit(1)
-      .for('update');
-    if (!current) throw new NotFoundError(ITEM_NOT_FOUND);
+      .for('update')
+    if (!current) throw new NotFoundError(ITEM_NOT_FOUND)
 
     const [item] = await tx
       .update(plaidItems)
@@ -228,8 +193,8 @@ export async function setBankItemState(
         consentExpiresAt: input.state.consentExpiresAt,
       })
       .where(itemKey(actor, input.itemId))
-      .returning(bankItemColumns);
-    if (!item) throw new NotFoundError(ITEM_NOT_FOUND);
+      .returning(bankItemColumns)
+    if (!item) throw new NotFoundError(ITEM_NOT_FOUND)
 
     if (current.status !== item.status || current.errorCode !== item.errorCode) {
       await recordAudit(actor, tx, {
@@ -242,20 +207,20 @@ export async function setBankItemState(
           to: item.status,
           errorCode: item.errorCode,
         },
-      });
+      })
     }
-    return item;
-  });
+    return item
+  })
 }
 
 // ---------------------------------------------------------------------------------------------
 // Sync
 
 export interface TransactionSyncResult {
-  accounts: number;
-  inserted: number;
-  updated: number;
-  deleted: number;
+  accounts: number
+  inserted: number
+  updated: number
+  deleted: number
 }
 
 /**
@@ -270,32 +235,32 @@ export async function applyTransactionSync(
   actor: Actor,
   db: Db,
   input: {
-    itemId: string;
-    expectedCursor: string | null;
-    nextCursor: string;
-    accounts: readonly BankAccount[];
-    pages: readonly TransactionChanges[];
-    now: Date;
-  },
+    itemId: string
+    expectedCursor: string | null
+    nextCursor: string
+    accounts: readonly BankAccount[]
+    pages: readonly TransactionChanges[]
+    now: Date
+  }
 ): Promise<TransactionSyncResult> {
-  authorize(actor, 'finances.manage');
-  return db.transaction(async (tx) => {
+  authorize(actor, 'finances.manage')
+  return db.transaction(async tx => {
     const [item] = await tx
       .select({ id: plaidItems.id, cursor: plaidItems.cursor })
       .from(plaidItems)
       .where(itemKey(actor, input.itemId))
       .limit(1)
-      .for('update');
-    if (!item) throw new NotFoundError(ITEM_NOT_FOUND);
+      .for('update')
+    if (!item) throw new NotFoundError(ITEM_NOT_FOUND)
     if (item.cursor !== input.expectedCursor) {
-      throw new ConflictError('This bank connection synced while this sync was running.');
+      throw new ConflictError('This bank connection synced while this sync was running.')
     }
 
-    await upsertAccounts(actor, tx, item.id, input.accounts, input.now);
-    const accountIds = await accountIdsForItem(tx, item.id);
+    await upsertAccounts(actor, tx, item.id, input.accounts, input.now)
+    const accountIds = await accountIdsForItem(tx, item.id)
 
-    const ids = transactionIdsToLoad(input.pages);
-    const existing: StoredTransaction[] = [];
+    const ids = transactionIdsToLoad(input.pages)
+    const existing: StoredTransaction[] = []
     for (const chunk of chunks(ids)) {
       existing.push(
         ...(await tx
@@ -313,37 +278,23 @@ export async function applyTransactionSync(
             isExcluded: transactions.isExcluded,
           })
           .from(transactions)
-          .where(
-            and(
-              eq(transactions.householdId, actor.householdId),
-              inArray(transactions.plaidTransactionId, chunk),
-            ),
-          )
+          .where(and(eq(transactions.householdId, actor.householdId), inArray(transactions.plaidTransactionId, chunk)))
           // Matched on a Plaid id, so every row has one. Only charges typed in by hand lack it.
-          .then((rows) =>
-            rows.flatMap(({ plaidTransactionId, ...row }) =>
-              plaidTransactionId === null ? [] : [{ ...row, plaidTransactionId }],
-            ),
-          )),
-      );
+          .then(rows =>
+            rows.flatMap(({ plaidTransactionId, ...row }) => (plaidTransactionId === null ? [] : [{ ...row, plaidTransactionId }]))
+          ))
+      )
     }
 
-    const plan = planTransactionSync(existing, input.pages);
+    const plan = planTransactionSync(existing, input.pages)
 
     for (const update of plan.updates) {
-      if (update.mergedFromId === undefined) continue;
-      await tx
-        .update(transactionEdits)
-        .set({ transactionId: update.id })
-        .where(eq(transactionEdits.transactionId, update.mergedFromId));
+      if (update.mergedFromId === undefined) continue
+      await tx.update(transactionEdits).set({ transactionId: update.id }).where(eq(transactionEdits.transactionId, update.mergedFromId))
     }
 
     for (const chunk of chunks(plan.deletes)) {
-      await tx
-        .delete(transactions)
-        .where(
-          and(eq(transactions.householdId, actor.householdId), inArray(transactions.id, chunk)),
-        );
+      await tx.delete(transactions).where(and(eq(transactions.householdId, actor.householdId), inArray(transactions.id, chunk)))
     }
 
     for (const update of plan.updates) {
@@ -354,20 +305,18 @@ export async function applyTransactionSync(
           ...update.userFields,
           updatedAt: input.now,
         })
-        .where(
-          and(eq(transactions.id, update.id), eq(transactions.householdId, actor.householdId)),
-        );
+        .where(and(eq(transactions.id, update.id), eq(transactions.householdId, actor.householdId)))
     }
 
     for (const chunk of chunks(plan.inserts)) {
       await tx.insert(transactions).values(
-        chunk.map((transaction) => ({
+        chunk.map(transaction => ({
           householdId: actor.householdId,
           ...bankFields(transaction, accountIds),
           createdAt: input.now,
           updatedAt: input.now,
-        })),
-      );
+        }))
+      )
     }
 
     await tx
@@ -378,29 +327,23 @@ export async function applyTransactionSync(
         status: 'good',
         errorCode: null,
       })
-      .where(eq(plaidItems.id, item.id));
+      .where(eq(plaidItems.id, item.id))
 
     return {
       accounts: input.accounts.length,
       inserted: plan.inserts.length,
       updated: plan.updates.length,
       deleted: plan.deletes.length,
-    };
-  });
+    }
+  })
 }
 
-async function upsertAccounts(
-  actor: Actor,
-  tx: Db,
-  itemId: string,
-  bankAccounts: readonly BankAccount[],
-  now: Date,
-): Promise<void> {
-  if (bankAccounts.length === 0) return;
+async function upsertAccounts(actor: Actor, tx: Db, itemId: string, bankAccounts: readonly BankAccount[], now: Date): Promise<void> {
+  if (bankAccounts.length === 0) return
   await tx
     .insert(accounts)
     .values(
-      bankAccounts.map((account) => ({
+      bankAccounts.map(account => ({
         householdId: actor.householdId,
         plaidItemId: itemId,
         plaidAccountId: account.plaidAccountId,
@@ -413,7 +356,7 @@ async function upsertAccounts(
         availableBalanceCents: account.availableBalanceCents,
         isoCurrency: account.isoCurrency,
         balanceUpdatedAt: now,
-      })),
+      }))
     )
     .onConflictDoUpdate({
       target: [accounts.plaidItemId, accounts.plaidAccountId],
@@ -429,26 +372,26 @@ async function upsertAccounts(
         isoCurrency: excluded('iso_currency'),
         balanceUpdatedAt: excluded('balance_updated_at'),
       },
-    });
+    })
 }
 
 function excluded(column: string) {
-  return sql.raw(`excluded.${column}`);
+  return sql.raw(`excluded.${column}`)
 }
 
 async function accountIdsForItem(tx: Db, itemId: string): Promise<Map<string, string>> {
   const rows = await tx
     .select({ id: accounts.id, plaidAccountId: accounts.plaidAccountId })
     .from(accounts)
-    .where(eq(accounts.plaidItemId, itemId));
-  return new Map(rows.map((row) => [row.plaidAccountId, row.id]));
+    .where(eq(accounts.plaidItemId, itemId))
+  return new Map(rows.map(row => [row.plaidAccountId, row.id]))
 }
 
 function bankFields(transaction: BankTransaction, accountIds: ReadonlyMap<string, string>) {
-  const accountId = accountIds.get(transaction.plaidAccountId);
+  const accountId = accountIds.get(transaction.plaidAccountId)
   if (accountId === undefined) {
     // Plaid sent a transaction for an account it didn't list. Fail the sync rather than guess.
-    throw new Error('Sync returned a transaction for an unknown account');
+    throw new Error('Sync returned a transaction for an unknown account')
   }
   return {
     accountId,
@@ -466,12 +409,12 @@ function bankFields(transaction: BankTransaction, accountIds: ReadonlyMap<string
     plaidCategoryConfidence: transaction.categoryConfidence,
     isPending: transaction.isPending,
     isTransfer: isTransferTransaction(transaction),
-  };
+  }
 }
 
 function* chunks<T>(items: readonly T[]): Generator<T[]> {
   for (let start = 0; start < items.length; start += CHUNK) {
-    yield items.slice(start, start + CHUNK);
+    yield items.slice(start, start + CHUNK)
   }
 }
 
@@ -479,19 +422,19 @@ function* chunks<T>(items: readonly T[]): Generator<T[]> {
 // Accounts
 
 export interface AccountRow {
-  id: string;
-  plaidItemId: string;
-  institutionName: string | null;
-  name: string;
-  officialName: string | null;
-  mask: string | null;
-  type: string;
-  subtype: string | null;
-  currentBalanceCents: number | null;
-  availableBalanceCents: number | null;
-  isoCurrency: string | null;
-  isHidden: boolean;
-  balanceUpdatedAt: Date | null;
+  id: string
+  plaidItemId: string
+  institutionName: string | null
+  name: string
+  officialName: string | null
+  mask: string | null
+  type: string
+  subtype: string | null
+  currentBalanceCents: number | null
+  availableBalanceCents: number | null
+  isoCurrency: string | null
+  isHidden: boolean
+  balanceUpdatedAt: Date | null
 }
 
 function selectAccounts(db: Db) {
@@ -512,80 +455,71 @@ function selectAccounts(db: Db) {
       balanceUpdatedAt: accounts.balanceUpdatedAt,
     })
     .from(accounts)
-    .innerJoin(plaidItems, eq(plaidItems.id, accounts.plaidItemId));
+    .innerJoin(plaidItems, eq(plaidItems.id, accounts.plaidItemId))
 }
 
-const ACCOUNT_NOT_FOUND = 'That account no longer exists.';
+const ACCOUNT_NOT_FOUND = 'That account no longer exists.'
 
 export async function listAccounts(ctx: RequestContext, db: Db): Promise<AccountRow[]> {
-  requirePermission(ctx, 'finances.view');
+  requirePermission(ctx, 'finances.view')
   return selectAccounts(db)
     .where(eq(accounts.householdId, ctx.householdId))
-    .orderBy(asc(plaidItems.createdAt), asc(accounts.name), asc(accounts.id));
+    .orderBy(asc(plaidItems.createdAt), asc(accounts.name), asc(accounts.id))
 }
 
-export async function setAccountHidden(
-  ctx: RequestContext,
-  db: Db,
-  input: { accountId: string; isHidden: boolean },
-): Promise<AccountRow> {
-  requirePermission(ctx, 'finances.manage');
-  const key = and(eq(accounts.id, input.accountId), eq(accounts.householdId, ctx.householdId));
-  return db.transaction(async (tx) => {
-    const [current] = await tx
-      .select({ isHidden: accounts.isHidden })
-      .from(accounts)
-      .where(key)
-      .limit(1)
-      .for('update');
-    if (!current) throw new NotFoundError(ACCOUNT_NOT_FOUND);
+export async function setAccountHidden(ctx: RequestContext, db: Db, input: { accountId: string; isHidden: boolean }): Promise<AccountRow> {
+  requirePermission(ctx, 'finances.manage')
+  const key = and(eq(accounts.id, input.accountId), eq(accounts.householdId, ctx.householdId))
+  return db.transaction(async tx => {
+    const [current] = await tx.select({ isHidden: accounts.isHidden }).from(accounts).where(key).limit(1).for('update')
+    if (!current) throw new NotFoundError(ACCOUNT_NOT_FOUND)
 
     if (current.isHidden !== input.isHidden) {
-      await tx.update(accounts).set({ isHidden: input.isHidden }).where(key);
+      await tx.update(accounts).set({ isHidden: input.isHidden }).where(key)
       await recordAudit(ctx, tx, {
         action: input.isHidden ? 'account.hidden' : 'account.shown',
         entity: 'account',
         entityId: input.accountId,
-      });
+      })
     }
 
-    const [account] = await selectAccounts(tx).where(key).limit(1);
-    if (!account) throw new NotFoundError(ACCOUNT_NOT_FOUND);
-    return account;
-  });
+    const [account] = await selectAccounts(tx).where(key).limit(1)
+    if (!account) throw new NotFoundError(ACCOUNT_NOT_FOUND)
+    return account
+  })
 }
 
 // ---------------------------------------------------------------------------------------------
 // Transactions
 
 export interface TransactionRow {
-  id: string;
-  accountId: string;
-  accountName: string;
-  accountMask: string | null;
-  institutionName: string | null;
-  amountCents: number;
-  isoCurrency: string | null;
-  date: string;
-  authorizedDate: string | null;
-  merchantName: string | null;
-  name: string;
-  paymentChannel: string | null;
-  plaidCategoryPrimary: string | null;
-  plaidCategoryDetailed: string | null;
-  categoryId: string | null;
-  categoryName: string | null;
-  categorySource: CategorySource | null;
+  id: string
+  accountId: string
+  accountName: string
+  accountMask: string | null
+  institutionName: string | null
+  amountCents: number
+  isoCurrency: string | null
+  date: string
+  authorizedDate: string | null
+  merchantName: string | null
+  name: string
+  paymentChannel: string | null
+  plaidCategoryPrimary: string | null
+  plaidCategoryDetailed: string | null
+  categoryId: string | null
+  categoryName: string | null
+  categorySource: CategorySource | null
   /** The model's confidence as a whole percent, on a category it assigned or suggested. */
-  categoryConfidence: number | null;
-  categoryRuleId: string | null;
-  suggestedCategoryId: string | null;
-  needsReview: boolean;
-  isPending: boolean;
-  isTransfer: boolean;
-  isExcluded: boolean;
-  notes: string | null;
-  updatedAt: Date;
+  categoryConfidence: number | null
+  categoryRuleId: string | null
+  suggestedCategoryId: string | null
+  needsReview: boolean
+  isPending: boolean
+  isTransfer: boolean
+  isExcluded: boolean
+  notes: string | null
+  updatedAt: Date
 }
 
 function selectTransactions(db: Db) {
@@ -623,24 +557,24 @@ function selectTransactions(db: Db) {
     .from(transactions)
     .innerJoin(accounts, eq(accounts.id, transactions.accountId))
     .innerJoin(plaidItems, eq(plaidItems.id, accounts.plaidItemId))
-    .leftJoin(categories, eq(categories.id, transactions.categoryId));
+    .leftJoin(categories, eq(categories.id, transactions.categoryId))
 }
 
 export interface TransactionFilters {
   /** Inclusive calendar dates. */
-  from?: string;
-  to?: string;
+  from?: string
+  to?: string
   /** Without one, transactions on hidden accounts are left out. */
-  accountId?: string;
+  accountId?: string
   /** Bounds on the size of the amount, in or out. */
-  minCents?: number;
-  maxCents?: number;
+  minCents?: number
+  maxCents?: number
   /** Matches the name, merchant or notes. */
-  q?: string;
+  q?: string
   /** Only the review queue: see reviewConditions. */
-  review?: boolean;
-  cursor?: TransactionListCursor;
-  limit: number;
+  review?: boolean
+  cursor?: TransactionListCursor
+  limit: number
 }
 
 /**
@@ -648,102 +582,78 @@ export interface TransactionFilters {
  * cleared it on purpose, and the household hasn't excluded it.
  */
 function reviewConditions() {
-  return [
-    isNull(transactions.categoryId),
-    isNull(transactions.categorySource),
-    eq(transactions.isExcluded, false),
-  ];
+  return [isNull(transactions.categoryId), isNull(transactions.categorySource), eq(transactions.isExcluded, false)]
 }
 
 export async function countReviewQueue(ctx: RequestContext, db: Db): Promise<number> {
-  requirePermission(ctx, 'finances.view');
+  requirePermission(ctx, 'finances.view')
   const [row] = await db
     .select({ total: count() })
     .from(transactions)
     .innerJoin(accounts, eq(accounts.id, transactions.accountId))
-    .where(
-      and(
-        eq(transactions.householdId, ctx.householdId),
-        eq(accounts.isHidden, false),
-        ...reviewConditions(),
-      ),
-    );
-  return row?.total ?? 0;
+    .where(and(eq(transactions.householdId, ctx.householdId), eq(accounts.isHidden, false), ...reviewConditions()))
+  return row?.total ?? 0
 }
 
 /** Newest first. `next` is the cursor for the following page, or null on the last. */
 export async function listTransactions(
   ctx: RequestContext,
   db: Db,
-  filters: TransactionFilters,
+  filters: TransactionFilters
 ): Promise<{ transactions: TransactionRow[]; next: TransactionListCursor | null }> {
-  requirePermission(ctx, 'finances.view');
-  const conditions = [eq(transactions.householdId, ctx.householdId)];
-  if (filters.from !== undefined) conditions.push(gte(transactions.date, filters.from));
-  if (filters.to !== undefined) conditions.push(lte(transactions.date, filters.to));
-  conditions.push(
-    filters.accountId === undefined
-      ? eq(accounts.isHidden, false)
-      : eq(transactions.accountId, filters.accountId),
-  );
+  requirePermission(ctx, 'finances.view')
+  const conditions = [eq(transactions.householdId, ctx.householdId)]
+  if (filters.from !== undefined) conditions.push(gte(transactions.date, filters.from))
+  if (filters.to !== undefined) conditions.push(lte(transactions.date, filters.to))
+  conditions.push(filters.accountId === undefined ? eq(accounts.isHidden, false) : eq(transactions.accountId, filters.accountId))
   if (filters.minCents !== undefined) {
-    conditions.push(sql`abs(${transactions.amountCents}) >= ${filters.minCents}`);
+    conditions.push(sql`abs(${transactions.amountCents}) >= ${filters.minCents}`)
   }
   if (filters.maxCents !== undefined) {
-    conditions.push(sql`abs(${transactions.amountCents}) <= ${filters.maxCents}`);
+    conditions.push(sql`abs(${transactions.amountCents}) <= ${filters.maxCents}`)
   }
-  const q = filters.q?.trim();
+  const q = filters.q?.trim()
   if (q) {
-    const pattern = `%${q.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
-    const matches = or(
-      ilike(transactions.name, pattern),
-      ilike(transactions.merchantName, pattern),
-      ilike(transactions.notes, pattern),
-    );
-    if (matches) conditions.push(matches);
+    const pattern = `%${q.replace(/[\\%_]/g, character => `\\${character}`)}%`
+    const matches = or(ilike(transactions.name, pattern), ilike(transactions.merchantName, pattern), ilike(transactions.notes, pattern))
+    if (matches) conditions.push(matches)
   }
-  if (filters.review) conditions.push(...reviewConditions());
+  if (filters.review) conditions.push(...reviewConditions())
   if (filters.cursor) {
     const after = or(
       lt(transactions.date, filters.cursor.date),
-      and(eq(transactions.date, filters.cursor.date), lt(transactions.id, filters.cursor.id)),
-    );
-    if (after) conditions.push(after);
+      and(eq(transactions.date, filters.cursor.date), lt(transactions.id, filters.cursor.id))
+    )
+    if (after) conditions.push(after)
   }
 
   const rows = await selectTransactions(db)
     .where(and(...conditions))
     .orderBy(desc(transactions.date), desc(transactions.id))
-    .limit(filters.limit + 1);
+    .limit(filters.limit + 1)
 
-  const page = rows.slice(0, filters.limit);
-  const last = page.at(-1);
+  const page = rows.slice(0, filters.limit)
+  const last = page.at(-1)
   return {
     transactions: page,
     next: rows.length > filters.limit && last ? { date: last.date, id: last.id } : null,
-  };
+  }
 }
 
-const TRANSACTION_NOT_FOUND = 'That transaction no longer exists.';
+const TRANSACTION_NOT_FOUND = 'That transaction no longer exists.'
 
-export async function getTransaction(
-  ctx: RequestContext,
-  db: Db,
-  input: { transactionId: string },
-): Promise<TransactionRow> {
-  requirePermission(ctx, 'finances.view');
-  const [row] = await selectTransactions(db)
-    .where(transactionKey(ctx, input.transactionId))
-    .limit(1);
-  if (!row) throw new NotFoundError(TRANSACTION_NOT_FOUND);
-  return row;
+export async function getTransaction(ctx: RequestContext, db: Db, input: { transactionId: string }): Promise<TransactionRow> {
+  requirePermission(ctx, 'finances.view')
+  const [row] = await selectTransactions(db).where(transactionKey(ctx, input.transactionId)).limit(1)
+  if (!row) throw new NotFoundError(TRANSACTION_NOT_FOUND)
+  return row
 }
 
 export interface TransactionEditInput {
-  transactionId: string;
-  categoryId?: string | null;
-  notes?: string | null;
-  isExcluded?: boolean;
+  transactionId: string
+  categoryId?: string | null
+  notes?: string | null
+  isExcluded?: boolean
 }
 
 /**
@@ -751,14 +661,10 @@ export interface TransactionEditInput {
  * A category set here is a person's decision, so it replaces whatever automatic categorization
  * said, including a question left for review, and nothing automatic changes it again.
  */
-export async function updateTransaction(
-  ctx: RequestContext,
-  db: Db,
-  input: TransactionEditInput,
-): Promise<TransactionRow> {
-  requirePermission(ctx, 'finances.manage');
-  const key = transactionKey(ctx, input.transactionId);
-  return db.transaction(async (tx) => {
+export async function updateTransaction(ctx: RequestContext, db: Db, input: TransactionEditInput): Promise<TransactionRow> {
+  requirePermission(ctx, 'finances.manage')
+  const key = transactionKey(ctx, input.transactionId)
+  return db.transaction(async tx => {
     const [current] = await tx
       .select({
         categoryId: transactions.categoryId,
@@ -768,30 +674,24 @@ export async function updateTransaction(
       .from(transactions)
       .where(key)
       .limit(1)
-      .for('update');
-    if (!current) throw new NotFoundError(TRANSACTION_NOT_FOUND);
+      .for('update')
+    if (!current) throw new NotFoundError(TRANSACTION_NOT_FOUND)
 
     if (input.categoryId !== undefined && input.categoryId !== null) {
       const [category] = await tx
         .select({ id: categories.id })
         .from(categories)
-        .where(
-          and(
-            eq(categories.id, input.categoryId),
-            eq(categories.householdId, ctx.householdId),
-            eq(categories.isArchived, false),
-          ),
-        )
-        .limit(1);
+        .where(and(eq(categories.id, input.categoryId), eq(categories.householdId, ctx.householdId), eq(categories.isArchived, false)))
+        .limit(1)
       if (!category) {
         throw new ValidationError('Choose one of your categories.', {
           details: { fieldErrors: { categoryId: ['Choose one of your categories.'] } },
-        });
+        })
       }
     }
 
-    const edits: { field: string; oldValue: string | null; newValue: string | null }[] = [];
-    const changes: Partial<typeof transactions.$inferInsert> = {};
+    const edits: { field: string; oldValue: string | null; newValue: string | null }[] = []
+    const changes: Partial<typeof transactions.$inferInsert> = {}
     if (input.categoryId !== undefined && input.categoryId !== current.categoryId) {
       Object.assign(changes, {
         categoryId: input.categoryId,
@@ -800,52 +700,52 @@ export async function updateTransaction(
         categoryRuleId: null,
         suggestedCategoryId: null,
         needsReview: false,
-      } satisfies Partial<typeof transactions.$inferInsert>);
+      } satisfies Partial<typeof transactions.$inferInsert>)
       edits.push({
         field: 'category_id',
         oldValue: current.categoryId,
         newValue: input.categoryId,
-      });
+      })
     }
     if (input.notes !== undefined && input.notes !== current.notes) {
-      changes.notes = input.notes;
-      edits.push({ field: 'notes', oldValue: current.notes, newValue: input.notes });
+      changes.notes = input.notes
+      edits.push({ field: 'notes', oldValue: current.notes, newValue: input.notes })
     }
     if (input.isExcluded !== undefined && input.isExcluded !== current.isExcluded) {
-      changes.isExcluded = input.isExcluded;
+      changes.isExcluded = input.isExcluded
       edits.push({
         field: 'is_excluded',
         oldValue: String(current.isExcluded),
         newValue: String(input.isExcluded),
-      });
+      })
     }
 
     if (edits.length > 0) {
       await tx
         .update(transactions)
         .set({ ...changes, updatedAt: sql`now()` })
-        .where(key);
+        .where(key)
       await tx.insert(transactionEdits).values(
-        edits.map((edit) => ({
+        edits.map(edit => ({
           transactionId: input.transactionId,
           userId: ctx.userId,
           ...edit,
-        })),
-      );
+        }))
+      )
       await recordAudit(ctx, tx, {
         action: 'transaction.updated',
         entity: 'transaction',
         entityId: input.transactionId,
-        metadata: { fields: edits.map((edit) => edit.field) },
-      });
+        metadata: { fields: edits.map(edit => edit.field) },
+      })
     }
 
-    const [row] = await selectTransactions(tx).where(key).limit(1);
-    if (!row) throw new NotFoundError(TRANSACTION_NOT_FOUND);
-    return row;
-  });
+    const [row] = await selectTransactions(tx).where(key).limit(1)
+    if (!row) throw new NotFoundError(TRANSACTION_NOT_FOUND)
+    return row
+  })
 }
 
 function transactionKey(ctx: RequestContext, transactionId: string) {
-  return and(eq(transactions.id, transactionId), eq(transactions.householdId, ctx.householdId));
+  return and(eq(transactions.id, transactionId), eq(transactions.householdId, ctx.householdId))
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest'
 import {
   accountGroup,
   assertCanCreateBankItem,
@@ -13,12 +13,12 @@ import {
   PLAID_PRODUCTION_ITEM_LIMIT,
   shouldSyncBankItem,
   type BankItemState,
-} from '../src/banking';
-import { ConflictError, ValidationError } from '../src/errors';
+} from '../src/banking'
+import { ConflictError, ValidationError } from '../src/errors'
 
-const now = new Date('2026-09-13T12:00:00Z');
-const DAY = 24 * 60 * 60 * 1000;
-const good: BankItemState = { status: 'good', errorCode: null, consentExpiresAt: null };
+const now = new Date('2026-09-13T12:00:00Z')
+const DAY = 24 * 60 * 60 * 1000
+const good: BankItemState = { status: 'good', errorCode: null, consentExpiresAt: null }
 
 describe('assertCanCreateBankItem', () => {
   it('allows production connections up to the limit', () => {
@@ -26,91 +26,71 @@ describe('assertCanCreateBankItem', () => {
       assertCanCreateBankItem({
         environment: 'production',
         productionItemsCreated: PLAID_PRODUCTION_ITEM_LIMIT - 1,
-      });
-    }).not.toThrow();
-  });
+      })
+    }).not.toThrow()
+  })
 
   it('refuses the connection that would pass the limit', () => {
     expect(() => {
       assertCanCreateBankItem({
         environment: 'production',
         productionItemsCreated: PLAID_PRODUCTION_ITEM_LIMIT,
-      });
-    }).toThrow(ConflictError);
-  });
+      })
+    }).toThrow(ConflictError)
+  })
 
   it('never limits sandbox or fake connections', () => {
     for (const environment of ['sandbox', 'fake'] as const) {
       expect(() => {
-        assertCanCreateBankItem({ environment, productionItemsCreated: 500 });
-      }).not.toThrow();
+        assertCanCreateBankItem({ environment, productionItemsCreated: 500 })
+      }).not.toThrow()
     }
-  });
-});
+  })
+})
 
 describe('bank item status', () => {
   it('asks for a sign-in on login errors and marks everything else as an error', () => {
-    expect(bankItemStatusForError('ITEM_LOGIN_REQUIRED')).toBe('login_required');
-    expect(bankItemStatusForError('PENDING_EXPIRATION')).toBe('login_required');
-    expect(bankItemStatusForError('INSTITUTION_DOWN')).toBe('error');
-    expect(bankItemStatusForError('USER_PERMISSION_REVOKED')).toBe('error');
-  });
+    expect(bankItemStatusForError('ITEM_LOGIN_REQUIRED')).toBe('login_required')
+    expect(bankItemStatusForError('PENDING_EXPIRATION')).toBe('login_required')
+    expect(bankItemStatusForError('INSTITUTION_DOWN')).toBe('error')
+    expect(bankItemStatusForError('USER_PERMISSION_REVOKED')).toBe('error')
+  })
 
   it('marks the item on ITEM_LOGIN_REQUIRED and clears it on LOGIN_REPAIRED', () => {
-    const broken = bankItemStateForWebhook(
-      { kind: 'item_error', plaidItemId: 'item', errorCode: 'ITEM_LOGIN_REQUIRED' },
-      good,
-      now,
-    );
+    const broken = bankItemStateForWebhook({ kind: 'item_error', plaidItemId: 'item', errorCode: 'ITEM_LOGIN_REQUIRED' }, good, now)
     expect(broken).toEqual({
       status: 'login_required',
       errorCode: 'ITEM_LOGIN_REQUIRED',
       consentExpiresAt: null,
-    });
-    expect(
-      broken &&
-        bankItemStateForWebhook({ kind: 'login_repaired', plaidItemId: 'item' }, broken, now),
-    ).toEqual(good);
-  });
+    })
+    expect(broken && bankItemStateForWebhook({ kind: 'login_repaired', plaidItemId: 'item' }, broken, now)).toEqual(good)
+  })
 
   it('records when consent expires without breaking a working connection', () => {
-    const expiresAt = new Date(now.getTime() + 5 * DAY);
+    const expiresAt = new Date(now.getTime() + 5 * DAY)
+    expect(bankItemStateForWebhook({ kind: 'consent_expiring', plaidItemId: 'item', expiresAt }, good, now)).toEqual({
+      ...good,
+      consentExpiresAt: expiresAt,
+    })
     expect(
-      bankItemStateForWebhook(
-        { kind: 'consent_expiring', plaidItemId: 'item', expiresAt },
-        good,
-        now,
-      ),
-    ).toEqual({ ...good, consentExpiresAt: expiresAt });
-    expect(
-      bankItemStateForWebhook(
-        { kind: 'consent_expiring', plaidItemId: 'item', expiresAt: null },
-        good,
-        now,
-      )?.consentExpiresAt,
-    ).toEqual(new Date(now.getTime() + 7 * DAY));
-  });
+      bankItemStateForWebhook({ kind: 'consent_expiring', plaidItemId: 'item', expiresAt: null }, good, now)?.consentExpiresAt
+    ).toEqual(new Date(now.getTime() + 7 * DAY))
+  })
 
   it('marks a revoked item as disconnected for good', () => {
-    const revoked = bankItemStateForWebhook(
-      { kind: 'permission_revoked', plaidItemId: 'item' },
-      good,
-      now,
-    );
+    const revoked = bankItemStateForWebhook({ kind: 'permission_revoked', plaidItemId: 'item' }, good, now)
     expect(revoked).toEqual({
       status: 'error',
       errorCode: 'USER_PERMISSION_REVOKED',
       consentExpiresAt: null,
-    });
-    expect(revoked && bankItemAttention(revoked, now)).toBe('disconnected');
-    expect(revoked && canReconnectBankItem(revoked, now)).toBe(false);
-    expect(revoked && shouldSyncBankItem(revoked)).toBe(false);
-  });
+    })
+    expect(revoked && bankItemAttention(revoked, now)).toBe('disconnected')
+    expect(revoked && canReconnectBankItem(revoked, now)).toBe(false)
+    expect(revoked && shouldSyncBankItem(revoked)).toBe(false)
+  })
 
   it('leaves the item alone for sync and unknown webhooks', () => {
-    expect(
-      bankItemStateForWebhook({ kind: 'sync_available', plaidItemId: 'item' }, good, now),
-    ).toBeNull();
+    expect(bankItemStateForWebhook({ kind: 'sync_available', plaidItemId: 'item' }, good, now)).toBeNull()
     expect(
       bankItemStateForWebhook(
         {
@@ -120,124 +100,96 @@ describe('bank item status', () => {
           plaidItemId: 'item',
         },
         good,
-        now,
-      ),
-    ).toBeNull();
-  });
+        now
+      )
+    ).toBeNull()
+  })
 
   it('says what a connection needs', () => {
-    expect(bankItemAttention(good, now)).toBeNull();
-    expect(
-      bankItemAttention(
-        { ...good, status: 'login_required', errorCode: 'ITEM_LOGIN_REQUIRED' },
-        now,
-      ),
-    ).toBe('reconnect');
-    expect(
-      bankItemAttention({ ...good, consentExpiresAt: new Date(now.getTime() + 3 * DAY) }, now),
-    ).toBe('consent_expiring');
-    expect(
-      bankItemAttention({ ...good, consentExpiresAt: new Date(now.getTime() + 60 * DAY) }, now),
-    ).toBeNull();
-    expect(
-      bankItemAttention({ ...good, status: 'error', errorCode: 'INSTITUTION_DOWN' }, now),
-    ).toBe('sync_error');
-  });
+    expect(bankItemAttention(good, now)).toBeNull()
+    expect(bankItemAttention({ ...good, status: 'login_required', errorCode: 'ITEM_LOGIN_REQUIRED' }, now)).toBe('reconnect')
+    expect(bankItemAttention({ ...good, consentExpiresAt: new Date(now.getTime() + 3 * DAY) }, now)).toBe('consent_expiring')
+    expect(bankItemAttention({ ...good, consentExpiresAt: new Date(now.getTime() + 60 * DAY) }, now)).toBeNull()
+    expect(bankItemAttention({ ...good, status: 'error', errorCode: 'INSTITUTION_DOWN' }, now)).toBe('sync_error')
+  })
 
   it('syncs working and temporarily failing items only', () => {
-    expect(shouldSyncBankItem(good)).toBe(true);
-    expect(shouldSyncBankItem({ ...good, status: 'error', errorCode: 'INSTITUTION_DOWN' })).toBe(
-      true,
-    );
-    expect(
-      shouldSyncBankItem({ ...good, status: 'login_required', errorCode: 'ITEM_LOGIN_REQUIRED' }),
-    ).toBe(false);
-    expect(shouldSyncBankItem({ ...good, status: 'error', errorCode: 'ITEM_NOT_FOUND' })).toBe(
-      false,
-    );
-  });
-});
+    expect(shouldSyncBankItem(good)).toBe(true)
+    expect(shouldSyncBankItem({ ...good, status: 'error', errorCode: 'INSTITUTION_DOWN' })).toBe(true)
+    expect(shouldSyncBankItem({ ...good, status: 'login_required', errorCode: 'ITEM_LOGIN_REQUIRED' })).toBe(false)
+    expect(shouldSyncBankItem({ ...good, status: 'error', errorCode: 'ITEM_NOT_FOUND' })).toBe(false)
+  })
+})
 
 describe('isTransferTransaction', () => {
   it('treats transfers and card payments as transfers', () => {
-    expect(isTransferTransaction({ categoryPrimary: 'TRANSFER_OUT', categoryDetailed: null })).toBe(
-      true,
-    );
-    expect(isTransferTransaction({ categoryPrimary: 'TRANSFER_IN', categoryDetailed: null })).toBe(
-      true,
-    );
+    expect(isTransferTransaction({ categoryPrimary: 'TRANSFER_OUT', categoryDetailed: null })).toBe(true)
+    expect(isTransferTransaction({ categoryPrimary: 'TRANSFER_IN', categoryDetailed: null })).toBe(true)
     expect(
       isTransferTransaction({
         categoryPrimary: 'LOAN_PAYMENTS',
         categoryDetailed: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
-      }),
-    ).toBe(true);
-  });
+      })
+    ).toBe(true)
+  })
 
   it('does not treat spending or loan payments as transfers', () => {
     expect(
       isTransferTransaction({
         categoryPrimary: 'FOOD_AND_DRINK',
         categoryDetailed: 'FOOD_AND_DRINK_COFFEE',
-      }),
-    ).toBe(false);
+      })
+    ).toBe(false)
     expect(
       isTransferTransaction({
         categoryPrimary: 'LOAN_PAYMENTS',
         categoryDetailed: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT',
-      }),
-    ).toBe(false);
-    expect(isTransferTransaction({ categoryPrimary: null, categoryDetailed: null })).toBe(false);
-  });
-});
+      })
+    ).toBe(false)
+    expect(isTransferTransaction({ categoryPrimary: null, categoryDetailed: null })).toBe(false)
+  })
+})
 
 describe('centsFromPlaidAmount', () => {
   it('flips the sign so money out is negative', () => {
-    expect(centsFromPlaidAmount(12.34)).toBe(-1234);
-    expect(centsFromPlaidAmount(-500)).toBe(50000);
-  });
+    expect(centsFromPlaidAmount(12.34)).toBe(-1234)
+    expect(centsFromPlaidAmount(-500)).toBe(50000)
+  })
 
   it('rounds binary noise to the nearest cent', () => {
-    expect(centsFromPlaidAmount(0.29)).toBe(-29);
-    expect(centsFromPlaidAmount(1.1)).toBe(-110);
-  });
+    expect(centsFromPlaidAmount(0.29)).toBe(-29)
+    expect(centsFromPlaidAmount(1.1)).toBe(-110)
+  })
 
   it('never returns negative zero', () => {
-    expect(Object.is(centsFromPlaidAmount(0), 0)).toBe(true);
-  });
+    expect(Object.is(centsFromPlaidAmount(0), 0)).toBe(true)
+  })
 
   it('refuses amounts that are not numbers', () => {
-    expect(() => centsFromPlaidAmount(Number.NaN)).toThrow(ValidationError);
-  });
-});
+    expect(() => centsFromPlaidAmount(Number.NaN)).toThrow(ValidationError)
+  })
+})
 
 describe('accountGroup', () => {
   it('groups Plaid account types', () => {
-    expect(accountGroup('depository')).toBe('cash');
-    expect(accountGroup('credit')).toBe('credit');
-    expect(accountGroup('loan')).toBe('loans');
-    expect(accountGroup('investment')).toBe('investments');
-    expect(accountGroup('brokerage')).toBe('investments');
-    expect(accountGroup('other')).toBe('other');
-    expect(accountGroup('something new')).toBe('other');
-  });
-});
+    expect(accountGroup('depository')).toBe('cash')
+    expect(accountGroup('credit')).toBe('credit')
+    expect(accountGroup('loan')).toBe('loans')
+    expect(accountGroup('investment')).toBe('investments')
+    expect(accountGroup('brokerage')).toBe('investments')
+    expect(accountGroup('other')).toBe('other')
+    expect(accountGroup('something new')).toBe('other')
+  })
+})
 
 describe('transaction list cursor', () => {
-  const cursor = { date: '2026-09-01', id: '7d3f1a2b-4c5d-4e6f-8a9b-0c1d2e3f4a5b' };
+  const cursor = { date: '2026-09-01', id: '7d3f1a2b-4c5d-4e6f-8a9b-0c1d2e3f4a5b' }
 
   it('round-trips', () => {
-    expect(decodeTransactionCursor(encodeTransactionCursor(cursor))).toEqual(cursor);
-  });
+    expect(decodeTransactionCursor(encodeTransactionCursor(cursor))).toEqual(cursor)
+  })
 
-  it.each([
-    '',
-    'nope',
-    '2026-09-01',
-    '2026-13-01_7d3f1a2b-4c5d-4e6f-8a9b-0c1d2e3f4a5b',
-    '2026-09-01_x',
-    'a_b_c',
-  ])('refuses %j', (value) => {
-    expect(() => decodeTransactionCursor(value)).toThrow(ValidationError);
-  });
-});
+  it.each(['', 'nope', '2026-09-01', '2026-13-01_7d3f1a2b-4c5d-4e6f-8a9b-0c1d2e3f4a5b', '2026-09-01_x', 'a_b_c'])('refuses %j', value => {
+    expect(() => decodeTransactionCursor(value)).toThrow(ValidationError)
+  })
+})

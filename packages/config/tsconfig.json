@@ -1,6 +1,11 @@
 {
   "extends": "./tsconfig/isomorphic.json",
   "compilerOptions": {
-    "types": ["node"]
-  }
+    "types": ["node"],
+    // oxlint loads the plugin and presets with Node's type stripping, and the test imports each
+    // workspace's oxlint.config.ts by path.
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true
+  },
+  "include": ["oxlint", "test", "*.ts"]
 }

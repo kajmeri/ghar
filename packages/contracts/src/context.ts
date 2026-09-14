@@ -1,8 +1,8 @@
-import { z } from 'zod';
+import { z } from 'zod'
 
 /** Most trusted first. Mirrors HOUSEHOLD_ROLES in @ghar/core/auth; a test keeps them equal. */
-export const householdRoleSchema = z.enum(['owner', 'adult', 'member', 'viewer']);
-export type HouseholdRole = z.infer<typeof householdRoleSchema>;
+export const householdRoleSchema = z.enum(['owner', 'adult', 'member', 'viewer'])
+export type HouseholdRole = z.infer<typeof householdRoleSchema>
 
 /**
  * Who is acting, and in which household. Every data access function takes one.
@@ -14,5 +14,5 @@ export const requestContextSchema = z.object({
   userId: z.uuid(),
   householdId: z.uuid(),
   role: householdRoleSchema,
-});
-export type RequestContext = Readonly<z.infer<typeof requestContextSchema>>;
+})
+export type RequestContext = Readonly<z.infer<typeof requestContextSchema>>

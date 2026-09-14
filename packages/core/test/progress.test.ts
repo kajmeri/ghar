@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { ValidationError } from '../src/errors';
-import { progressFraction, progressStatus } from '../src/progress';
+import { describe, expect, it } from 'vitest'
+import { ValidationError } from '../src/errors'
+import { progressFraction, progressStatus } from '../src/progress'
 
 describe('progressStatus', () => {
   it.each([
@@ -13,14 +13,14 @@ describe('progressStatus', () => {
     [0, 0, 'approaching'],
     [1, 0, 'over'],
   ] as const)('%d of %d is %s', (value, limit, expected) => {
-    expect(progressStatus(value, limit)).toBe(expected);
-  });
+    expect(progressStatus(value, limit)).toBe(expected)
+  })
 
   it('takes its own threshold', () => {
-    expect(progressStatus(50, 100, { approachingAt: 0.5 })).toBe('approaching');
-    expect(progressStatus(49, 100, { approachingAt: 0.5 })).toBe('under');
-    expect(progressStatus(99, 100, { approachingAt: 1 })).toBe('under');
-  });
+    expect(progressStatus(50, 100, { approachingAt: 0.5 })).toBe('approaching')
+    expect(progressStatus(49, 100, { approachingAt: 0.5 })).toBe('under')
+    expect(progressStatus(99, 100, { approachingAt: 1 })).toBe('under')
+  })
 
   it.each([
     [Number.NaN, 100, {}],
@@ -29,9 +29,9 @@ describe('progressStatus', () => {
     [10, 100, { approachingAt: 0 }],
     [10, 100, { approachingAt: 1.2 }],
   ])('rejects value %d, limit %d, options %j', (value, limit, options) => {
-    expect(() => progressStatus(value, limit, options)).toThrow(ValidationError);
-  });
-});
+    expect(() => progressStatus(value, limit, options)).toThrow(ValidationError)
+  })
+})
 
 describe('progressFraction', () => {
   it.each([
@@ -43,6 +43,6 @@ describe('progressFraction', () => {
     [0, 0, 1],
     [-1, 0, 0],
   ])('%d of %d fills %d', (value, limit, expected) => {
-    expect(progressFraction(value, limit)).toBe(expected);
-  });
-});
+    expect(progressFraction(value, limit)).toBe(expected)
+  })
+})

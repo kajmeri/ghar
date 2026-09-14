@@ -1,8 +1,8 @@
-import 'server-only';
-import type { LinkPreview } from '@ghar/contracts';
-import { ValidationError } from '@ghar/core/errors';
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import 'server-only'
+import type { LinkPreview } from '@ghar/contracts'
+import { ValidationError } from '@ghar/core/errors'
+import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
 
 /**
  * Reads the OpenGraph tags on a page, and nothing else.
@@ -18,114 +18,114 @@ import { isIP } from 'node:net';
  */
 
 export interface OpenGraphProvider {
-  fetchPreview(url: string): Promise<LinkPreview>;
+  fetchPreview(url: string): Promise<LinkPreview>
 }
 
 /** Enough for a <head>. A page that has not declared itself by here is not going to. */
-const MAX_BYTES = 512 * 1024;
-const TIMEOUT_MS = 5000;
-const MAX_REDIRECTS = 3;
+const MAX_BYTES = 512 * 1024
+const TIMEOUT_MS = 5000
+const MAX_REDIRECTS = 3
 
-const USER_AGENT = 'Ghar/1.0 (household app; reads OpenGraph tags only)';
+const USER_AGENT = 'Ghar/1.0 (household app; reads OpenGraph tags only)'
 
 function realProvider(): OpenGraphProvider {
   return {
     async fetchPreview(url) {
-      let current = url;
+      let current = url
       for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
-        await assertPublicHost(current);
-        const response = await fetchHead(current);
+        await assertPublicHost(current)
+        const response = await fetchHead(current)
 
         if (response.status >= 300 && response.status < 400) {
-          const location = response.headers.get('location');
-          if (!location) break;
-          current = new URL(location, current).toString();
-          continue;
+          const location = response.headers.get('location')
+          if (!location) break
+          current = new URL(location, current).toString()
+          continue
         }
         if (!response.ok) {
-          throw new ValidationError(`That link came back with a ${response.status}`);
+          throw new ValidationError(`That link came back with a ${response.status}`)
         }
 
-        const contentType = response.headers.get('content-type') ?? '';
+        const contentType = response.headers.get('content-type') ?? ''
         if (!contentType.includes('html')) {
           // An image or a PDF has no tags to read, but the link is still an idea.
-          return emptyPreview(current);
+          return emptyPreview(current)
         }
-        return parseOpenGraph(await readCapped(response), current);
+        return parseOpenGraph(await readCapped(response), current)
       }
-      throw new ValidationError('That link redirects too many times');
+      throw new ValidationError('That link redirects too many times')
     },
-  };
+  }
 }
 
 async function fetchHead(url: string): Promise<Response> {
-  const controller = new AbortController();
+  const controller = new AbortController()
   const timeout = setTimeout(() => {
-    controller.abort();
-  }, TIMEOUT_MS);
+    controller.abort()
+  }, TIMEOUT_MS)
   try {
     return await fetch(url, {
       redirect: 'manual',
       signal: controller.signal,
       headers: { accept: 'text/html', 'user-agent': USER_AGENT },
-    });
+    })
   } catch (cause) {
-    throw new ValidationError('That link could not be reached', { cause });
+    throw new ValidationError('That link could not be reached', { cause })
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(timeout)
   }
 }
 
 /** Stops reading at the byte cap rather than buffering whatever the server decides to send. */
 async function readCapped(response: Response): Promise<string> {
-  const body = response.body;
-  if (!body) return '';
+  const body = response.body
+  if (!body) return ''
 
-  const reader = body.getReader();
-  const decoder = new TextDecoder('utf-8');
-  const chunks: string[] = [];
-  let total = 0;
+  const reader = body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  const chunks: string[] = []
+  let total = 0
 
   try {
     for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.length;
-      chunks.push(decoder.decode(value, { stream: true }));
-      const text = chunks.join('');
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.length
+      chunks.push(decoder.decode(value, { stream: true }))
+      const text = chunks.join('')
       // The tags we want live in <head>; there is no reason to read past it.
-      if (total >= MAX_BYTES || text.includes('</head>')) break;
+      if (total >= MAX_BYTES || text.includes('</head>')) break
     }
   } finally {
-    await reader.cancel().catch(() => undefined);
+    await reader.cancel().catch(() => undefined)
   }
-  return chunks.join('');
+  return chunks.join('')
 }
 
-const META_TAG = /<meta\b[^>]*>/gi;
-const ATTRIBUTE = /([a-z][a-z0-9:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/gi;
-const TITLE_TAG = /<title[^>]*>([\s\S]*?)<\/title>/i;
+const META_TAG = /<meta\b[^>]*>/gi
+const ATTRIBUTE = /([a-z][a-z0-9:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/gi
+const TITLE_TAG = /<title[^>]*>([\s\S]*?)<\/title>/i
 
 /** og:* first, then the page's own title. Nothing else is read. */
 export function parseOpenGraph(html: string, url: string): LinkPreview {
-  const head = html.split(/<\/head>/i)[0] ?? html;
-  const tags = new Map<string, string>();
+  const head = html.split(/<\/head>/i)[0] ?? html
+  const tags = new Map<string, string>()
 
   for (const [tag] of head.matchAll(META_TAG)) {
-    const attributes = new Map<string, string>();
+    const attributes = new Map<string, string>()
     for (const [, name, quoted, single, bare] of tag.matchAll(ATTRIBUTE)) {
-      if (name === undefined) continue;
-      attributes.set(name.toLowerCase(), quoted ?? single ?? bare ?? '');
+      if (name === undefined) continue
+      attributes.set(name.toLowerCase(), quoted ?? single ?? bare ?? '')
     }
-    const key = attributes.get('property') ?? attributes.get('name');
-    const content = attributes.get('content');
+    const key = attributes.get('property') ?? attributes.get('name')
+    const content = attributes.get('content')
     if (key && content && key.startsWith('og:') && !tags.has(key)) {
-      tags.set(key, decodeEntities(content).trim());
+      tags.set(key, decodeEntities(content).trim())
     }
   }
 
-  const pageTitle = TITLE_TAG.exec(head)?.[1];
-  const image = tags.get('og:image');
+  const pageTitle = TITLE_TAG.exec(head)?.[1]
+  const image = tags.get('og:image')
 
   return {
     url: tags.get('og:url') ?? url,
@@ -134,15 +134,13 @@ export function parseOpenGraph(html: string, url: string): LinkPreview {
     // A relative og:image is legal and common. Anything that is not http(s) is dropped.
     imageUrl: image ? absoluteHttpUrl(image, url) : null,
     siteName: tags.get('og:site_name') ?? null,
-  };
+  }
 }
 
 function absoluteHttpUrl(value: string, base: string): string | null {
-  const resolved = URL.parse(value, base);
-  if (!resolved) return null;
-  return resolved.protocol === 'http:' || resolved.protocol === 'https:'
-    ? resolved.toString()
-    : null;
+  const resolved = URL.parse(value, base)
+  if (!resolved) return null
+  return resolved.protocol === 'http:' || resolved.protocol === 'https:' ? resolved.toString() : null
 }
 
 const ENTITIES: Record<string, string> = {
@@ -153,24 +151,22 @@ const ENTITIES: Record<string, string> = {
   '#39': "'",
   apos: "'",
   nbsp: ' ',
-};
+}
 
 function decodeEntities(value: string): string {
   return value.replace(/&(#\d+|[a-z]+);/gi, (match, name: string) => {
-    const known = ENTITIES[name.toLowerCase()];
-    if (known !== undefined) return known;
+    const known = ENTITIES[name.toLowerCase()]
+    if (known !== undefined) return known
     if (name.startsWith('#')) {
-      const code = Number(name.slice(1));
-      return Number.isInteger(code) && code > 0 && code < 0x110000
-        ? String.fromCodePoint(code)
-        : match;
+      const code = Number(name.slice(1))
+      return Number.isInteger(code) && code > 0 && code < 0x110000 ? String.fromCodePoint(code) : match
     }
-    return match;
-  });
+    return match
+  })
 }
 
 function emptyPreview(url: string): LinkPreview {
-  return { url, title: null, description: null, imageUrl: null, siteName: null };
+  return { url, title: null, description: null, imageUrl: null, siteName: null }
 }
 
 /**
@@ -179,39 +175,39 @@ function emptyPreview(url: string): LinkPreview {
  * is resolved and checked before each hop, redirects included.
  */
 async function assertPublicHost(url: string): Promise<void> {
-  const parsed = URL.parse(url);
+  const parsed = URL.parse(url)
   if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) {
-    throw new ValidationError('Links must start with http:// or https://');
+    throw new ValidationError('Links must start with http:// or https://')
   }
 
-  const hostname = parsed.hostname.replace(/^\[|\]$/g, '');
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '')
   const addresses = isIP(hostname)
     ? [hostname]
     : await lookup(hostname, { all: true })
-        .then((results) => results.map((result) => result.address))
+        .then(results => results.map(result => result.address))
         .catch(() => {
-          throw new ValidationError('That link could not be reached');
-        });
+          throw new ValidationError('That link could not be reached')
+        })
 
   if (addresses.length === 0 || addresses.some(isPrivateAddress)) {
-    throw new ValidationError('That link points somewhere we cannot read');
+    throw new ValidationError('That link points somewhere we cannot read')
   }
 }
 
 export function isPrivateAddress(address: string): boolean {
   if (isIP(address) === 6) {
-    const lower = address.toLowerCase();
-    if (lower === '::' || lower === '::1') return true;
+    const lower = address.toLowerCase()
+    if (lower === '::' || lower === '::1') return true
     // Unique-local (fc00::/7) and link-local (fe80::/10).
-    if (/^f[cd]/.test(lower) || /^fe[89ab]/.test(lower)) return true;
+    if (/^f[cd]/.test(lower) || /^fe[89ab]/.test(lower)) return true
     // ::ffff:a.b.c.d maps an IPv4 address into v6 and has to be judged as that address.
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(lower)?.[1];
-    return mapped ? isPrivateAddress(mapped) : false;
+    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(lower)?.[1]
+    return mapped ? isPrivateAddress(mapped) : false
   }
 
-  const octets = address.split('.').map(Number);
-  const [a = -1, b = -1] = octets;
-  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet))) return true;
+  const octets = address.split('.').map(Number)
+  const [a = -1, b = -1] = octets
+  if (octets.length !== 4 || octets.some(octet => !Number.isInteger(octet))) return true
 
   return (
     a === 0 || // this network
@@ -224,21 +220,19 @@ export function isPrivateAddress(address: string): boolean {
     (a === 192 && b === 0) || // IETF protocol assignments
     (a === 198 && b >= 18 && b <= 19) || // benchmarking
     a >= 224 // multicast and reserved
-  );
+  )
 }
 
 /** For tests and for local development: no network, one predictable answer. */
-export function createFakeOpenGraphProvider(
-  previews: Readonly<Record<string, LinkPreview>> = {},
-): OpenGraphProvider {
+export function createFakeOpenGraphProvider(previews: Readonly<Record<string, LinkPreview>> = {}): OpenGraphProvider {
   return {
-    fetchPreview: (url) => Promise.resolve(previews[url] ?? emptyPreview(url)),
-  };
+    fetchPreview: url => Promise.resolve(previews[url] ?? emptyPreview(url)),
+  }
 }
 
-let provider: OpenGraphProvider | undefined;
+let provider: OpenGraphProvider | undefined
 
 export function getOpenGraphProvider(): OpenGraphProvider {
-  provider ??= realProvider();
-  return provider;
+  provider ??= realProvider()
+  return provider
 }

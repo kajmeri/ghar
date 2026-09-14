@@ -1,24 +1,18 @@
-import { z } from 'zod';
-import { defineEndpoint } from '../endpoint';
+import { z } from 'zod'
+import { defineEndpoint } from '../endpoint'
 
 // These lists mirror @ghar/core/travel. A test keeps them equal.
-export const bookingKindSchema = z.enum(['flight', 'hotel', 'car']);
-export const bookingStatusSchema = z.enum(['booked', 'cancelled', 'completed']);
-export const ratePlanSchema = z.enum(['prepaid', 'pay_at_property', 'refundable']);
-export const bookingSourceSchema = z.enum(['manual', 'email']);
-export const cabinSchema = z.enum([
-  'basic_economy',
-  'economy',
-  'premium_economy',
-  'business',
-  'first',
-]);
-export const priceConfidenceSchema = z.enum(['cached', 'exact']);
-export const dropActionSchema = z.enum(['rebook', 'call', 'claim_credit']);
+export const bookingKindSchema = z.enum(['flight', 'hotel', 'car'])
+export const bookingStatusSchema = z.enum(['booked', 'cancelled', 'completed'])
+export const ratePlanSchema = z.enum(['prepaid', 'pay_at_property', 'refundable'])
+export const bookingSourceSchema = z.enum(['manual', 'email'])
+export const cabinSchema = z.enum(['basic_economy', 'economy', 'premium_economy', 'business', 'first'])
+export const priceConfidenceSchema = z.enum(['cached', 'exact'])
+export const dropActionSchema = z.enum(['rebook', 'call', 'claim_credit'])
 
-const calendarDateSchema = z.iso.date();
-const instantSchema = z.iso.datetime({ offset: true });
-const centsSchema = z.number().int();
+const calendarDateSchema = z.iso.date()
+const instantSchema = z.iso.datetime({ offset: true })
+const centsSchema = z.number().int()
 
 export const bookingSchema = z.object({
   id: z.uuid(),
@@ -50,8 +44,8 @@ export const bookingSchema = z.object({
   tripId: z.uuid().nullable(),
   createdAt: instantSchema,
   updatedAt: instantSchema,
-});
-export type Booking = z.infer<typeof bookingSchema>;
+})
+export type Booking = z.infer<typeof bookingSchema>
 
 export const priceSummarySchema = z.object({
   /** The most recent price found. A cached price is a hint, never a promise. */
@@ -67,24 +61,24 @@ export const priceSummarySchema = z.object({
   lowestCents: centsSchema.nullable(),
   lastCheckedAt: instantSchema.nullable(),
   lastCheckFailed: z.boolean(),
-});
-export type PriceSummary = z.infer<typeof priceSummarySchema>;
+})
+export type PriceSummary = z.infer<typeof priceSummarySchema>
 
 /** One price per day in the household's zone. */
 export const dailyPriceSchema = z.object({
   date: calendarDateSchema,
   priceCents: centsSchema,
   confidence: priceConfidenceSchema,
-});
-export type DailyPrice = z.infer<typeof dailyPriceSchema>;
+})
+export type DailyPrice = z.infer<typeof dailyPriceSchema>
 
 export const bookingListItemSchema = z.object({
   booking: bookingSchema,
   price: priceSummarySchema,
   /** The last 30 days, oldest first. */
   sparkline: z.array(dailyPriceSchema),
-});
-export type BookingListItem = z.infer<typeof bookingListItemSchema>;
+})
+export type BookingListItem = z.infer<typeof bookingListItemSchema>
 
 export const priceCheckSchema = z.object({
   id: z.uuid(),
@@ -94,8 +88,8 @@ export const priceCheckSchema = z.object({
   confidence: priceConfidenceSchema,
   success: z.boolean(),
   error: z.string().nullable(),
-});
-export type PriceCheck = z.infer<typeof priceCheckSchema>;
+})
+export type PriceCheck = z.infer<typeof priceCheckSchema>
 
 export const priceAlertSchema = z.object({
   id: z.uuid(),
@@ -103,8 +97,8 @@ export const priceAlertSchema = z.object({
   priceCents: centsSchema,
   deltaCents: centsSchema,
   floorCents: centsSchema,
-});
-export type PriceAlert = z.infer<typeof priceAlertSchema>;
+})
+export type PriceAlert = z.infer<typeof priceAlertSchema>
 
 export const bookingDetailSchema = z.object({
   booking: bookingSchema,
@@ -128,10 +122,10 @@ export const bookingDetailSchema = z.object({
     action: dropActionSchema.nullable(),
     reason: z.string(),
   }),
-});
-export type BookingDetail = z.infer<typeof bookingDetailSchema>;
+})
+export type BookingDetail = z.infer<typeof bookingDetailSchema>
 
-const optionalTextSchema = z.string().max(200).nullable().default(null);
+const optionalTextSchema = z.string().max(200).nullable().default(null)
 
 /**
  * What a client sends to create or replace a booking. Fields that don't apply to the kind may be
@@ -158,24 +152,24 @@ export const bookingBodySchema = z.object({
   paidCents: centsSchema,
   currency: z.string().max(3),
   watchEnabled: z.boolean().default(true),
-});
-export type BookingBody = z.output<typeof bookingBodySchema>;
+})
+export type BookingBody = z.output<typeof bookingBodySchema>
 
-export const bookingParamsSchema = z.object({ bookingId: z.uuid() });
+export const bookingParamsSchema = z.object({ bookingId: z.uuid() })
 
 /** Every booking, soonest trip first, with where its price stands. */
 export const listBookings = defineEndpoint({
   method: 'GET',
   path: '/api/v1/travel/bookings',
   response: z.object({ bookings: z.array(bookingListItemSchema) }),
-});
+})
 
 export const getBooking = defineEndpoint({
   method: 'GET',
   path: '/api/v1/travel/bookings/:bookingId',
   params: bookingParamsSchema,
   response: bookingDetailSchema,
-});
+})
 
 /** Owners, adults and members. The price watch starts on by default. */
 export const createBooking = defineEndpoint({
@@ -183,7 +177,7 @@ export const createBooking = defineEndpoint({
   path: '/api/v1/travel/bookings',
   body: bookingBodySchema,
   response: z.object({ booking: bookingSchema }),
-});
+})
 
 /** Replaces every field. Owners, adults and members. */
 export const updateBooking = defineEndpoint({
@@ -192,7 +186,7 @@ export const updateBooking = defineEndpoint({
   params: bookingParamsSchema,
   body: bookingBodySchema,
   response: z.object({ booking: bookingSchema }),
-});
+})
 
 export const setBookingWatch = defineEndpoint({
   method: 'PUT',
@@ -200,7 +194,7 @@ export const setBookingWatch = defineEndpoint({
   params: bookingParamsSchema,
   body: z.object({ watchEnabled: z.boolean() }),
   response: z.object({ booking: bookingSchema }),
-});
+})
 
 /** Removes the booking with its price history and alerts. */
 export const deleteBooking = defineEndpoint({
@@ -208,4 +202,4 @@ export const deleteBooking = defineEndpoint({
   path: '/api/v1/travel/bookings/:bookingId',
   params: bookingParamsSchema,
   response: z.object({ bookingId: z.uuid() }),
-});
+})

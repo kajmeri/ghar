@@ -6,7 +6,7 @@ import type { RuleTester } from 'oxlint/plugins-dev'
 type Rule = Parameters<RuleTester['run']>[1]
 type Context = Parameters<NonNullable<Rule['create']>>[0]
 type Visitor = ReturnType<NonNullable<Rule['create']>>
-type Reported = Parameters<Context['report']>[0]['node']
+type Reported = NonNullable<Parameters<Context['report']>[0]['node']>
 
 interface Ban {
   /** Package names. One ending in `/`, `-` or `:` bans everything with that prefix. */
@@ -86,7 +86,18 @@ function allowOption(context: Context): string[] {
 
 /** core and contracts: nothing from Node, Next, React, @ghar/db or an SDK, and only allowlisted packages. */
 const isomorphicImports: Rule = {
-  meta: { type: 'problem', docs: { description: 'Keep isomorphic packages free of platform, server and SDK imports.' } },
+  meta: {
+    type: 'problem',
+    docs: { description: 'Keep isomorphic packages free of platform, server and SDK imports.' },
+    schema: [
+      {
+        type: 'object',
+        properties: { allow: { type: 'array', items: { type: 'string' } } },
+        required: ['allow'],
+        additionalProperties: false,
+      },
+    ],
+  },
   create(context) {
     const allow = allowOption(context)
     const unlisted = `Only ${allow.join(', ')} and relative imports are allowed here. Adding a dependency to core or contracts needs a reason (see CLAUDE.md).`

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod'
 
 /**
  * The wire vocabulary. Every value that crosses the API boundary is one of these, so a
@@ -13,18 +13,18 @@ import { z } from 'zod';
 export const calendarDateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a calendar date, YYYY-MM-DD')
-  .refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)), 'That date does not exist');
-export type CalendarDateString = z.infer<typeof calendarDateSchema>;
+  .refine(value => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)), 'That date does not exist')
+export type CalendarDateString = z.infer<typeof calendarDateSchema>
 
 /** Integer minor units. Never a float, never a decimal string. */
-export const centsSchema = z.int();
+export const centsSchema = z.int()
 
 /** An instant, UTC, ISO 8601. */
-export const instantSchema = z.iso.datetime();
+export const instantSchema = z.iso.datetime()
 
 /** Trimmed, non-empty, and bounded so a paste cannot fill a text column. */
-export const shortTextSchema = z.string().trim().min(1).max(200);
-export const longTextSchema = z.string().trim().max(4000);
+export const shortTextSchema = z.string().trim().min(1).max(200)
+export const longTextSchema = z.string().trim().max(4000)
 
 /**
  * Only http(s). A javascript: or data: URL never reaches the database, and never reaches
@@ -34,36 +34,29 @@ export const longTextSchema = z.string().trim().max(4000);
 export const httpUrlSchema = z
   .url({ protocol: /^https?$/ })
   .max(2000)
-  .refine((value) => /^https?:\/\//i.test(value), 'Links must start with http:// or https://');
+  .refine(value => /^https?:\/\//i.test(value), 'Links must start with http:// or https://')
 
-export const tripStatusSchema = z.enum(['idea', 'planned', 'booked', 'past']);
-export type TripStatusValue = z.infer<typeof tripStatusSchema>;
+export const tripStatusSchema = z.enum(['idea', 'planned', 'booked', 'past'])
+export type TripStatusValue = z.infer<typeof tripStatusSchema>
 
-export const itineraryKindSchema = z.enum([
-  'flight',
-  'lodging',
-  'activity',
-  'meal',
-  'transport',
-  'note',
-]);
-export type ItineraryKindValue = z.infer<typeof itineraryKindSchema>;
+export const itineraryKindSchema = z.enum(['flight', 'lodging', 'activity', 'meal', 'transport', 'note'])
+export type ItineraryKindValue = z.infer<typeof itineraryKindSchema>
 
-export const voteSchema = z.enum(['up', 'down']);
-export type VoteValue = z.infer<typeof voteSchema>;
+export const voteSchema = z.enum(['up', 'down'])
+export type VoteValue = z.infer<typeof voteSchema>
 
 /** Latitude and longitude travel together; one without the other is not a place. */
-export const latitudeSchema = z.number().min(-90).max(90);
-export const longitudeSchema = z.number().min(-180).max(180);
+export const latitudeSchema = z.number().min(-90).max(90)
+export const longitudeSchema = z.number().min(-180).max(180)
 
 /** A `{ tripId }` path. Every trip-scoped endpoint takes one. */
-export const tripParamsSchema = z.object({ tripId: z.uuid() });
+export const tripParamsSchema = z.object({ tripId: z.uuid() })
 
 /**
  * A boolean query param. It arrives as a string over the wire, but a typed client should
  * be able to pass a boolean, so both are accepted.
  */
-export const queryBooleanSchema = z.union([z.boolean(), z.stringbool()]);
+export const queryBooleanSchema = z.union([z.boolean(), z.stringbool()])
 
 /** Cursor-free paging. Household data is small; a limit is enough to bound a response. */
-export const limitSchema = z.coerce.number().int().min(1).max(200).default(50);
+export const limitSchema = z.coerce.number().int().min(1).max(200).default(50)

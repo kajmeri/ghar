@@ -1,6 +1,6 @@
-'use client';
+'use client'
 
-import { travelModeSchema, type TravelMode } from '@ghar/contracts';
+import { travelModeSchema, type TravelMode } from '@ghar/contracts'
 
 /**
  * Travel mode's offline copy.
@@ -13,33 +13,33 @@ import { travelModeSchema, type TravelMode } from '@ghar/contracts';
  * is thrown away rather than rendered, because a shape that half-matches is worse than no
  * cache at all.
  */
-const KEY = (tripId: string) => `ghar:travel-mode:${tripId}`;
+const KEY = (tripId: string) => `ghar:travel-mode:${tripId}`
 
 export function cacheTravelMode(mode: TravelMode): void {
   try {
-    localStorage.setItem(KEY(mode.trip.id), JSON.stringify(mode));
+    localStorage.setItem(KEY(mode.trip.id), JSON.stringify(mode))
   } catch {
     // A full or disabled store is not worth telling anyone about; the page still works.
   }
 }
 
 export function cachedTravelMode(tripId: string): TravelMode | null {
-  let raw: string | null = null;
+  let raw: string | null = null
   try {
-    raw = localStorage.getItem(KEY(tripId));
+    raw = localStorage.getItem(KEY(tripId))
   } catch {
-    return null;
+    return null
   }
-  if (raw === null) return null;
+  if (raw === null) return null
 
-  const parsed = travelModeSchema.safeParse(JSON.parse(raw) as unknown);
+  const parsed = travelModeSchema.safeParse(JSON.parse(raw) as unknown)
   if (!parsed.success) {
     try {
-      localStorage.removeItem(KEY(tripId));
+      localStorage.removeItem(KEY(tripId))
     } catch {
       // Nothing to do; the parse failure already means we will not use it.
     }
-    return null;
+    return null
   }
-  return parsed.data;
+  return parsed.data
 }

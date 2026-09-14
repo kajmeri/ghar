@@ -1,8 +1,8 @@
-'use client';
+'use client'
 
-import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
-import { errorMessage } from '@/lib/api/client';
+import { useRouter } from 'next/navigation'
+import { useState, useTransition } from 'react'
+import { errorMessage } from '@/lib/api/client'
 
 /**
  * One write, then re-read from the server.
@@ -12,28 +12,28 @@ import { errorMessage } from '@/lib/api/client';
  * A trip is edited by several people at once; optimistic state would lie about that.
  */
 export function useMutation<Args extends unknown[]>(run: (...args: Args) => Promise<unknown>) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
 
   const mutate = (...args: Args) => {
-    setError(null);
+    setError(null)
     startTransition(async () => {
       try {
-        await run(...args);
-        router.refresh();
+        await run(...args)
+        router.refresh()
       } catch (cause) {
-        setError(errorMessage(cause));
+        setError(errorMessage(cause))
       }
-    });
-  };
+    })
+  }
 
   return {
     mutate,
     pending,
     error,
     clearError: () => {
-      setError(null);
+      setError(null)
     },
-  };
+  }
 }

@@ -1,28 +1,28 @@
-import { UnauthorizedError } from '@ghar/core/errors';
-import { errorResponse } from '@/lib/api/errors';
-import { runCalendarSync } from '@/lib/calendar/sync';
-import { isCronRequest, runJob } from '@/lib/cron';
-import { openSecret } from '@/lib/crypto';
-import { getDb } from '@/lib/db';
-import { env } from '@/lib/env';
-import { getEmailProvider } from '@/lib/providers/email';
-import { getGoogleCalendarClient } from '@/lib/providers/google-calendar';
-import { getPriceProviders } from '@/lib/providers/prices';
-import { runPriceWatch } from '@/lib/travel/price-watch';
+import { UnauthorizedError } from '@ghar/core/errors'
+import { errorResponse } from '@/lib/api/errors'
+import { runCalendarSync } from '@/lib/calendar/sync'
+import { isCronRequest, runJob } from '@/lib/cron'
+import { openSecret } from '@/lib/crypto'
+import { getDb } from '@/lib/db'
+import { env } from '@/lib/env'
+import { getEmailProvider } from '@/lib/providers/email'
+import { getGoogleCalendarClient } from '@/lib/providers/google-calendar'
+import { getPriceProviders } from '@/lib/providers/prices'
+import { runPriceWatch } from '@/lib/travel/price-watch'
 
 // Vercel Cron calls this once a day (see apps/web/vercel.json). Each job writes a job_runs row,
 // and one failing never stops the next. Running it twice in a day stores another price check per
 // booking but never emails twice about the same drop: the alert floor sees to that. A second
 // calendar sync only asks Google for what changed since the first.
 
-export const maxDuration = 300;
+export const maxDuration = 300
 
 export async function GET(request: Request): Promise<Response> {
   if (!isCronRequest(request, env().CRON_SECRET)) {
-    return errorResponse(new UnauthorizedError('Missing or wrong cron secret.'), crypto.randomUUID());
+    return errorResponse(new UnauthorizedError('Missing or wrong cron secret.'), crypto.randomUUID())
   }
 
-  const db = getDb();
+  const db = getDb()
   const jobs = [
     await runJob(db, 'travel.price_watch', () =>
       runPriceWatch({
@@ -31,7 +31,7 @@ export async function GET(request: Request): Promise<Response> {
         email: getEmailProvider(),
         appUrl: env().APP_URL,
         now: new Date(),
-      }),
+      })
     ),
     await runJob(db, 'calendar.sync', () =>
       runCalendarSync({
@@ -39,10 +39,10 @@ export async function GET(request: Request): Promise<Response> {
         client: getGoogleCalendarClient,
         decrypt: openSecret,
         now: () => new Date(),
-      }),
+      })
     ),
-  ];
+  ]
 
-  const failed = jobs.some((job) => job.status === 'failed');
-  return Response.json({ jobs }, { status: failed ? 500 : 200 });
+  const failed = jobs.some(job => job.status === 'failed')
+  return Response.json({ jobs }, { status: failed ? 500 : 200 })
 }

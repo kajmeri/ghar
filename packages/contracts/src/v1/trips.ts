@@ -1,8 +1,8 @@
-import { z } from 'zod';
-import { householdRoleSchema } from '../context';
-import { defineEndpoint } from '../endpoint';
-import { itineraryItemSchema } from './itinerary';
-import { packingItemSchema } from './packing';
+import { z } from 'zod'
+import { householdRoleSchema } from '../context'
+import { defineEndpoint } from '../endpoint'
+import { itineraryItemSchema } from './itinerary'
+import { packingItemSchema } from './packing'
 import {
   calendarDateSchema,
   centsSchema,
@@ -12,8 +12,8 @@ import {
   shortTextSchema,
   tripParamsSchema,
   tripStatusSchema,
-} from './shared';
-import { bookingSchema } from './travel';
+} from './shared'
+import { bookingSchema } from './travel'
 
 /**
  * A person a trip can be assigned to. `displayName` is the name on their profile; null means
@@ -24,8 +24,8 @@ export const householdMemberSchema = z.object({
   userId: z.uuid(),
   displayName: z.string().nullable(),
   role: householdRoleSchema,
-});
-export type HouseholdMember = z.infer<typeof householdMemberSchema>;
+})
+export type HouseholdMember = z.infer<typeof householdMemberSchema>
 
 /**
  * A trip as it crosses the wire. Dates are a matched pair: both set once the trip has
@@ -45,8 +45,8 @@ export const tripSchema = z.object({
   memberUserIds: z.array(z.uuid()),
   createdAt: instantSchema,
   updatedAt: instantSchema,
-});
-export type Trip = z.infer<typeof tripSchema>;
+})
+export type Trip = z.infer<typeof tripSchema>
 
 /** A trip in a list: the trip, plus the counts a card shows without opening it. */
 export const tripSummarySchema = tripSchema.extend({
@@ -54,8 +54,8 @@ export const tripSummarySchema = tripSchema.extend({
   bookingCount: z.int().nonnegative(),
   packedCount: z.int().nonnegative(),
   packingItemCount: z.int().nonnegative(),
-});
-export type TripSummary = z.infer<typeof tripSummarySchema>;
+})
+export type TripSummary = z.infer<typeof tripSummarySchema>
 
 export const createTripBodySchema = z
   .object({
@@ -71,14 +71,8 @@ export const createTripBodySchema = z
     endsOn: calendarDateSchema.nullable().default(null),
   })
   // Dates are a matched pair, as on the table's check constraint.
-  .refine(
-    ({ startsOn, endsOn }) => (startsOn === null) === (endsOn === null),
-    'Give a trip both dates or neither',
-  )
-  .refine(
-    ({ startsOn, endsOn }) => startsOn === null || endsOn === null || endsOn >= startsOn,
-    'A trip cannot end before it starts',
-  );
+  .refine(({ startsOn, endsOn }) => (startsOn === null) === (endsOn === null), 'Give a trip both dates or neither')
+  .refine(({ startsOn, endsOn }) => startsOn === null || endsOn === null || endsOn >= startsOn, 'A trip cannot end before it starts')
 
 export const updateTripBodySchema = z
   .object({
@@ -92,21 +86,17 @@ export const updateTripBodySchema = z
     startsOn: calendarDateSchema.nullable().optional(),
     endsOn: calendarDateSchema.nullable().optional(),
   })
-  .refine((body) => Object.keys(body).length > 0, 'Send at least one field to change')
+  .refine(body => Object.keys(body).length > 0, 'Send at least one field to change')
   .refine(
     // Dates move together, so a patch that touches one must touch the other.
-    (body) => 'startsOn' in body === 'endsOn' in body,
-    'Change both dates together, or neither',
+    body => 'startsOn' in body === 'endsOn' in body,
+    'Change both dates together, or neither'
   )
+  .refine(({ startsOn, endsOn }) => startsOn == null || endsOn == null || endsOn >= startsOn, 'A trip cannot end before it starts')
   .refine(
-    ({ startsOn, endsOn }) => startsOn == null || endsOn == null || endsOn >= startsOn,
-    'A trip cannot end before it starts',
+    ({ startsOn, endsOn }) => startsOn === undefined || endsOn === undefined || (startsOn === null) === (endsOn === null),
+    'Give a trip both dates or neither'
   )
-  .refine(
-    ({ startsOn, endsOn }) =>
-      startsOn === undefined || endsOn === undefined || (startsOn === null) === (endsOn === null),
-    'Give a trip both dates or neither',
-  );
 
 /** What one trip's page needs, in one request. */
 export const tripDetailSchema = z.object({
@@ -122,8 +112,8 @@ export const tripDetailSchema = z.object({
   /** Raw budget inputs. Clients call tripBudget in @ghar/core to get the state. */
   actualCents: centsSchema,
   committedCents: centsSchema,
-});
-export type TripDetail = z.infer<typeof tripDetailSchema>;
+})
+export type TripDetail = z.infer<typeof tripDetailSchema>
 
 export const listTrips = defineEndpoint({
   method: 'GET',
@@ -138,21 +128,21 @@ export const listTrips = defineEndpoint({
     timeZone: z.string(),
     trips: z.array(tripSummarySchema),
   }),
-});
+})
 
 export const createTrip = defineEndpoint({
   method: 'POST',
   path: '/api/v1/trips',
   body: createTripBodySchema,
   response: z.object({ trip: tripSchema }),
-});
+})
 
 export const getTrip = defineEndpoint({
   method: 'GET',
   path: '/api/v1/trips/:tripId',
   params: tripParamsSchema,
   response: tripDetailSchema,
-});
+})
 
 export const updateTrip = defineEndpoint({
   method: 'PATCH',
@@ -160,14 +150,14 @@ export const updateTrip = defineEndpoint({
   params: tripParamsSchema,
   body: updateTripBodySchema,
   response: z.object({ trip: tripSchema }),
-});
+})
 
 export const deleteTrip = defineEndpoint({
   method: 'DELETE',
   path: '/api/v1/trips/:tripId',
   params: tripParamsSchema,
   response: z.object({ deleted: z.literal(true) }),
-});
+})
 
 /**
  * Filing a booking under a trip. `generateItineraryItem` is on by default because the
@@ -187,7 +177,7 @@ export const linkBookingToTrip = defineEndpoint({
     /** Null when the booking has no date to put it on, or generation was declined. */
     itineraryItemId: z.uuid().nullable(),
   }),
-});
+})
 
 /**
  * Taking a booking off a trip. The itinerary item generated from it goes too, because an
@@ -198,4 +188,4 @@ export const unlinkBookingFromTrip = defineEndpoint({
   path: '/api/v1/trips/:tripId/bookings/:bookingId',
   params: tripParamsSchema.extend({ bookingId: z.uuid() }),
   response: z.object({ booking: bookingSchema, removedItineraryItemCount: z.int().nonnegative() }),
-});
+})

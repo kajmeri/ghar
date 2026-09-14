@@ -1,38 +1,36 @@
-import { HOUSEHOLD_ROLES } from '@ghar/core/auth';
-import { describe, expect, it } from 'vitest';
-import { householdRoleSchema } from '../src/context';
-import { createHouseholdBodySchema } from '../src/v1/households';
-import { createInvitationBodySchema, invitableRoleSchema } from '../src/v1/invitations';
+import { HOUSEHOLD_ROLES } from '@ghar/core/auth'
+import { describe, expect, it } from 'vitest'
+import { householdRoleSchema } from '../src/context'
+import { createHouseholdBodySchema } from '../src/v1/households'
+import { createInvitationBodySchema, invitableRoleSchema } from '../src/v1/invitations'
 
 describe('household roles', () => {
   it('match the roles in @ghar/core, in order', () => {
-    expect(householdRoleSchema.options).toEqual([...HOUSEHOLD_ROLES]);
-  });
+    expect(householdRoleSchema.options).toEqual([...HOUSEHOLD_ROLES])
+  })
 
   it('cannot be invited as owner', () => {
-    expect(invitableRoleSchema.options).toEqual(['adult', 'member', 'viewer']);
-  });
-});
+    expect(invitableRoleSchema.options).toEqual(['adult', 'member', 'viewer'])
+  })
+})
 
 describe('request bodies', () => {
   it('normalize an invitation email', () => {
-    expect(createInvitationBodySchema.parse({ email: ' Sam@Example.com ', role: 'adult' })).toEqual(
-      {
-        email: 'sam@example.com',
-        role: 'adult',
-      },
-    );
-  });
+    expect(createInvitationBodySchema.parse({ email: ' Sam@Example.com ', role: 'adult' })).toEqual({
+      email: 'sam@example.com',
+      role: 'adult',
+    })
+  })
 
   it('refuse an owner invitation', () => {
-    expect(
-      createInvitationBodySchema.safeParse({ email: 'sam@example.com', role: 'owner' }).success,
-    ).toBe(false);
-  });
+    expect(createInvitationBodySchema.safeParse({ email: 'sam@example.com', role: 'owner' }).success).toBe(false)
+  })
 
   it('normalize household settings', () => {
-    expect(
-      createHouseholdBodySchema.parse({ name: ' Home ', timezone: 'UTC', currency: 'usd' }),
-    ).toEqual({ name: 'Home', timezone: 'UTC', currency: 'USD' });
-  });
-});
+    expect(createHouseholdBodySchema.parse({ name: ' Home ', timezone: 'UTC', currency: 'usd' })).toEqual({
+      name: 'Home',
+      timezone: 'UTC',
+      currency: 'USD',
+    })
+  })
+})

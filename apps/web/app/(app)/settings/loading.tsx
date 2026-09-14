@@ -1,15 +1,10 @@
-import {
-  CardSkeleton,
-  LoadingRegion,
-  PageHeaderSkeleton,
-  SectionHeaderSkeleton,
-} from '@/app/(app)/_components/ui/skeletons';
+import { CardSkeleton, LoadingRegion, PageHeaderSkeleton, SectionHeaderSkeleton } from '@/app/(app)/_components/ui/skeletons'
 
 export default function Loading() {
   return (
     <LoadingRegion>
       <PageHeaderSkeleton />
-      <div className="flex flex-col gap-8">
+      <div className='flex flex-col gap-8'>
         <div>
           <SectionHeaderSkeleton />
           <CardSkeleton />
@@ -20,5 +15,5 @@ export default function Loading() {
         </div>
       </div>
     </LoadingRegion>
-  );
+  )
 }

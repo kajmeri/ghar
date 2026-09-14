@@ -1,14 +1,12 @@
-import { colors } from '@ghar/tokens';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { colors } from '@ghar/tokens'
+import { Stack } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 
 export default function RootLayout() {
   return (
     <>
-      <StatusBar style="dark" />
-      <Stack
-        screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.paper } }}
-      />
+      <StatusBar style='dark' />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.paper } }} />
     </>
-  );
+  )
 }

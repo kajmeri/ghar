@@ -1,39 +1,31 @@
-import { join } from 'node:path';
-import { GENERATED_DIR, camelCase, loadTokens, writeGenerated, type Tokens } from './tokens.ts';
+import { join } from 'node:path'
+import { GENERATED_DIR, camelCase, loadTokens, writeGenerated, type Tokens } from './tokens.ts'
 
-const json = (value: unknown) => JSON.stringify(value, null, 2);
+const json = (value: unknown) => JSON.stringify(value, null, 2)
 
 /** A typed, `as const` object for React Native (and any TS that wants token values). */
 export function renderNativeTokens(tokens: Tokens): string {
-  const colorEntries = Object.entries(tokens.color);
-  const colors = Object.fromEntries(
-    colorEntries.map(([name, { value }]) => [camelCase(name), value]),
-  );
+  const colorEntries = Object.entries(tokens.color)
+  const colors = Object.fromEntries(colorEntries.map(([name, { value }]) => [camelCase(name), value]))
   const colorTokens = colorEntries.map(([name, { value, description }]) => ({
     name: camelCase(name),
     cssVariable: `--${name}`,
     value,
     description,
-  }));
+  }))
 
-  const fontWeight = Object.fromEntries(
-    Object.entries(tokens.font.weight).map(([name, weight]) => [camelCase(name), String(weight)]),
-  );
+  const fontWeight = Object.fromEntries(Object.entries(tokens.font.weight).map(([name, weight]) => [camelCase(name), String(weight)]))
 
   // React Native letterSpacing is in points, so -0.02em is resolved per size.
   const amount = Object.entries(tokens.typeScale).map(
     ([step, { fontSize, lineHeight }]) =>
-      `  ${JSON.stringify(step)}: { fontSize: ${fontSize}, lineHeight: ${lineHeight}, fontWeight: ${JSON.stringify(String(tokens.amount.fontWeight))}, letterSpacing: ${Number((tokens.amount.letterSpacingEm * fontSize).toFixed(3))}, fontVariant: tabularNums },`,
-  );
+      `  ${JSON.stringify(step)}: { fontSize: ${fontSize}, lineHeight: ${lineHeight}, fontWeight: ${JSON.stringify(String(tokens.amount.fontWeight))}, letterSpacing: ${Number((tokens.amount.letterSpacingEm * fontSize).toFixed(3))}, fontVariant: tabularNums },`
+  )
 
-  const radius = Object.fromEntries(
-    Object.entries(tokens.radius).map(([name, { value }]) => [camelCase(name), value]),
-  );
-  const space = Object.fromEntries(
-    tokens.space.steps.map((step) => [step, step * tokens.space.unit]),
-  );
-  const { overlay } = tokens.shadow;
-  const overlayColor = tokens.color[overlay.color]?.value;
+  const radius = Object.fromEntries(Object.entries(tokens.radius).map(([name, { value }]) => [camelCase(name), value]))
+  const space = Object.fromEntries(tokens.space.steps.map(step => [step, step * tokens.space.unit]))
+  const { overlay } = tokens.shadow
+  const overlayColor = tokens.color[overlay.color]?.value
 
   return [
     '// Generated from packages/tokens/tokens.json by scripts/build-native.ts. Do not edit.',
@@ -83,13 +75,13 @@ export function renderNativeTokens(tokens: Tokens): string {
     '/** Only in answer to a user action. Durations in milliseconds, easings as bezier points. */',
     `export const motion = ${json(tokens.motion)} as const;`,
     '',
-  ].join('\n');
+  ].join('\n')
 }
 
 export function buildNative(tokens = loadTokens()): boolean {
-  return writeGenerated(join(GENERATED_DIR, 'tokens.ts'), renderNativeTokens(tokens));
+  return writeGenerated(join(GENERATED_DIR, 'tokens.ts'), renderNativeTokens(tokens))
 }
 
 if (import.meta.main) {
-  console.log(buildNative() ? 'tokens: wrote tokens.ts' : 'tokens: tokens.ts up to date');
+  console.log(buildNative() ? 'tokens: wrote tokens.ts' : 'tokens: tokens.ts up to date')
 }

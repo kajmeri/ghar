@@ -5,9 +5,10 @@
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/packages/core/eslint.config.js",
-        "$TURBO_ROOT$/packages/contracts/eslint.config.js",
-        "$TURBO_ROOT$/apps/mobile/eslint.config.mjs"
+        "$TURBO_ROOT$/packages/core/oxlint.config.ts",
+        "$TURBO_ROOT$/packages/contracts/oxlint.config.ts",
+        "$TURBO_ROOT$/apps/mobile/oxlint.config.mts",
+        "$TURBO_ROOT$/apps/web/oxlint.config.ts"
       ]
     }
   }

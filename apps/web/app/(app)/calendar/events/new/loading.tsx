@@ -1,4 +1,4 @@
-import { CardSkeleton, LoadingRegion, PageHeaderSkeleton } from '@/app/(app)/_components/ui/skeletons';
+import { CardSkeleton, LoadingRegion, PageHeaderSkeleton } from '@/app/(app)/_components/ui/skeletons'
 
 export default function Loading() {
   return (
@@ -6,5 +6,5 @@ export default function Loading() {
       <PageHeaderSkeleton description={false} />
       <CardSkeleton lines={8} />
     </LoadingRegion>
-  );
+  )
 }

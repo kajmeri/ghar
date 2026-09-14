@@ -1,5 +1,5 @@
-import { z } from 'zod';
-import { defineEndpoint } from '../endpoint';
+import { z } from 'zod'
+import { defineEndpoint } from '../endpoint'
 import {
   calendarDateSchema,
   centsSchema,
@@ -11,7 +11,7 @@ import {
   longitudeSchema,
   shortTextSchema,
   tripParamsSchema,
-} from './shared';
+} from './shared'
 
 /**
  * One row on a day's timeline. `day` is what groups the timeline and is stored, not
@@ -37,14 +37,14 @@ export const itineraryItemSchema = z.object({
   url: z.string().nullable(),
   notes: z.string().nullable(),
   sortOrder: z.int(),
-});
-export type ItineraryItem = z.infer<typeof itineraryItemSchema>;
+})
+export type ItineraryItem = z.infer<typeof itineraryItemSchema>
 
 /** Coordinates arrive together or not at all; half a point cannot go on a map. */
 const coordinates = z.object({
   lat: latitudeSchema.nullable().default(null),
   lng: longitudeSchema.nullable().default(null),
-});
+})
 
 export const createItineraryItemBodySchema = coordinates
   .extend({
@@ -60,14 +60,8 @@ export const createItineraryItemBodySchema = coordinates
     url: httpUrlSchema.nullable().default(null),
     notes: longTextSchema.nullable().default(null),
   })
-  .refine(
-    ({ lat, lng }) => (lat === null) === (lng === null),
-    'Give both a latitude and a longitude',
-  )
-  .refine(
-    ({ startsAt, endsAt }) => startsAt === null || endsAt === null || endsAt >= startsAt,
-    'An item cannot end before it starts',
-  );
+  .refine(({ lat, lng }) => (lat === null) === (lng === null), 'Give both a latitude and a longitude')
+  .refine(({ startsAt, endsAt }) => startsAt === null || endsAt === null || endsAt >= startsAt, 'An item cannot end before it starts')
 
 export const updateItineraryItemBodySchema = z
   .object({
@@ -85,24 +79,18 @@ export const updateItineraryItemBodySchema = z
     url: httpUrlSchema.nullable().optional(),
     notes: longTextSchema.nullable().optional(),
   })
-  .refine((body) => Object.keys(body).length > 0, 'Send at least one field to change')
-  .refine(
-    ({ lat, lng }) => (lat === undefined) === (lng === undefined),
-    'Change a latitude and a longitude together',
-  )
-  .refine(
-    ({ startsAt, endsAt }) => startsAt == null || endsAt == null || endsAt >= startsAt,
-    'An item cannot end before it starts',
-  );
+  .refine(body => Object.keys(body).length > 0, 'Send at least one field to change')
+  .refine(({ lat, lng }) => (lat === undefined) === (lng === undefined), 'Change a latitude and a longitude together')
+  .refine(({ startsAt, endsAt }) => startsAt == null || endsAt == null || endsAt >= startsAt, 'An item cannot end before it starts')
 
-const itemParamsSchema = tripParamsSchema.extend({ itemId: z.uuid() });
+const itemParamsSchema = tripParamsSchema.extend({ itemId: z.uuid() })
 
 export const listItinerary = defineEndpoint({
   method: 'GET',
   path: '/api/v1/trips/:tripId/itinerary',
   params: tripParamsSchema,
   response: z.object({ items: z.array(itineraryItemSchema) }),
-});
+})
 
 export const createItineraryItem = defineEndpoint({
   method: 'POST',
@@ -110,7 +98,7 @@ export const createItineraryItem = defineEndpoint({
   params: tripParamsSchema,
   body: createItineraryItemBodySchema,
   response: z.object({ item: itineraryItemSchema }),
-});
+})
 
 export const updateItineraryItem = defineEndpoint({
   method: 'PATCH',
@@ -118,14 +106,14 @@ export const updateItineraryItem = defineEndpoint({
   params: itemParamsSchema,
   body: updateItineraryItemBodySchema,
   response: z.object({ item: itineraryItemSchema }),
-});
+})
 
 export const deleteItineraryItem = defineEndpoint({
   method: 'DELETE',
   path: '/api/v1/trips/:tripId/itinerary/:itemId',
   params: itemParamsSchema,
   response: z.object({ deleted: z.literal(true) }),
-});
+})
 
 /**
  * Both gestures land here: a drag on desktop sends the index it was dropped at, and the
@@ -143,7 +131,7 @@ export const reorderItineraryBodySchema = z.union([
     itemId: z.uuid(),
     direction: z.enum(['up', 'down']),
   }),
-]);
+])
 
 export const reorderItinerary = defineEndpoint({
   method: 'POST',
@@ -152,7 +140,7 @@ export const reorderItinerary = defineEndpoint({
   body: reorderItineraryBodySchema,
   // The whole trip's items come back, so a client never has to guess at the new order.
   response: z.object({ items: z.array(itineraryItemSchema) }),
-});
+})
 
 /**
  * Fills the timeline in from the trip's linked bookings. Idempotent: a booking that
@@ -172,4 +160,4 @@ export const generateItineraryFromBookings = defineEndpoint({
     /** Bookings with no date to put them on, and so nowhere to go on the timeline. */
     skippedBookingIds: z.array(z.uuid()),
   }),
-});
+})

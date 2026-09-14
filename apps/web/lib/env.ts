@@ -1,10 +1,10 @@
-import 'server-only';
-import { normalizeEmail } from '@ghar/core/invitations';
-import { z } from 'zod';
+import 'server-only'
+import { normalizeEmail } from '@ghar/core/invitations'
+import { z } from 'zod'
 
 // Blank lines in an .env file arrive as empty strings. Treat them as unset so defaults apply.
 function unset(value: unknown): unknown {
-  return typeof value === 'string' && value.trim() === '' ? undefined : value;
+  return typeof value === 'string' && value.trim() === '' ? undefined : value
 }
 
 const envSchema = z.object({
@@ -16,9 +16,7 @@ const envSchema = z.object({
   /** Only the seed script needs it. Never import it into request code. */
   SUPABASE_SECRET_KEY: z.preprocess(unset, z.string().min(1).optional()),
   /** Origin used in emailed links. No trailing slash. */
-  APP_URL: z
-    .preprocess(unset, z.url().default('http://localhost:3000'))
-    .transform((url) => url.replace(/\/+$/, '')),
+  APP_URL: z.preprocess(unset, z.url().default('http://localhost:3000')).transform(url => url.replace(/\/+$/, '')),
   /** Without it, emails print to the server console. Required in production. */
   RESEND_API_KEY: z.preprocess(unset, z.string().min(1).optional()),
   EMAIL_FROM: z.preprocess(unset, z.string().min(1).default('Ghar <onboarding@resend.dev>')),
@@ -27,13 +25,13 @@ const envSchema = z.object({
    * public signup: everyone else needs a pending invitation. Existing accounts always sign in.
    */
   SIGNUP_EMAILS: z.preprocess(unset, z.string().default('')).transform(
-    (value) =>
+    value =>
       new Set(
         value
           .split(',')
-          .map((email) => normalizeEmail(email))
-          .filter(Boolean),
-      ),
+          .map(email => normalizeEmail(email))
+          .filter(Boolean)
+      )
   ),
   /** Vercel Cron sends it as a bearer token. Cron routes refuse every request while it's unset. */
   CRON_SECRET: z.preprocess(unset, z.string().min(16).optional()),
@@ -56,25 +54,23 @@ const envSchema = z.object({
   CALENDAR_PROVIDER: z.preprocess(unset, z.enum(['fake', 'google']).default('fake')),
   GOOGLE_CLIENT_ID: z.preprocess(unset, z.string().min(1).optional()),
   GOOGLE_CLIENT_SECRET: z.preprocess(unset, z.string().min(1).optional()),
-});
+})
 
-export type Env = z.output<typeof envSchema>;
+export type Env = z.output<typeof envSchema>
 
-let cached: Env | undefined;
+let cached: Env | undefined
 
 /**
  * Validated server environment. Read lazily, so `next build` works without secrets. The error
  * names the variables that are wrong and never echoes their values.
  */
 export function env(): Env {
-  if (cached) return cached;
-  const result = envSchema.safeParse(process.env);
+  if (cached) return cached
+  const result = envSchema.safeParse(process.env)
   if (!result.success) {
-    const names = Array.from(new Set(result.error.issues.map((issue) => String(issue.path[0]))));
-    throw new Error(
-      `Missing or invalid environment variables: ${names.join(', ')}. See apps/web/.env.example.`,
-    );
+    const names = Array.from(new Set(result.error.issues.map(issue => String(issue.path[0]))))
+    throw new Error(`Missing or invalid environment variables: ${names.join(', ')}. See apps/web/.env.example.`)
   }
-  cached = result.data;
-  return cached;
+  cached = result.data
+  return cached
 }

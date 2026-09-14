@@ -1,5 +1,5 @@
-import { HOUSEHOLD_ROLES } from '@ghar/core/auth';
-import { BANK_ENVIRONMENTS, BANK_ITEM_STATUSES } from '@ghar/core/banking';
+import { HOUSEHOLD_ROLES } from '@ghar/core/auth'
+import { BANK_ENVIRONMENTS, BANK_ITEM_STATUSES } from '@ghar/core/banking'
 import {
   ATTENDEE_RESPONSES,
   CALENDAR_PROVIDERS,
@@ -11,7 +11,7 @@ import {
   LINK_DIRECTIONS,
   LINK_STATUSES,
   type EventColorToken,
-} from '@ghar/core/calendar';
+} from '@ghar/core/calendar'
 import {
   BUDGET_PERIOD_TYPES,
   CATEGORY_COLOR_TOKENS,
@@ -22,7 +22,7 @@ import {
   MAX_PLANNED_CENTS,
   type CategoryColorToken,
   type CategoryIcon,
-} from '@ghar/core/finances';
+} from '@ghar/core/finances'
 import {
   BOOKING_KINDS,
   BOOKING_SOURCES,
@@ -37,10 +37,10 @@ import {
   PROVIDER_NAME_MAX_LENGTH,
   RATE_PLANS,
   type Cabin,
-} from '@ghar/core/travel';
-import { ITINERARY_KINDS } from '@ghar/core/itinerary';
-import { TRIP_STATUSES } from '@ghar/core/trips';
-import { sql, type SQL } from 'drizzle-orm';
+} from '@ghar/core/travel'
+import { ITINERARY_KINDS } from '@ghar/core/itinerary'
+import { TRIP_STATUSES } from '@ghar/core/trips'
+import { sql, type SQL } from 'drizzle-orm'
 import {
   bigint,
   boolean,
@@ -62,46 +62,46 @@ import {
   uniqueIndex,
   uuid,
   type AnyPgColumn,
-} from 'drizzle-orm/pg-core';
-import { authUsers } from 'drizzle-orm/supabase';
+} from 'drizzle-orm/pg-core'
+import { authUsers } from 'drizzle-orm/supabase'
 
 // Row-level security policies are hand-written SQL at the end of the migration that creates
 // each table in packages/db/drizzle. Every table here has RLS enabled. No table has a write
 // policy: writes go through the data access layer on the server connection, never through
 // PostgREST.
 
-export const householdRole = pgEnum('household_role', HOUSEHOLD_ROLES);
-export const jobStatus = pgEnum('job_status', ['running', 'succeeded', 'failed']);
-export const bankEnvironment = pgEnum('bank_environment', BANK_ENVIRONMENTS);
-export const plaidItemStatus = pgEnum('plaid_item_status', BANK_ITEM_STATUSES);
-export const categoryKind = pgEnum('category_kind', CATEGORY_KINDS);
-export const categoryMatcherType = pgEnum('category_matcher_type', CATEGORY_MATCHER_TYPES);
-export const categorySource = pgEnum('category_source', CATEGORY_SOURCES);
-export const budgetPeriodType = pgEnum('budget_period_type', BUDGET_PERIOD_TYPES);
-export const bookingKind = pgEnum('booking_kind', BOOKING_KINDS);
-export const bookingStatus = pgEnum('booking_status', BOOKING_STATUSES);
-export const bookingRatePlan = pgEnum('booking_rate_plan', RATE_PLANS);
-export const bookingSource = pgEnum('booking_source', BOOKING_SOURCES);
-export const priceConfidence = pgEnum('price_confidence', PRICE_CONFIDENCES);
-export const eventCategory = pgEnum('event_category', EVENT_CATEGORIES);
-export const attendeeResponse = pgEnum('attendee_response', ATTENDEE_RESPONSES);
-export const calendarProvider = pgEnum('calendar_provider', CALENDAR_PROVIDERS);
-export const calendarLinkDirection = pgEnum('calendar_link_direction', LINK_DIRECTIONS);
-export const calendarLinkStatus = pgEnum('calendar_link_status', LINK_STATUSES);
-export const tripStatus = pgEnum('trip_status', TRIP_STATUSES);
-export const itineraryItemKind = pgEnum('itinerary_item_kind', ITINERARY_KINDS);
+export const householdRole = pgEnum('household_role', HOUSEHOLD_ROLES)
+export const jobStatus = pgEnum('job_status', ['running', 'succeeded', 'failed'])
+export const bankEnvironment = pgEnum('bank_environment', BANK_ENVIRONMENTS)
+export const plaidItemStatus = pgEnum('plaid_item_status', BANK_ITEM_STATUSES)
+export const categoryKind = pgEnum('category_kind', CATEGORY_KINDS)
+export const categoryMatcherType = pgEnum('category_matcher_type', CATEGORY_MATCHER_TYPES)
+export const categorySource = pgEnum('category_source', CATEGORY_SOURCES)
+export const budgetPeriodType = pgEnum('budget_period_type', BUDGET_PERIOD_TYPES)
+export const bookingKind = pgEnum('booking_kind', BOOKING_KINDS)
+export const bookingStatus = pgEnum('booking_status', BOOKING_STATUSES)
+export const bookingRatePlan = pgEnum('booking_rate_plan', RATE_PLANS)
+export const bookingSource = pgEnum('booking_source', BOOKING_SOURCES)
+export const priceConfidence = pgEnum('price_confidence', PRICE_CONFIDENCES)
+export const eventCategory = pgEnum('event_category', EVENT_CATEGORIES)
+export const attendeeResponse = pgEnum('attendee_response', ATTENDEE_RESPONSES)
+export const calendarProvider = pgEnum('calendar_provider', CALENDAR_PROVIDERS)
+export const calendarLinkDirection = pgEnum('calendar_link_direction', LINK_DIRECTIONS)
+export const calendarLinkStatus = pgEnum('calendar_link_status', LINK_STATUSES)
+export const tripStatus = pgEnum('trip_status', TRIP_STATUSES)
+export const itineraryItemKind = pgEnum('itinerary_item_kind', ITINERARY_KINDS)
 
-const timestamptz = () => timestamp({ withTimezone: true });
+const timestamptz = () => timestamp({ withTimezone: true })
 const metadata = () =>
   jsonb()
     .$type<Record<string, unknown>>()
     .notNull()
-    .default(sql`'{}'::jsonb`);
-const cents = () => bigint({ mode: 'number' });
+    .default(sql`'{}'::jsonb`)
+const cents = () => bigint({ mode: 'number' })
 
 /** `column in ('a', 'b')` for a fixed list from @ghar/core. Never for request input. */
 function inList(column: AnyPgColumn, values: readonly string[]): SQL {
-  return sql`${column} in (${sql.raw(values.map((value) => `'${value}'`).join(', '))})`;
+  return sql`${column} in (${sql.raw(values.map(value => `'${value}'`).join(', '))})`
 }
 
 export const households = pgTable(
@@ -115,11 +115,11 @@ export const households = pgTable(
     currency: char({ length: 3 }).notNull(),
     createdAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
+  table => [
     check('households_name_length', sql`char_length(${table.name}) between 1 and 80`),
     check('households_currency_code', sql`${table.currency} ~ '^[A-Z]{3}$'`),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 /** One per Supabase auth user. Email lives on auth.users and is read from there. */
 export const profiles = pgTable('profiles', {
@@ -129,7 +129,7 @@ export const profiles = pgTable('profiles', {
   fullName: text(),
   avatarUrl: text(),
   createdAt: timestamptz().notNull().defaultNow(),
-}).enableRLS();
+}).enableRLS()
 
 export const householdMembers = pgTable(
   'household_members',
@@ -143,12 +143,12 @@ export const householdMembers = pgTable(
     role: householdRole().notNull(),
     joinedAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
+  table => [
     primaryKey({ columns: [table.householdId, table.userId] }),
     // One household per person, so a session resolves to exactly one household.
     unique('household_members_user_id_unique').on(table.userId),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 export const invitations = pgTable(
   'invitations',
@@ -166,7 +166,7 @@ export const invitations = pgTable(
     invitedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
     createdAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
+  table => [
     unique('invitations_token_hash_unique').on(table.tokenHash),
     check('invitations_email_lowercase', sql`${table.email} = lower(${table.email})`),
     check('invitations_role_not_owner', sql`${table.role} <> 'owner'`),
@@ -174,8 +174,8 @@ export const invitations = pgTable(
     uniqueIndex('invitations_pending_email_unique')
       .on(table.householdId, table.email)
       .where(sql`${table.acceptedAt} is null`),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 export const auditLog = pgTable(
   'audit_log',
@@ -193,10 +193,8 @@ export const auditLog = pgTable(
     metadata: metadata(),
     createdAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
-    index('audit_log_household_created_idx').on(table.householdId, table.createdAt.desc()),
-  ],
-).enableRLS();
+  table => [index('audit_log_household_created_idx').on(table.householdId, table.createdAt.desc())]
+).enableRLS()
 
 /** One row per cron run. Not household-scoped, so no policy: only the server reads it. */
 export const jobRuns = pgTable(
@@ -210,8 +208,8 @@ export const jobRuns = pgTable(
     error: text(),
     metadata: metadata(),
   },
-  (table) => [index('job_runs_job_started_idx').on(table.jobName, table.startedAt.desc())],
-).enableRLS();
+  table => [index('job_runs_job_started_idx').on(table.jobName, table.startedAt.desc())]
+).enableRLS()
 
 /**
  * A household's categories, two levels deep. The default tree is created with the household.
@@ -237,11 +235,8 @@ export const categories = pgTable(
     isArchived: boolean().notNull().default(false),
     createdAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
-    uniqueIndex('categories_household_name_unique').on(
-      table.householdId,
-      sql`lower(${table.name})`,
-    ),
+  table => [
+    uniqueIndex('categories_household_name_unique').on(table.householdId, sql`lower(${table.name})`),
     uniqueIndex('categories_household_system_key_unique')
       .on(table.householdId, table.systemKey)
       .where(sql`${table.systemKey} is not null`),
@@ -249,8 +244,8 @@ export const categories = pgTable(
     check('categories_name_length', sql`char_length(${table.name}) between 1 and 40`),
     check('categories_not_own_parent', sql`${table.parentId} <> ${table.id}`),
     check('categories_color_token', inList(table.colorToken, CATEGORY_COLOR_TOKENS)),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 /** A household's own categorization rules. The first layer of the waterfall. */
 export const categoryRules = pgTable(
@@ -273,19 +268,15 @@ export const categoryRules = pgTable(
     hitCount: integer().notNull().default(0),
     createdAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
-    unique('category_rules_matcher_unique').on(
-      table.householdId,
-      table.matcherType,
-      table.matcherValue,
-    ),
+  table => [
+    unique('category_rules_matcher_unique').on(table.householdId, table.matcherType, table.matcherValue),
     index('category_rules_category_idx').on(table.categoryId),
     check(
       'category_rules_matcher_value_length',
-      sql`char_length(${table.matcherValue}) between 1 and ${sql.raw(String(MATCHER_VALUE_MAX_LENGTH))}`,
+      sql`char_length(${table.matcherValue}) between 1 and ${sql.raw(String(MATCHER_VALUE_MAX_LENGTH))}`
     ),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 /**
  * One per bank connection (a Plaid Item). Rows are never deleted: production Items are a
@@ -317,11 +308,8 @@ export const plaidItems = pgTable(
     errorCode: text(),
     createdAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
-    unique('plaid_items_plaid_item_id_unique').on(table.plaidItemId),
-    index('plaid_items_household_idx').on(table.householdId),
-  ],
-).enableRLS();
+  table => [unique('plaid_items_plaid_item_id_unique').on(table.plaidItemId), index('plaid_items_household_idx').on(table.householdId)]
+).enableRLS()
 
 export const accounts = pgTable(
   'accounts',
@@ -349,11 +337,11 @@ export const accounts = pgTable(
     balanceUpdatedAt: timestamptz(),
     createdAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
+  table => [
     unique('accounts_item_plaid_account_unique').on(table.plaidItemId, table.plaidAccountId),
     index('accounts_household_idx').on(table.householdId),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 export const transactions = pgTable(
   'transactions',
@@ -402,21 +390,14 @@ export const transactions = pgTable(
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
+  table => [
     unique('transactions_plaid_transaction_id_unique').on(table.plaidTransactionId),
     index('transactions_trip_idx')
       .on(table.tripId)
       .where(sql`${table.tripId} is not null`),
     // A bank row has both, a hand-entered one has neither.
-    check(
-      'transactions_manual_or_plaid',
-      sql`(${table.accountId} is null) = (${table.plaidTransactionId} is null)`,
-    ),
-    index('transactions_household_date_idx').on(
-      table.householdId,
-      table.date.desc(),
-      table.id.desc(),
-    ),
+    check('transactions_manual_or_plaid', sql`(${table.accountId} is null) = (${table.plaidTransactionId} is null)`),
+    index('transactions_household_date_idx').on(table.householdId, table.date.desc(), table.id.desc()),
     index('transactions_account_date_idx').on(table.accountId, table.date.desc()),
     // The review queue and rule backfills.
     index('transactions_household_uncategorized_idx')
@@ -424,16 +405,10 @@ export const transactions = pgTable(
       .where(sql`${table.categoryId} is null`),
     check('transactions_notes_length', sql`char_length(${table.notes}) <= 500`),
     check('transactions_category_confidence', sql`${table.categoryConfidence} between 0 and 100`),
-    check(
-      'transactions_category_has_source',
-      sql`${table.categoryId} is null or ${table.categorySource} is not null`,
-    ),
-    check(
-      'transactions_review_uncategorized',
-      sql`not (${table.needsReview} and ${table.categoryId} is not null)`,
-    ),
-  ],
-).enableRLS();
+    check('transactions_category_has_source', sql`${table.categoryId} is null or ${table.categorySource} is not null`),
+    check('transactions_review_uncategorized', sql`not (${table.needsReview} and ${table.categoryId} is not null)`),
+  ]
+).enableRLS()
 
 /** Who changed what on a transaction. Bank updates are not edits and never land here. */
 export const transactionEdits = pgTable(
@@ -449,14 +424,11 @@ export const transactionEdits = pgTable(
     newValue: text(),
     createdAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
+  table => [
     index('transaction_edits_transaction_idx').on(table.transactionId, table.createdAt.desc()),
-    check(
-      'transaction_edits_field',
-      sql`${table.field} in ('category_id', 'notes', 'is_excluded')`,
-    ),
-  ],
-).enableRLS();
+    check('transaction_edits_field', sql`${table.field} in ('category_id', 'notes', 'is_excluded')`),
+  ]
+).enableRLS()
 
 /**
  * A household's plan for one period. A closed month stores what it spent outside its lines, and
@@ -477,16 +449,16 @@ export const budgets = pgTable(
     uncategorizedCents: cents(),
     createdAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
+  table => [
     unique('budgets_household_period_unique').on(table.householdId, table.periodStart),
     check('budgets_period_start_first_day', sql`extract(day from ${table.periodStart}) = 1`),
     check(
       'budgets_closed_snapshot',
       sql`(${table.closedAt} is null) = (${table.unbudgetedCents} is null)
-        and (${table.closedAt} is null) = (${table.uncategorizedCents} is null)`,
+        and (${table.closedAt} is null) = (${table.uncategorizedCents} is null)`
     ),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 /** What a budget plans for one expense category, and a child category without its own line. */
 export const budgetLines = pgTable(
@@ -506,15 +478,12 @@ export const budgetLines = pgTable(
     /** Set when the month closes. */
     actualCents: cents(),
   },
-  (table) => [
+  table => [
     unique('budget_lines_budget_category_unique').on(table.budgetId, table.categoryId),
     index('budget_lines_category_idx').on(table.categoryId),
-    check(
-      'budget_lines_planned_cents',
-      sql`${table.plannedCents} between 0 and ${sql.raw(String(MAX_PLANNED_CENTS))}`,
-    ),
-  ],
-).enableRLS();
+    check('budget_lines_planned_cents', sql`${table.plannedCents} between 0 and ${sql.raw(String(MAX_PLANNED_CENTS))}`),
+  ]
+).enableRLS()
 
 export const goals = pgTable(
   'goals',
@@ -531,16 +500,13 @@ export const goals = pgTable(
     notes: text(),
     createdAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
+  table => [
     index('goals_household_idx').on(table.householdId),
     check('goals_name_length', sql`char_length(${table.name}) between 1 and 80`),
-    check(
-      'goals_target_cents',
-      sql`${table.targetCents} between 1 and ${sql.raw(String(MAX_PLANNED_CENTS))}`,
-    ),
+    check('goals_target_cents', sql`${table.targetCents} between 1 and ${sql.raw(String(MAX_PLANNED_CENTS))}`),
     check('goals_notes_length', sql`char_length(${table.notes}) <= 500`),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 /**
  * A flight, hotel stay or car rental. Which columns apply depends on the kind; validateBooking in
@@ -593,7 +559,7 @@ export const bookings = pgTable(
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
+  table => [
     index('bookings_household_idx').on(table.householdId),
     index('bookings_household_trip_idx').on(table.householdId, table.tripId),
     // The daily price watch.
@@ -603,19 +569,13 @@ export const bookings = pgTable(
     uniqueIndex('bookings_source_message_unique')
       .on(table.householdId, table.sourceMessageId)
       .where(sql`${table.sourceMessageId} is not null`),
-    check(
-      'bookings_travelers',
-      sql`${table.travelers} between 1 and ${sql.raw(String(MAX_TRAVELERS))}`,
-    ),
-    check(
-      'bookings_paid_cents',
-      sql`${table.paidCents} between 1 and ${sql.raw(String(MAX_BOOKING_CENTS))}`,
-    ),
+    check('bookings_travelers', sql`${table.travelers} between 1 and ${sql.raw(String(MAX_TRAVELERS))}`),
+    check('bookings_paid_cents', sql`${table.paidCents} between 1 and ${sql.raw(String(MAX_BOOKING_CENTS))}`),
     check('bookings_currency_code', sql`${table.currency} ~ '^[A-Z]{3}$'`),
     check('bookings_carrier_code', sql`${table.carrier} ~ '^[A-Z0-9]{2}$'`),
     check(
       'bookings_airport_codes',
-      sql`${table.kind} <> 'flight' or (${table.origin} ~ '^[A-Z]{3}$' and ${table.destination} ~ '^[A-Z]{3}$')`,
+      sql`${table.kind} <> 'flight' or (${table.origin} ~ '^[A-Z]{3}$' and ${table.destination} ~ '^[A-Z]{3}$')`
     ),
     check('bookings_cabin', inList(table.cabin, CABINS)),
     check(
@@ -624,7 +584,7 @@ export const bookings = pgTable(
         and char_length(${table.providerName}) <= ${sql.raw(String(PROVIDER_NAME_MAX_LENGTH))}
         and char_length(${table.propertyName}) <= ${sql.raw(String(PROPERTY_NAME_MAX_LENGTH))}
         and char_length(${table.origin}) <= ${sql.raw(String(PLACE_MAX_LENGTH))}
-        and char_length(${table.destination}) <= ${sql.raw(String(PLACE_MAX_LENGTH))}`,
+        and char_length(${table.destination}) <= ${sql.raw(String(PLACE_MAX_LENGTH))}`
     ),
     check(
       'bookings_flight_shape',
@@ -633,7 +593,7 @@ export const bookings = pgTable(
         and ${table.origin} is not null and ${table.destination} is not null
         and ${table.departAt} is not null and ${table.ratePlan} is null
         and ${table.checkIn} is null and ${table.checkOut} is null
-      )`,
+      )`
     ),
     check(
       'bookings_stay_shape',
@@ -642,20 +602,17 @@ export const bookings = pgTable(
         and ${table.checkOut} is not null and ${table.departAt} is null
         and ${table.returnAt} is null and ${table.carrier} is null and ${table.cabin} is null
         and ${table.refundable} = (${table.ratePlan} = 'refundable')
-      )`,
+      )`
     ),
-    check(
-      'bookings_hotel_property',
-      sql`${table.kind} <> 'hotel' or ${table.propertyName} is not null`,
-    ),
+    check('bookings_hotel_property', sql`${table.kind} <> 'hotel' or ${table.propertyName} is not null`),
     check('bookings_return_after_depart', sql`${table.returnAt} > ${table.departAt}`),
     check(
       'bookings_check_out_after_check_in',
       sql`case when ${table.kind} = 'hotel' then ${table.checkOut} > ${table.checkIn}
-        else ${table.checkOut} >= ${table.checkIn} end`,
+        else ${table.checkOut} >= ${table.checkIn} end`
     ),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 /**
  * The organizing layer above bookings. A trip starts as an idea with no dates, gains dates when
@@ -681,15 +638,15 @@ export const trips = pgTable(
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
+  table => [
     index('trips_household_starts_idx').on(table.householdId, table.startsOn),
     // Either both dates or neither, and never backwards.
     check(
       'trips_dates_valid',
-      sql`(${table.startsOn} is null) = (${table.endsOn} is null) and (${table.endsOn} is null or ${table.endsOn} >= ${table.startsOn})`,
+      sql`(${table.startsOn} is null) = (${table.endsOn} is null) and (${table.endsOn} is null or ${table.endsOn} >= ${table.startsOn})`
     ),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 /** Who is going. A household member not on this list still sees the trip. */
 export const tripMembers = pgTable(
@@ -703,11 +660,8 @@ export const tripMembers = pgTable(
       .references(() => profiles.id, { onDelete: 'cascade' }),
     createdAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
-    primaryKey({ columns: [table.tripId, table.userId] }),
-    index('trip_members_user_idx').on(table.userId),
-  ],
-).enableRLS();
+  table => [primaryKey({ columns: [table.tripId, table.userId] }), index('trip_members_user_idx').on(table.userId)]
+).enableRLS()
 
 /**
  * One row on a day's timeline. `day` is stored rather than derived from `startsAt`, so a note can
@@ -740,16 +694,16 @@ export const itineraryItems = pgTable(
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
+  table => [
     index('itinerary_items_trip_day_idx').on(table.tripId, table.day, table.sortOrder),
     // Generating from bookings twice must not duplicate. Every null bookingId is distinct, so
     // hand-written items are unaffected.
     uniqueIndex('itinerary_items_trip_booking_idx').on(table.tripId, table.bookingId),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 /** One vote per member, stored as a map so a second vote replaces the first. */
-export type IdeaVotes = Record<string, 'up' | 'down'>;
+export type IdeaVotes = Record<string, 'up' | 'down'>
 
 /** The idea board. Ideas belong to the household, not a trip; promoting one creates a trip. */
 export const tripIdeas = pgTable(
@@ -773,8 +727,8 @@ export const tripIdeas = pgTable(
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [index('trip_ideas_household_idx').on(table.householdId, table.createdAt)],
-).enableRLS();
+  table => [index('trip_ideas_household_idx').on(table.householdId, table.createdAt)]
+).enableRLS()
 
 /** One shared list per trip. An unassigned item is the household's to pick up. */
 export const packingItems = pgTable(
@@ -793,8 +747,8 @@ export const packingItems = pgTable(
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [index('packing_items_trip_idx').on(table.tripId, table.sortOrder)],
-).enableRLS();
+  table => [index('packing_items_trip_idx').on(table.tripId, table.sortOrder)]
+).enableRLS()
 
 /** A reusable list: "Beach week", "Carry-on only". Owned by the household, not a trip. */
 export const packingTemplates = pgTable(
@@ -808,8 +762,8 @@ export const packingTemplates = pgTable(
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [index('packing_templates_household_idx').on(table.householdId)],
-).enableRLS();
+  table => [index('packing_templates_household_idx').on(table.householdId)]
+).enableRLS()
 
 export const packingTemplateItems = pgTable(
   'packing_template_items',
@@ -822,8 +776,8 @@ export const packingTemplateItems = pgTable(
     category: text(),
     sortOrder: integer().notNull().default(0),
   },
-  (table) => [index('packing_template_items_template_idx').on(table.templateId, table.sortOrder)],
-).enableRLS();
+  table => [index('packing_template_items_template_idx').on(table.templateId, table.sortOrder)]
+).enableRLS()
 
 /** Every price the watch looked up, failures included. The price history chart reads these. */
 export const priceChecks = pgTable(
@@ -843,16 +797,16 @@ export const priceChecks = pgTable(
     /** Why a check failed, in our words. Never a vendor's response body. */
     error: text(),
   },
-  (table) => [
+  table => [
     index('price_checks_booking_checked_idx').on(table.bookingId, table.checkedAt.desc()),
     check(
       'price_checks_outcome',
       sql`(${table.success} and ${table.priceCents} > 0 and ${table.error} is null)
-        or (not ${table.success} and ${table.priceCents} is null and ${table.error} is not null)`,
+        or (not ${table.success} and ${table.priceCents} is null and ${table.error} is not null)`
     ),
     check('price_checks_error_length', sql`char_length(${table.error}) <= 500`),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 /**
  * A price-drop email that went out. Its floor is the price it reported: the next alert for the
@@ -871,12 +825,12 @@ export const priceAlerts = pgTable(
     deltaCents: cents().notNull(),
     floorCents: cents().notNull(),
   },
-  (table) => [
+  table => [
     index('price_alerts_booking_sent_idx').on(table.bookingId, table.sentAt.desc()),
     check('price_alerts_drop', sql`${table.deltaCents} < 0`),
     check('price_alerts_prices', sql`${table.priceCents} > 0 and ${table.floorCents} > 0`),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 /**
  * One person's connected calendar. OAuth is per person: each member links their own Google
@@ -913,12 +867,8 @@ export const calendarLinks = pgTable(
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
-    unique('calendar_links_user_calendar_unique').on(
-      table.userId,
-      table.provider,
-      table.calendarId,
-    ),
+  table => [
+    unique('calendar_links_user_calendar_unique').on(table.userId, table.provider, table.calendarId),
     index('calendar_links_household_idx').on(table.householdId),
     foreignKey({
       name: 'calendar_links_membership_fk',
@@ -926,8 +876,8 @@ export const calendarLinks = pgTable(
       foreignColumns: [householdMembers.householdId, householdMembers.userId],
     }).onDelete('cascade'),
     check('calendar_links_last_error_length', sql`char_length(${table.lastError}) <= 500`),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 /**
  * A native event, or one synced in from a linked calendar. Synced events carry the provider's id
@@ -968,7 +918,7 @@ export const events = pgTable(
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
-  (table) => [
+  table => [
     index('events_household_starts_idx').on(table.householdId, table.startsAt),
     // Repeating events are read by where they start alone; their end says nothing about later occurrences.
     index('events_household_recurring_idx')
@@ -978,14 +928,11 @@ export const events = pgTable(
     uniqueIndex('events_link_external_unique')
       .on(table.calendarLinkId, table.externalId)
       .where(sql`${table.externalId} is not null`),
-    check(
-      'events_title_length',
-      sql`char_length(${table.title}) between 1 and ${sql.raw(String(EVENT_TITLE_MAX_LENGTH))}`,
-    ),
+    check('events_title_length', sql`char_length(${table.title}) between 1 and ${sql.raw(String(EVENT_TITLE_MAX_LENGTH))}`),
     check(
       'events_text_lengths',
       sql`char_length(${table.description}) <= ${sql.raw(String(EVENT_DESCRIPTION_MAX_LENGTH))}
-        and char_length(${table.location}) <= ${sql.raw(String(EVENT_LOCATION_MAX_LENGTH))}`,
+        and char_length(${table.location}) <= ${sql.raw(String(EVENT_LOCATION_MAX_LENGTH))}`
     ),
     check('events_ends_after_starts', sql`${table.endsAt} >= ${table.startsAt}`),
     check(
@@ -994,7 +941,7 @@ export const events = pgTable(
         ${table.endsAt} > ${table.startsAt}
         and (${table.startsAt} at time zone 'UTC')::time = '00:00'
         and (${table.endsAt} at time zone 'UTC')::time = '00:00'
-      )`,
+      )`
     ),
     check('events_color_token', inList(table.colorToken, EVENT_COLOR_TOKENS)),
     check(
@@ -1007,10 +954,10 @@ export const events = pgTable(
         ${table.externalSource} is not null and ${table.externalId} is not null
         and ${table.externalCalendarId} is not null and ${table.calendarLinkId} is not null
         and ${table.lastSyncedAt} is not null and ${table.rrule} is null
-      )`,
+      )`
     ),
-  ],
-).enableRLS();
+  ]
+).enableRLS()
 
 /** Household members on a native event, and how each answered. */
 export const eventAttendees = pgTable(
@@ -1024,8 +971,5 @@ export const eventAttendees = pgTable(
       .references(() => profiles.id, { onDelete: 'cascade' }),
     response: attendeeResponse().notNull().default('needs_action'),
   },
-  (table) => [
-    primaryKey({ columns: [table.eventId, table.userId] }),
-    index('event_attendees_user_idx').on(table.userId),
-  ],
-).enableRLS();
+  table => [primaryKey({ columns: [table.eventId, table.userId] }), index('event_attendees_user_idx').on(table.userId)]
+).enableRLS()

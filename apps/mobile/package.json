@@ -11,7 +11,7 @@
     "dev": "expo start",
     "ios": "turbo run build --filter=@ghar/tokens --output-logs=errors-only && expo start --ios",
     "build": "expo export --platform ios --platform android --output-dir dist",
-    "lint": "eslint . && ghar-no-hex",
+    "lint": "oxlint && ghar-no-hex",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -35,9 +35,10 @@
     "@ghar/config": "workspace:*",
     "@types/node": "24.13.4",
     "@types/react": "19.2.18",
-    "eslint": "9.39.5",
     "typescript": "6.0.3",
     "vite": "^8.0.0",
-    "vitest": "5.0.0"
+    "vitest": "5.0.0",
+    "oxlint": "1.82.0",
+    "oxlint-tsgolint": "7.0.2001"
   }
 }

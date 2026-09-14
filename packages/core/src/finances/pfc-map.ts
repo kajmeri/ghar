@@ -1,4 +1,4 @@
-import type { DefaultCategoryKey } from './default-categories';
+import type { DefaultCategoryKey } from './default-categories'
 
 // Plaid's personal finance categories (PFC v1), mapped onto the default category tree by key.
 // A detailed code maps to the most specific category that fits. A primary code is the fallback
@@ -123,7 +123,7 @@ const DETAILED: Readonly<Record<string, DefaultCategoryKey>> = {
   RENT_AND_UTILITIES_TELEPHONE: 'internet_phone',
   RENT_AND_UTILITIES_WATER: 'utilities',
   RENT_AND_UTILITIES_OTHER_UTILITIES: 'utilities',
-};
+}
 
 const PRIMARY: Readonly<Record<string, DefaultCategoryKey>> = {
   INCOME: 'income',
@@ -142,36 +142,36 @@ const PRIMARY: Readonly<Record<string, DefaultCategoryKey>> = {
   TRANSPORTATION: 'transportation',
   TRAVEL: 'travel',
   RENT_AND_UTILITIES: 'home',
-};
+}
 
 // Maps, so a code like "constructor" can never find something on Object's prototype.
-const DETAILED_MAP = new Map(Object.entries(DETAILED));
-const PRIMARY_MAP = new Map(Object.entries(PRIMARY));
+const DETAILED_MAP = new Map(Object.entries(DETAILED))
+const PRIMARY_MAP = new Map(Object.entries(PRIMARY))
 
 /**
  * Plaid's confidence levels worth acting on. MEDIUM and below go to the next layer instead. A
  * transaction with no level at all (older data, the fake provider) is taken at its word.
  */
-const TRUSTED_CONFIDENCE = new Set(['VERY_HIGH', 'HIGH']);
+const TRUSTED_CONFIDENCE = new Set(['VERY_HIGH', 'HIGH'])
 
 export interface PfcFields {
-  plaidCategoryPrimary: string | null;
-  plaidCategoryDetailed: string | null;
-  plaidCategoryConfidence: string | null;
+  plaidCategoryPrimary: string | null
+  plaidCategoryDetailed: string | null
+  plaidCategoryConfidence: string | null
 }
 
 /** The default category Plaid's category points to, or null when it doesn't point anywhere firmly. */
 export function pfcCategoryKey(transaction: PfcFields): DefaultCategoryKey | null {
-  const confidence = transaction.plaidCategoryConfidence;
-  if (confidence !== null && !TRUSTED_CONFIDENCE.has(confidence)) return null;
-  const detailed = transaction.plaidCategoryDetailed;
+  const confidence = transaction.plaidCategoryConfidence
+  if (confidence !== null && !TRUSTED_CONFIDENCE.has(confidence)) return null
+  const detailed = transaction.plaidCategoryDetailed
   if (detailed !== null) {
-    const key = DETAILED_MAP.get(detailed);
-    if (key !== undefined) return key;
+    const key = DETAILED_MAP.get(detailed)
+    if (key !== undefined) return key
   }
-  const primary = transaction.plaidCategoryPrimary;
-  return primary === null ? null : (PRIMARY_MAP.get(primary) ?? null);
+  const primary = transaction.plaidCategoryPrimary
+  return primary === null ? null : (PRIMARY_MAP.get(primary) ?? null)
 }
 
 /** Every detailed code the map knows, for tests. */
-export const MAPPED_PFC_DETAILED_CODES: readonly string[] = [...DETAILED_MAP.keys()];
+export const MAPPED_PFC_DETAILED_CODES: readonly string[] = [...DETAILED_MAP.keys()]

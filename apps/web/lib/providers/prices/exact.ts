@@ -1,5 +1,5 @@
-import 'server-only';
-import { PriceLookupError, type PriceProvider } from './types';
+import 'server-only'
+import { PriceLookupError, type PriceProvider } from './types'
 
 /**
  * Tier 2 in production, until a live source is connected. Airlines, hotels and rental companies
@@ -11,7 +11,6 @@ export function createUnconnectedExactProvider(): PriceProvider {
     name: 'unconnected',
     confidence: 'exact',
     supports: () => true,
-    quote: () =>
-      Promise.reject(new PriceLookupError('Live price verification is not connected yet.')),
-  };
+    quote: () => Promise.reject(new PriceLookupError('Live price verification is not connected yet.')),
+  }
 }

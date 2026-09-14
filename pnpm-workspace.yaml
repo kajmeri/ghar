@@ -20,6 +20,3 @@ overrides:
 allowBuilds:
   # Verifies the platform binary that drizzle-kit and vite use.
   esbuild: true
-  # Native resolver for eslint-plugin-import-x. The prebuilt binding ships as an optional
-  # dependency, so its fallback download script is not needed.
-  unrs-resolver: false

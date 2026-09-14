@@ -1,8 +1,8 @@
-import { cva, type VariantProps } from 'class-variance-authority';
-import { Slot } from 'radix-ui';
-import type * as React from 'react';
+import { cva, type VariantProps } from 'class-variance-authority'
+import { Slot } from 'radix-ui'
+import type * as React from 'react'
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils'
 
 /**
  * shadcn/ui button, restyled for Ghar: ink primary, hairline outline, 8px radius, 44px tall.
@@ -29,8 +29,8 @@ const buttonVariants = cva(
       variant: 'default',
       size: 'default',
     },
-  },
-);
+  }
+)
 
 function Button({
   className,
@@ -40,19 +40,19 @@ function Button({
   ...props
 }: React.ComponentProps<'button'> &
   VariantProps<typeof buttonVariants> & {
-    asChild?: boolean;
+    asChild?: boolean
   }) {
-  const Comp = asChild ? Slot.Root : 'button';
+  const Comp = asChild ? Slot.Root : 'button'
 
   return (
     <Comp
-      data-slot="button"
+      data-slot='button'
       data-variant={variant}
       data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />
-  );
+  )
 }
 
-export { Button, buttonVariants };
+export { Button, buttonVariants }

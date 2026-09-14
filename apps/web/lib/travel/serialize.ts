@@ -1,4 +1,4 @@
-import 'server-only';
+import 'server-only'
 import type {
   Booking,
   HouseholdMember,
@@ -9,7 +9,7 @@ import type {
   TripIdea,
   TripSummary,
   TripTransaction,
-} from '@ghar/contracts';
+} from '@ghar/contracts'
 import type {
   BookingRow,
   ItineraryItemRow,
@@ -19,7 +19,7 @@ import type {
   TripIdeaRow,
   TripTransactionRow,
   TripWithCounts,
-} from '@ghar/db/queries';
+} from '@ghar/db/queries'
 
 /**
  * Rows in, contract shapes out. One direction, one place.
@@ -29,7 +29,7 @@ import type {
  * contract field drift apart, this file stops compiling.
  */
 
-const instant = (value: Date | null): string | null => value?.toISOString() ?? null;
+const instant = (value: Date | null): string | null => value?.toISOString() ?? null
 
 export function toTrip(row: TripWithCounts): Trip {
   return {
@@ -45,7 +45,7 @@ export function toTrip(row: TripWithCounts): Trip {
     memberUserIds: row.memberUserIds,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-  };
+  }
 }
 
 export function toTripSummary(row: TripWithCounts): TripSummary {
@@ -55,12 +55,12 @@ export function toTripSummary(row: TripWithCounts): TripSummary {
     bookingCount: row.bookingCount,
     packedCount: row.packedCount,
     packingItemCount: row.packingItemCount,
-  };
+  }
 }
 
 /** The name is the one on the person's profile. */
 export function toHouseholdMember(row: MemberRow): HouseholdMember {
-  return { userId: row.userId, displayName: row.fullName, role: row.role };
+  return { userId: row.userId, displayName: row.fullName, role: row.role }
 }
 
 export function toItineraryItem(row: ItineraryItemRow): ItineraryItem {
@@ -82,7 +82,7 @@ export function toItineraryItem(row: ItineraryItemRow): ItineraryItem {
     url: row.url,
     notes: row.notes,
     sortOrder: row.sortOrder,
-  };
+  }
 }
 
 export function toBooking(row: BookingRow): Booking {
@@ -111,7 +111,7 @@ export function toBooking(row: BookingRow): Booking {
     tripId: row.tripId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-  };
+  }
 }
 
 export function toPackingItem(row: PackingItemRow): PackingItem {
@@ -123,20 +123,20 @@ export function toPackingItem(row: PackingItemRow): PackingItem {
     isPacked: row.isPacked,
     category: row.category,
     sortOrder: row.sortOrder,
-  };
+  }
 }
 
 export function toPackingTemplate(row: PackingTemplateWithItems): PackingTemplate {
   return {
     id: row.id,
     name: row.name,
-    items: row.items.map((item) => ({
+    items: row.items.map(item => ({
       id: item.id,
       label: item.label,
       category: item.category,
       sortOrder: item.sortOrder,
     })),
-  };
+  }
 }
 
 export function toTripIdea(row: TripIdeaRow): TripIdea {
@@ -150,7 +150,7 @@ export function toTripIdea(row: TripIdeaRow): TripIdea {
     votes: row.votes,
     createdByUserId: row.createdByUserId,
     createdAt: row.createdAt.toISOString(),
-  };
+  }
 }
 
 export function toTripTransaction(row: TripTransactionRow): TripTransaction {
@@ -161,9 +161,8 @@ export function toTripTransaction(row: TripTransactionRow): TripTransaction {
     merchant: row.merchantName,
     amountCents: row.amountCents,
     tripId: row.tripId,
-  };
+  }
 }
 
 /** Contract instants are ISO strings; the columns behind them are timestamptz. */
-export const toDate = (value: string | null): Date | null =>
-  value === null ? null : new Date(value);
+export const toDate = (value: string | null): Date | null => (value === null ? null : new Date(value))
