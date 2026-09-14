@@ -62,8 +62,9 @@ async function main(): Promise<void> {
   try {
     const owner = await findOrCreateUser(supabase, env.SEED_OWNER_EMAIL)
     const adult = await findOrCreateUser(supabase, env.SEED_ADULT_EMAIL)
-    await queries.updateProfile(owner, db, { fullName: PEOPLE.owner.fullName })
-    await queries.updateProfile(adult, db, { fullName: PEOPLE.adult.fullName })
+    // Only the demo addresses get demo names. A real account seeded with SEED_OWNER_EMAIL keeps its own.
+    if (owner.email === PEOPLE.owner.defaultEmail) await queries.updateProfile(owner, db, { fullName: PEOPLE.owner.fullName })
+    if (adult.email === PEOPLE.adult.defaultEmail) await queries.updateProfile(adult, db, { fullName: PEOPLE.adult.fullName })
 
     const ctx = await ensureHousehold(db, owner)
     await ensureMember(db, ctx, adult, 'adult')
