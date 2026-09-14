@@ -1,5 +1,4 @@
 import 'server-only'
-import { normalizeEmail } from '@ghar/core/invitations'
 import { z } from 'zod'
 
 // Blank lines in an .env file arrive as empty strings. Treat them as unset so defaults apply.
@@ -24,19 +23,6 @@ const envSchema = z.object({
   /** Without it, emails print to the server console. Required in production. */
   RESEND_API_KEY: z.preprocess(unset, z.string().min(1).optional()),
   EMAIL_FROM: z.preprocess(unset, z.string().min(1).default('Ghar <onboarding@resend.dev>')),
-  /**
-   * Comma-separated addresses that may create an account without an invitation. Ghar has no
-   * public signup: everyone else needs a pending invitation. Existing accounts always sign in.
-   */
-  SIGNUP_EMAILS: z.preprocess(unset, z.string().default('')).transform(
-    value =>
-      new Set(
-        value
-          .split(',')
-          .map(email => normalizeEmail(email))
-          .filter(Boolean)
-      )
-  ),
   /** Vercel Cron sends it as a bearer token. Cron routes refuse every request while it's unset. */
   CRON_SECRET: z.preprocess(unset, z.string().min(16).optional()),
   /**

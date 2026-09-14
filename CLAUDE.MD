@@ -1,8 +1,8 @@
 # Ghar
 
 A private household operations app for one family. Finances, calendar, travel,
-documents, and home maintenance in one place. Not a SaaS product. No public signup,
-no billing, no marketing pages.
+documents, and home maintenance in one place. Not a SaaS product. Anyone can sign up
+with a magic link, but there is no billing and there are no marketing pages.
 
 ## Stack
 

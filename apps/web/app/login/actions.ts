@@ -14,6 +14,6 @@ export async function requestSignInLink(_previous: ActionState, formData: FormDa
   return runAction(formData, async () => {
     const { email, next } = parseForm(signInFormSchema, formData)
     await sendSignInLink({ email, next })
-    return `If ${email} can use Ghar, a sign-in link is on its way. It works on any device.`
+    return `A sign-in link is on its way to ${email}. It works on any device.`
   })
 }
