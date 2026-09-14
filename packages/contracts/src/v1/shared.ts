@@ -65,5 +65,11 @@ export const longitudeSchema = z.number().min(-180).max(180);
 /** A `{ tripId }` path. Every trip-scoped endpoint takes one. */
 export const tripParamsSchema = z.object({ tripId: z.uuid() });
 
+/**
+ * A boolean query param. It arrives as a string over the wire, but a typed client should
+ * be able to pass a boolean, so both are accepted.
+ */
+export const queryBooleanSchema = z.union([z.boolean(), z.stringbool()]);
+
 /** Cursor-free paging. Household data is small; a limit is enough to bound a response. */
 export const limitSchema = z.coerce.number().int().min(1).max(200).default(50);

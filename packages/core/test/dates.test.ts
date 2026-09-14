@@ -4,10 +4,12 @@ import {
   assertTimeZone,
   formatCalendarDate,
   formatInstant,
+  instantInTimeZone,
   isCalendarDate,
   startOfDayInTimeZone,
   toCalendarDate,
   todayInTimeZone,
+  wallClockTimeInTimeZone,
 } from '../src/dates';
 import { ValidationError } from '../src/errors';
 
@@ -91,5 +93,43 @@ describe('calendar dates', () => {
   it('formats without a zone', () => {
     expect(formatCalendarDate('2026-09-13')).toBe('Sep 13, 2026');
     expect(formatCalendarDate('2026-09-13', 'EEEE')).toBe('Sunday');
+  });
+});
+
+describe('instantInTimeZone', () => {
+  it('reads a wall-clock time as that zone, not as UTC', () => {
+    expect(instantInTimeZone('2026-03-03', '09:30', 'America/New_York').toISOString()).toBe(
+      '2026-03-03T14:30:00.000Z',
+    );
+    expect(instantInTimeZone('2026-03-03', '09:30', 'UTC').toISOString()).toBe(
+      '2026-03-03T09:30:00.000Z',
+    );
+  });
+
+  it('handles a time after the clocks go forward', () => {
+    // America/New_York moves to -04:00 at 02:00 on 2026-03-08.
+    expect(instantInTimeZone('2026-03-08', '10:00', 'America/New_York').toISOString()).toBe(
+      '2026-03-08T14:00:00.000Z',
+    );
+  });
+
+  it('takes the earlier instant when a local time happens twice', () => {
+    // America/New_York repeats 01:00-02:00 on 2026-11-01, first at -04:00.
+    expect(instantInTimeZone('2026-11-01', '01:30', 'America/New_York').toISOString()).toBe(
+      '2026-11-01T05:30:00.000Z',
+    );
+  });
+
+  it('rejects something that is not a time', () => {
+    expect(() => instantInTimeZone('2026-03-03', '9:30', 'UTC')).toThrow(ValidationError);
+    expect(() => instantInTimeZone('2026-03-03', '24:00', 'UTC')).toThrow(ValidationError);
+    expect(() => instantInTimeZone('2026-03-03', '10:61', 'UTC')).toThrow(ValidationError);
+  });
+});
+
+describe('wallClockTimeInTimeZone', () => {
+  it('round-trips a time back into a time input', () => {
+    const instant = instantInTimeZone('2026-03-03', '18:05', 'America/New_York');
+    expect(wallClockTimeInTimeZone(instant, 'America/New_York')).toBe('18:05');
   });
 });

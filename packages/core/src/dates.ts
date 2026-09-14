@@ -133,6 +133,54 @@ export function startOfDayInTimeZone(date: CalendarDate, timeZone: TimeZone): Da
   return new Date(onDate[0] ?? second);
 }
 
+const WALL_CLOCK_TIME = /^(\d{2}):(\d{2})$/;
+
+/**
+ * The UTC instant of a wall-clock time on a calendar date in a zone: what a person means
+ * when they type "9:30" into a form while planning a trip.
+ *
+ * On the two days a year a zone changes offset, a local time can be skipped or happen
+ * twice. As with startOfDayInTimeZone, the earliest instant that reads back as that time
+ * wins, and a time that does not exist at all resolves to the moment the clocks jumped.
+ */
+export function instantInTimeZone(
+  date: CalendarDate,
+  time: string,
+  timeZone: TimeZone,
+): Date {
+  const parts = WALL_CLOCK_TIME.exec(time);
+  const hour = Number(parts?.[1]);
+  const minute = Number(parts?.[2]);
+  if (!parts || hour > 23 || minute > 59) {
+    throw new ValidationError(`"${time}" is not a time of day (HH:MM)`, { details: { time } });
+  }
+  assertCalendarDate(date);
+
+  const wallClockAsUtc =
+    Date.UTC(
+      Number(date.slice(0, 4)),
+      Number(date.slice(5, 7)) - 1,
+      Number(date.slice(8, 10)),
+    ) +
+    hour * 3_600_000 +
+    minute * 60_000;
+
+  const first = wallClockAsUtc - zoneOffsetMs(new Date(wallClockAsUtc), timeZone);
+  const second = wallClockAsUtc - zoneOffsetMs(new Date(first), timeZone);
+  const candidates = [first, second].sort((a, b) => a - b);
+  const exact = candidates.find(
+    (candidate) => formatInstant(new Date(candidate), timeZone, WALL_CLOCK_FORMAT) === time,
+  );
+  return new Date(exact ?? candidates[1] ?? second);
+}
+
+const WALL_CLOCK_FORMAT = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' } as const;
+
+/** The "HH:MM" an instant reads as in a zone, for putting back into a time input. */
+export function wallClockTimeInTimeZone(instant: Date, timeZone: TimeZone): string {
+  return formatInstant(instant, timeZone, WALL_CLOCK_FORMAT);
+}
+
 export interface FormatInstantOptions extends Omit<Intl.DateTimeFormatOptions, 'timeZone'> {
   /** BCP 47 locale. Defaults to en-US. */
   locale?: string;

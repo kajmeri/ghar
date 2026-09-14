@@ -3,7 +3,13 @@ import { defineEndpoint } from '../endpoint';
 import { bookingSchema } from './bookings';
 import { tripIdeaSchema } from './ideas';
 import { itineraryItemSchema } from './itinerary';
-import { calendarDateSchema, centsSchema, instantSchema, tripParamsSchema } from './shared';
+import {
+  calendarDateSchema,
+  centsSchema,
+  instantSchema,
+  queryBooleanSchema,
+  tripParamsSchema,
+} from './shared';
 import { tripSchema, tripSummarySchema } from './trips';
 
 /**
@@ -92,7 +98,7 @@ export const listTransactions = defineEndpoint({
   query: z.object({
     tripId: z.uuid().optional(),
     /** Only what is not tagged to any trip yet. */
-    untagged: z.stringbool().optional(),
+    untagged: queryBooleanSchema.optional(),
     from: calendarDateSchema.optional(),
     to: calendarDateSchema.optional(),
     limit: z.coerce.number().int().min(1).max(200).default(50),
