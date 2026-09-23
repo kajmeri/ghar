@@ -1,12 +1,14 @@
 'use client'
 
 import { assetKindSchema, createAsset, updateAsset, type Asset } from '@ghar/contracts'
+import { DEFAULT_REMINDER_LEAD_DAYS } from '@ghar/core/expiries'
 import { ASSET_KINDS } from '@ghar/core/home'
 import { Pencil, Plus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useId, useState, type SyntheticEvent } from 'react'
 import { DateField } from '@/app/(app)/_components/ui/date-field'
 import { MoneyInput } from '@/app/(app)/_components/ui/money-input'
+import { ReminderLeadField, remindFromDaysOf } from '@/app/(app)/_components/ui/reminder-lead-field'
 import { Sheet, SheetClose } from '@/app/(app)/_components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/field'
@@ -69,6 +71,7 @@ export function AssetSheet({
       purchasedOn: formText(data, 'purchasedOn') || null,
       purchasePriceCents: price === '' ? null : Number(price),
       warrantyExpiresOn: formText(data, 'warrantyExpiresOn') || null,
+      warrantyRemindFromDays: remindFromDaysOf(data, 'warrantyRemindFromDays'),
       notes: formText(data, 'notes') || null,
     })
   }
@@ -151,6 +154,13 @@ export function AssetSheet({
             defaultValue={asset?.warrantyExpiresOn ?? undefined}
           />
         </div>
+
+        <ReminderLeadField
+          name='warrantyRemindFromDays'
+          value={asset?.warrantyRemindFromDays}
+          defaultLeadDays={DEFAULT_REMINDER_LEAD_DAYS}
+          hint='Before the warranty ends, when it has an end date. More emails follow as the date gets closer.'
+        />
 
         <MoneyInput
           id={`${formId}-price`}

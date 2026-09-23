@@ -24,6 +24,8 @@ export interface AssetInput {
   purchasedOn: CalendarDate | null
   purchasePriceCents: number | null
   warrantyExpiresOn: CalendarDate | null
+  /** Days before the warranty ends that reminders start. Null, or left out on create, for the default. */
+  warrantyRemindFromDays?: number | null
   location: string | null
   notes: string | null
 }
@@ -111,6 +113,7 @@ export interface WarrantyExpiryRow {
   id: string
   name: string
   warrantyExpiresOn: CalendarDate
+  warrantyRemindFromDays: number | null
   /** Someone said it won't be renewed, for this date. */
   notRenewing: boolean
 }
@@ -127,6 +130,7 @@ export async function listWarrantyExpiries(
       id: assets.id,
       name: assets.name,
       warrantyExpiresOn: assets.warrantyExpiresOn,
+      warrantyRemindFromDays: assets.warrantyRemindFromDays,
       notRenewing: notRenewingSql('warranty', assets.id, assets.warrantyExpiresOn),
     })
     .from(assets)

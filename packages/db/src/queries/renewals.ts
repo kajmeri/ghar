@@ -29,6 +29,8 @@ export interface RenewalInput {
   title: string
   kind: RenewalKind
   expiresOn: CalendarDate
+  /** Days before it runs out that reminders start. Null, or left out on create, for the default. */
+  remindFromDays?: number | null
   cadenceMonths: number | null
   autoRenews: boolean
   costCents: number | null
@@ -169,6 +171,7 @@ export interface RenewalExpiryRow {
   autoRenews: boolean
   costCents: number | null
   cadenceMonths: number | null
+  remindFromDays: number | null
   /** Someone said it won't be renewed, for this date. */
   notRenewing: boolean
 }
@@ -189,6 +192,7 @@ export async function listRenewalExpiries(
       autoRenews: renewals.autoRenews,
       costCents: renewals.costCents,
       cadenceMonths: renewals.cadenceMonths,
+      remindFromDays: renewals.remindFromDays,
       notRenewing: notRenewingSql('renewal', renewals.id, renewals.expiresOn),
     })
     .from(renewals)
@@ -198,7 +202,10 @@ export async function listRenewalExpiries(
 
 // The one list of everything that runs out.
 
-/** `notRenewing`: someone said it won't be renewed, for the date it has now. */
+/**
+ * `notRenewing`: someone said it won't be renewed, for the date it has now. `remindFromDays`: the
+ * lead time picked for it, or null for the default.
+ */
 export type ExpiryRow =
   | {
       kind: 'document'
@@ -207,9 +214,10 @@ export type ExpiryRow =
       expiresOn: CalendarDate
       issuedOn: CalendarDate | null
       documentKind: DocumentKind
+      remindFromDays: number | null
       notRenewing: boolean
     }
-  | { kind: 'warranty'; id: string; title: string; expiresOn: CalendarDate; notRenewing: boolean }
+  | { kind: 'warranty'; id: string; title: string; expiresOn: CalendarDate; remindFromDays: number | null; notRenewing: boolean }
   | {
       kind: 'renewal'
       id: string
@@ -219,6 +227,7 @@ export type ExpiryRow =
       autoRenews: boolean
       costCents: number | null
       cadenceMonths: number | null
+      remindFromDays: number | null
       notRenewing: boolean
     }
 
@@ -266,6 +275,7 @@ export async function listExpiriesPage(
         expiresOn: documents.expiresOn,
         issuedOn: documents.issuedOn,
         documentKind: documents.kind,
+        remindFromDays: documents.remindFromDays,
         notRenewing: notRenewingSql('document', documents.id, documents.expiresOn),
         pageKeys: pageKeys(documentExpiryOrder),
       })
@@ -287,6 +297,7 @@ export async function listExpiriesPage(
             id: assets.id,
             title: assets.name,
             expiresOn: assets.warrantyExpiresOn,
+            remindFromDays: assets.warrantyRemindFromDays,
             notRenewing: notRenewingSql('warranty', assets.id, assets.warrantyExpiresOn),
             pageKeys: pageKeys(warrantyExpiryOrder),
           })
@@ -311,6 +322,7 @@ export async function listExpiriesPage(
         autoRenews: renewals.autoRenews,
         costCents: renewals.costCents,
         cadenceMonths: renewals.cadenceMonths,
+        remindFromDays: renewals.remindFromDays,
         notRenewing: notRenewingSql('renewal', renewals.id, renewals.expiresOn),
         pageKeys: pageKeys(renewalExpiryOrder),
       })

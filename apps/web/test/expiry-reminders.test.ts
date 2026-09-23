@@ -1,7 +1,17 @@
 import type { PGlite } from '@electric-sql/pglite'
 import type { CalendarDate } from '@ghar/core/dates'
-import { documentStoragePath } from '@ghar/core/documents'
-import { createAsset, createDocument, createHousehold, createRenewal, getRenewal, type Db, type RequestContext } from '@ghar/db/queries'
+import { documentStoragePath, type DocumentKind } from '@ghar/core/documents'
+import {
+  createAsset,
+  createDocument,
+  createHousehold,
+  createRenewal,
+  getRenewal,
+  updateRenewal,
+  type Db,
+  type RenewalInput,
+  type RequestContext,
+} from '@ghar/db/queries'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
 import { runExpiryReminders } from '@/lib/documents/expiry-reminders'
@@ -31,12 +41,16 @@ async function household(): Promise<{ ctx: RequestContext; email: string }> {
   return { ctx: { userId, householdId: row.id, role: 'owner' }, email }
 }
 
-function addDocument(ctx: RequestContext, input: { title: string; expiresOn: CalendarDate; isSensitive?: boolean }) {
+function addDocument(
+  ctx: RequestContext,
+  input: { title: string; expiresOn: CalendarDate; kind?: DocumentKind; remindFromDays?: number | null; isSensitive?: boolean }
+) {
   return createDocument(ctx, db, {
     title: input.title,
-    kind: 'id',
+    kind: input.kind ?? 'insurance',
     issuedOn: null,
     expiresOn: input.expiresOn,
+    remindFromDays: input.remindFromDays ?? null,
     issuer: null,
     referenceNumber: 'X1234567',
     assetId: null,
@@ -90,7 +104,7 @@ describe('expiry reminders', () => {
 
   it('sends one reminder at 60, 30 and 7 days, and never twice', async () => {
     const { ctx, email } = await household()
-    const passport = await addDocument(ctx, { title: 'Passport', expiresOn: '2026-12-01' })
+    const passport = await addDocument(ctx, { title: 'Passport', kind: 'other', expiresOn: '2026-12-01' })
     const inbox = createMemoryProvider()
 
     await run(ctx, inbox, '2026-10-01')
@@ -104,6 +118,7 @@ describe('expiry reminders', () => {
     expect(reminder?.text).toContain(`https://ghar.test/documents/${passport.id}`)
     expect(reminder?.text).not.toContain('X1234567')
     expect(reminder?.html).not.toContain('X1234567')
+    expect(reminder?.text).toContain('Ghar sends a reminder 60, 30 and 7 days before')
 
     const again = await run(ctx, inbox, '2026-10-02')
     expect(again).toMatchObject({ reminded: 0, skipped: 1 })
@@ -121,6 +136,59 @@ describe('expiry reminders', () => {
     ])
   })
 
+  it('starts six months ahead for an ID, since those take longest to renew', async () => {
+    const { ctx } = await household()
+    await addDocument(ctx, { title: 'Passport', kind: 'id', expiresOn: '2027-03-31' })
+    const inbox = createMemoryProvider()
+
+    await run(ctx, inbox, '2026-10-01')
+    expect(inbox.sent).toHaveLength(0)
+    await run(ctx, inbox, '2026-10-02')
+    await run(ctx, inbox, '2027-01-30')
+    await run(ctx, inbox, '2027-03-01')
+    // 180 days out is five months and 29 days, and a reminder never rounds a date closer.
+    expect(inbox.sent.map(message => message.subject)).toEqual(['Passport expires in 5 months', 'Passport expires in 30 days'])
+    expect(inbox.sent[0]?.text).toContain('Ghar sends a reminder 6 months, 30 and 7 days before')
+  })
+
+  it('starts when the household asked for this one', async () => {
+    const { ctx } = await household()
+    const input: RenewalInput = {
+      title: 'Gym',
+      kind: 'membership',
+      expiresOn: '2026-11-20',
+      remindFromDays: 14,
+      cadenceMonths: null,
+      autoRenews: false,
+      costCents: null,
+      provider: null,
+      referenceNumber: null,
+      url: null,
+      contactId: null,
+      assetId: null,
+      documentId: null,
+      notes: null,
+    }
+    const gym = await createRenewal(ctx, db, input)
+    const inbox = createMemoryProvider()
+
+    // Nothing at 60 or 30 days out: the first one goes at 14.
+    await run(ctx, inbox, '2026-09-21')
+    await run(ctx, inbox, '2026-10-21')
+    await run(ctx, inbox, '2026-11-05')
+    expect(inbox.sent).toHaveLength(0)
+    await run(ctx, inbox, '2026-11-06')
+    expect(inbox.sent.map(message => message.subject)).toEqual(['Gym expires in 14 days'])
+    expect(inbox.sent[0]?.text).toContain('Ghar sends a reminder 14 and 7 days before')
+
+    // Moving it further out after that doesn't send the same news again.
+    await updateRenewal(ctx, db, gym.id, { ...input, remindFromDays: 90 })
+    await run(ctx, inbox, '2026-11-07')
+    expect(inbox.sent).toHaveLength(1)
+    await run(ctx, inbox, '2026-11-13')
+    expect(inbox.sent.map(message => message.subject)).toEqual(['Gym expires in 14 days', 'Gym expires in 7 days'])
+  })
+
   it('catches up a missed day with one reminder, not one per tier', async () => {
     const { ctx } = await household()
     await addDocument(ctx, { title: 'Car registration', expiresOn: '2026-10-20' })
@@ -133,7 +201,7 @@ describe('expiry reminders', () => {
 
   it('includes sensitive documents and warranties', async () => {
     const { ctx } = await household()
-    await addDocument(ctx, { title: 'Birth certificate', expiresOn: '2026-10-14', isSensitive: true })
+    await addDocument(ctx, { title: 'Birth certificate', kind: 'id', expiresOn: '2026-10-14', isSensitive: true })
     const dishwasher = await createAsset(ctx, db, {
       name: 'Dishwasher',
       kind: 'appliance',

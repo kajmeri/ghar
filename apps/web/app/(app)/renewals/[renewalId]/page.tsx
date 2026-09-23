@@ -2,6 +2,7 @@ import { renewalParamsSchema } from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
 import { formatCalendarDate, todayInTimeZone } from '@ghar/core/dates'
 import { expiryPhrase } from '@ghar/core/documents'
+import { reminderSchedulePhrase } from '@ghar/core/expiries'
 import { NotFoundError } from '@ghar/core/errors'
 import { formatCents } from '@ghar/core/money'
 import { nextTermEnd, renewalCadenceLabel, renewsPhrase } from '@ghar/core/renewals'
@@ -145,8 +146,8 @@ export default async function RenewalPage({ params }: PageProps<'/renewals/[rene
                 ? 'Marked not renewing, so no reminders go out and Ghar won’t move the date on when it passes.'
                 : 'Marked not renewing, so no reminders go out for this date.'
               : renewal.autoRenews
-                ? 'It renews on its own. Ghar moves the date on a term once it passes, and emails owners and adults 60, 30 and 7 days before, in case you want to cancel.'
-                : 'Ghar emails owners and adults 60, 30 and 7 days before it runs out. Once it’s renewed, tap Renew and the reminders start over.'}
+                ? `It renews on its own. Ghar moves the date on a term once it passes, and emails owners and adults ${reminderSchedulePhrase(renewal.reminderLeadDays)} before, in case you want to cancel.`
+                : `Ghar emails owners and adults ${reminderSchedulePhrase(renewal.reminderLeadDays)} before it runs out. Once it’s renewed, tap Renew and the reminders start over.`}
           </p>
           {canManage ? <ExpiryActions expiry={expiry} /> : null}
         </div>

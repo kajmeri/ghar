@@ -33,7 +33,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
         <EmptyState
           illustration={<DocumentIllustration />}
           title='Keep important papers where you can find them'
-          description='Take a photo of a passport, policy or warranty and add its expiry date. Ghar emails a reminder 60, 30 and 7 days before.'
+          description='Take a photo of a passport, policy or warranty and add its expiry date. Ghar emails reminders before it runs out, months ahead for a passport.'
           action={addButton}
         />
       ) : (

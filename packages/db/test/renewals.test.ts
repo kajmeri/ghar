@@ -237,4 +237,18 @@ describe('automatic renewals', () => {
     expect(await claimExpiryReminder(system, db, { subject: costco, thresholdDays: 30 })).toEqual(expect.any(String))
     expect(await claimExpiryReminder(system, db, { subject: costco, thresholdDays: 30 })).toBeNull()
   })
+
+  it('start reminding when the household asked, between a week and a year out', async () => {
+    const ctx = await makeHousehold('lead@example.com', 'Lead')
+    const system: SystemContext = { householdId: ctx.householdId, userId: null }
+    await createRenewal(ctx, db, renewal({ title: 'Gym', expiresOn: '2026-10-10', remindFromDays: 14 }))
+    await createRenewal(ctx, db, renewal({ title: 'Library card', expiresOn: '2026-10-11' }))
+    const subjects = await listExpiriesForReminders(system, db, { from: '2026-09-23', to: '2026-10-23' })
+    expect(subjects.map(s => [s.title, s.leadDays])).toEqual([
+      ['Gym', 14],
+      ['Library card', 60],
+    ])
+    await expect(createRenewal(ctx, db, renewal({ title: 'Too soon', expiresOn: '2026-10-10', remindFromDays: 6 }))).rejects.toThrow()
+    await expect(createRenewal(ctx, db, renewal({ title: 'Too far', expiresOn: '2026-10-10', remindFromDays: 366 }))).rejects.toThrow()
+  })
 })

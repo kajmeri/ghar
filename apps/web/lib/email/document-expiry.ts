@@ -1,6 +1,7 @@
 import 'server-only'
 import { formatCalendarDate, type CalendarDate } from '@ghar/core/dates'
 import { expiryPhrase } from '@ghar/core/documents'
+import { reminderSchedulePhrase } from '@ghar/core/expiries'
 import { renewsPhrase } from '@ghar/core/renewals'
 import { colors } from '@ghar/tokens'
 import type { EmailMessage } from '@/lib/providers/email'
@@ -14,6 +15,8 @@ export interface DocumentExpiryEmailInput {
     /** The document's title, the asset's name for a warranty, or the renewal's title. */
     title: string
     expiresOn: CalendarDate
+    /** Days ahead its reminders start. */
+    leadDays: number
     /** A renewal that renews on its own: the email is a heads-up, not a to-do. */
     autoRenews?: boolean
   }
@@ -40,10 +43,10 @@ export function documentExpiryEmail(input: DocumentExpiryEmailInput): EmailMessa
     : subject.kind === 'warranty'
       ? 'If anything about it isn’t working right, get it looked at while the warranty still covers it.'
       : subject.kind === 'renewal'
-        ? 'Renewals can take weeks, so it’s worth starting now. Once it’s renewed, update the date in Ghar and the reminders start over.'
-        : 'Renewals can take weeks, so it’s worth starting now. When the new one arrives, update the expiry date in Ghar and the reminders start over.'
+        ? 'Renewals can take weeks, so it’s worth starting now. Once it’s renewed, tap Renew in Ghar and the reminders start over.'
+        : 'Renewals can take weeks, so it’s worth starting now. When the new one arrives, tap Renew in Ghar and the reminders start over.'
   const linkLabel = { warranty: 'See the warranty in Ghar', document: 'See the document in Ghar', renewal: 'See the renewal in Ghar' }[subject.kind]
-  const footer = `You get this because you’re an owner or adult in ${input.householdName}. Ghar sends a reminder 60, 30 and 7 days before something expires.`
+  const footer = `You get this because you’re an owner or adult in ${input.householdName}. For this one, Ghar sends a reminder ${reminderSchedulePhrase(subject.leadDays)} before.`
 
   const text = [intro, '', nudge, '', `${linkLabel}: ${input.url}`, '', footer].join('\n')
 

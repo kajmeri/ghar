@@ -1,7 +1,7 @@
 import { BILL_CADENCES } from '@ghar/core/bills'
 import { DOCUMENT_KINDS, DOCUMENT_MIME_TYPES, MAX_DOCUMENT_BYTES } from '@ghar/core/documents'
 import { ASSET_KINDS } from '@ghar/core/home'
-import { EXPIRY_SUBJECT_KINDS } from '@ghar/core/expiries'
+import { EXPIRY_SUBJECT_KINDS, REMINDER_LEAD_DAYS_MAX, REMINDER_LEAD_DAYS_MIN } from '@ghar/core/expiries'
 import { MAX_RENEWAL_CADENCE_MONTHS, MAX_RENEWAL_CENTS, RENEWAL_KINDS } from '@ghar/core/renewals'
 import { describe, expect, it } from 'vitest'
 import { billBodySchema, billCadenceSchema } from '../src/v1/bills'
@@ -12,6 +12,8 @@ import {
   documentKindSchema,
   documentMimeTypeSchema,
   documentUploadBodySchema,
+  REMINDER_LEAD_MAX_DAYS,
+  REMINDER_LEAD_MIN_DAYS,
 } from '../src/v1/documents'
 import { assetKindSchema, completeMaintenanceBodySchema } from '../src/v1/home'
 import { expiryKindSchema, RENEWAL_MAX_CADENCE_MONTHS, RENEWAL_MAX_CENTS, renewalBodySchema, renewalKindSchema } from '../src/v1/renewals'
@@ -27,6 +29,7 @@ describe('household operations lists', () => {
     expect(expiryKindSchema.options).toEqual([...EXPIRY_SUBJECT_KINDS])
     expect(RENEWAL_MAX_CADENCE_MONTHS).toBe(MAX_RENEWAL_CADENCE_MONTHS)
     expect(RENEWAL_MAX_CENTS).toBe(MAX_RENEWAL_CENTS)
+    expect([REMINDER_LEAD_MIN_DAYS, REMINDER_LEAD_MAX_DAYS]).toEqual([REMINDER_LEAD_DAYS_MIN, REMINDER_LEAD_DAYS_MAX])
   })
 })
 
@@ -36,6 +39,7 @@ describe('renewal bodies', () => {
       title: 'Car registration',
       kind: 'other',
       expiresOn: '2027-03-31',
+      remindFromDays: null,
       cadenceMonths: null,
       autoRenews: false,
       costCents: null,
@@ -52,6 +56,10 @@ describe('renewal bodies', () => {
   it('needs a cadence for something that renews on its own', () => {
     expect(renewalBodySchema.safeParse({ title: 'Costco', expiresOn: '2027-03-31', autoRenews: true }).success).toBe(false)
     expect(renewalBodySchema.safeParse({ title: 'Costco', expiresOn: '2027-03-31', autoRenews: true, cadenceMonths: 12 }).success).toBe(true)
+    // Reminders start between a week and a year ahead.
+    expect(renewalBodySchema.safeParse({ title: 'Costco', expiresOn: '2027-03-31', remindFromDays: 6 }).success).toBe(false)
+    expect(renewalBodySchema.safeParse({ title: 'Costco', expiresOn: '2027-03-31', remindFromDays: 366 }).success).toBe(false)
+    expect(renewalBodySchema.safeParse({ title: 'Costco', expiresOn: '2027-03-31', remindFromDays: 180 }).success).toBe(true)
   })
 
   it('needs an expiry date and refuses a link that is not http', () => {
@@ -69,6 +77,7 @@ describe('document bodies', () => {
       kind: 'other',
       issuedOn: null,
       expiresOn: null,
+      remindFromDays: null,
       issuer: null,
       referenceNumber: null,
       assetId: null,

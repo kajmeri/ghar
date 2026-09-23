@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { NOT_RENEWING_ACTIONS, ONE_TAP_ACTIONS, ONE_TAP_PERMISSIONS, notRenewingKind, oneTapActionHasDate } from '../src/digest'
-import { EXPIRY_SUBJECT_KINDS, isExpirySubjectKind, renewalDateProblem, suggestedRenewalDate } from '../src/expiries'
+import {
+  EXPIRY_SUBJECT_KINDS,
+  REMINDER_LEAD_DAYS_OPTIONS,
+  isExpirySubjectKind,
+  isReminderLeadDays,
+  leadTimePhrase,
+  reminderLeadDays,
+  reminderSchedulePhrase,
+  reminderThreshold,
+  reminderTiers,
+  renewalDateProblem,
+  suggestedRenewalDate,
+} from '../src/expiries'
 
 describe('suggestedRenewalDate', () => {
   it('moves a renewal on by its cadence', () => {
@@ -53,5 +65,62 @@ describe('not renewing links', () => {
     expect(ONE_TAP_PERMISSIONS.not_renewing_warranty).toBe('home.manage')
     expect(ONE_TAP_PERMISSIONS.not_renewing_document).toBe('documents.manage')
     expect(ONE_TAP_PERMISSIONS.not_renewing_renewal).toBe('documents.manage')
+  })
+})
+
+describe('reminder lead time', () => {
+  const today = '2026-09-14'
+
+  it('starts months ahead for an ID and two months for anything else, unless someone picked', () => {
+    expect(reminderLeadDays({ kind: 'document', documentKind: 'id' }, null)).toBe(180)
+    expect(reminderLeadDays({ kind: 'document', documentKind: 'insurance' }, null)).toBe(60)
+    expect(reminderLeadDays({ kind: 'warranty' }, null)).toBe(60)
+    expect(reminderLeadDays({ kind: 'renewal', renewalKind: 'registration' }, null)).toBe(60)
+    expect(reminderLeadDays({ kind: 'document', documentKind: 'id' }, 30)).toBe(30)
+    expect(reminderLeadDays({ kind: 'renewal', renewalKind: 'lease' }, 90)).toBe(90)
+  })
+
+  it('reminds at the lead time, then 30 and 7 days before', () => {
+    expect(reminderTiers(180)).toEqual([180, 30, 7])
+    expect(reminderTiers(60)).toEqual([60, 30, 7])
+    expect(reminderTiers(30)).toEqual([30, 7])
+    expect(reminderTiers(14)).toEqual([14, 7])
+    expect(reminderTiers(7)).toEqual([7])
+  })
+
+  it('picks the tightest tier crossed', () => {
+    expect(reminderThreshold('2026-11-14', today, 60)).toBeNull()
+    expect(reminderThreshold('2026-11-13', today, 60)).toBe(60)
+    expect(reminderThreshold('2026-10-14', today, 60)).toBe(30)
+    // A missed run on day 30 still finds the 30-day tier on day 25.
+    expect(reminderThreshold('2026-10-09', today, 60)).toBe(30)
+    expect(reminderThreshold('2026-09-21', today, 60)).toBe(7)
+    expect(reminderThreshold('2026-09-14', today, 60)).toBe(7)
+    expect(reminderThreshold('2026-09-13', today, 60)).toBeNull()
+    // A passport six months out, and not a day before.
+    expect(reminderThreshold('2027-03-13', today, 180)).toBe(180)
+    expect(reminderThreshold('2027-03-14', today, 180)).toBeNull()
+    expect(reminderThreshold('2026-11-13', today, 180)).toBe(180)
+    expect(reminderThreshold('2026-10-14', today, 180)).toBe(30)
+  })
+
+  it('takes a week to a year, in whole days', () => {
+    for (const days of REMINDER_LEAD_DAYS_OPTIONS) expect(isReminderLeadDays(days)).toBe(true)
+    expect(isReminderLeadDays(7)).toBe(true)
+    expect(isReminderLeadDays(6)).toBe(false)
+    expect(isReminderLeadDays(366)).toBe(false)
+    expect(isReminderLeadDays(30.5)).toBe(false)
+  })
+
+  it('says it plainly', () => {
+    expect(REMINDER_LEAD_DAYS_OPTIONS.map(leadTimePhrase)).toEqual(['2 weeks', '1 month', '2 months', '3 months', '6 months', '1 year'])
+    expect(leadTimePhrase(7)).toBe('1 week')
+    expect(leadTimePhrase(45)).toBe('45 days')
+    expect(reminderSchedulePhrase(60)).toBe('60, 30 and 7 days')
+    expect(reminderSchedulePhrase(180)).toBe('6 months, 30 and 7 days')
+    expect(reminderSchedulePhrase(365)).toBe('1 year, 30 and 7 days')
+    expect(reminderSchedulePhrase(45)).toBe('45, 30 and 7 days')
+    expect(reminderSchedulePhrase(14)).toBe('14 and 7 days')
+    expect(reminderSchedulePhrase(7)).toBe('7 days')
   })
 })

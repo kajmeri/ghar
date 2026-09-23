@@ -368,6 +368,8 @@ describe('expiry reminders', () => {
     const system: SystemContext = { householdId: owner.householdId, userId: null }
     const subjects = await listExpiriesForReminders(system, db, { from: today, to: '2026-11-13' })
     expect(subjects.map(s => `${s.kind}:${s.title}`)).toEqual(['warranty:Water heater', 'document:Passport', 'document:Home insurance'])
+    // An ID's reminders start six months out, everything else's two.
+    expect(subjects.map(s => s.leadDays)).toEqual([60, 180, 60])
     expect(await listExpiriesForReminders({ householdId: other.householdId, userId: null }, db, { from: today, to: '2026-09-30' })).toEqual([])
 
     const [heater] = subjects
@@ -375,11 +377,13 @@ describe('expiry reminders', () => {
     const claim = await claimExpiryReminder(system, db, { subject: heater, thresholdDays: 30 })
     expect(claim).toEqual(expect.any(String))
     expect(await claimExpiryReminder(system, db, { subject: heater, thresholdDays: 30 })).toBeNull()
-    expect(await claimExpiryReminder(system, db, { subject: heater, thresholdDays: 60 })).toEqual(expect.any(String))
+    // Once a closer reminder went, a farther one isn't news, as when the lead time was moved out.
+    expect(await claimExpiryReminder(system, db, { subject: heater, thresholdDays: 60 })).toBeNull()
+    expect(await claimExpiryReminder(system, db, { subject: heater, thresholdDays: 7 })).toEqual(expect.any(String))
 
     if (claim === null) throw new Error('expected a claim')
     await releaseExpiryReminder(system, db, claim)
-    expect(await claimExpiryReminder(system, db, { subject: heater, thresholdDays: 30 })).toEqual(expect.any(String))
+    expect(await claimExpiryReminder(system, db, { subject: heater, thresholdDays: 30 })).toBeNull()
 
     // A renewed warranty starts its reminders over.
     expect(await claimExpiryReminder(system, db, { subject: { ...heater, expiresOn: '2027-10-02' }, thresholdDays: 30 })).toEqual(

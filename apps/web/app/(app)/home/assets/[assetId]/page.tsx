@@ -2,6 +2,7 @@ import { assetParamsSchema } from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
 import { formatCalendarDate, todayInTimeZone } from '@ghar/core/dates'
 import { expiryPhrase } from '@ghar/core/documents'
+import { reminderSchedulePhrase } from '@ghar/core/expiries'
 import { NotFoundError } from '@ghar/core/errors'
 import { formatCents } from '@ghar/core/money'
 import { FileText, Lock } from 'lucide-react'
@@ -112,6 +113,10 @@ export default async function AssetPage({ params }: PageProps<'/home/assets/[ass
           </dl>
           {expiry?.notRenewing ? (
             <p className='text-sm text-ink-muted'>Marked not extending, so no reminders go out before the warranty ends.</p>
+          ) : expiry && asset.warrantyState !== 'expired' ? (
+            <p className='text-sm text-ink-muted'>
+              A reminder email goes out {reminderSchedulePhrase(asset.warrantyReminderLeadDays)} before the warranty ends.
+            </p>
           ) : null}
           {expiry && canManage ? <ExpiryActions expiry={expiry} /> : null}
         </div>

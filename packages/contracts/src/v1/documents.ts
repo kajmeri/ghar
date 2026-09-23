@@ -10,6 +10,17 @@ export type DocumentMimeTypeValue = z.infer<typeof documentMimeTypeSchema>
 export const expiryStateSchema = z.enum(['expired', 'expiring', 'current'])
 export type ExpiryStateValue = z.infer<typeof expiryStateSchema>
 
+/** REMINDER_LEAD_DAYS_MIN and _MAX in @ghar/core/expiries. */
+export const REMINDER_LEAD_MIN_DAYS = 7
+export const REMINDER_LEAD_MAX_DAYS = 365
+/**
+ * How many days before it runs out reminders start, as picked for this one thing. Null for the
+ * default: six months for an ID document, two months for anything else.
+ */
+export const remindFromDaysSchema = z.int().min(REMINDER_LEAD_MIN_DAYS).max(REMINDER_LEAD_MAX_DAYS).nullable()
+/** The lead time in effect: the one picked, or the default. Reminders go out then, and 30 and 7 days before. */
+export const reminderLeadDaysSchema = z.int()
+
 /** MAX_DOCUMENT_BYTES in @ghar/core/documents. */
 export const DOCUMENT_MAX_BYTES = 20 * 1024 * 1024
 
@@ -23,6 +34,8 @@ export const documentSchema = z.object({
   expiresOn: calendarDateSchema.nullable(),
   /** Null when it doesn't expire. */
   expiryState: expiryStateSchema.nullable(),
+  remindFromDays: remindFromDaysSchema,
+  reminderLeadDays: reminderLeadDaysSchema,
   issuer: z.string().nullable(),
   referenceNumber: z.string().nullable(),
   assetId: z.uuid().nullable(),
@@ -43,6 +56,7 @@ const documentFieldsSchema = z.object({
   kind: documentKindSchema.default('other'),
   issuedOn: calendarDateSchema.nullable().default(null),
   expiresOn: calendarDateSchema.nullable().default(null),
+  remindFromDays: remindFromDaysSchema.default(null),
   issuer: shortTextSchema.nullable().default(null),
   referenceNumber: shortTextSchema.nullable().default(null),
   assetId: z.uuid().nullable().default(null),

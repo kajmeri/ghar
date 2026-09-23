@@ -1,12 +1,14 @@
 'use client'
 
 import { createRenewal, renewalKindSchema, updateRenewal, type Renewal } from '@ghar/contracts'
+import { DEFAULT_REMINDER_LEAD_DAYS } from '@ghar/core/expiries'
 import { renewalCadenceLabel } from '@ghar/core/renewals'
 import { Pencil, Plus } from 'lucide-react'
 import { useId, useState, type SyntheticEvent } from 'react'
 import { CheckboxField } from '@/app/(app)/_components/ui/checkbox-field'
 import { DateField } from '@/app/(app)/_components/ui/date-field'
 import { MoneyInput } from '@/app/(app)/_components/ui/money-input'
+import { ReminderLeadField, remindFromDaysOf } from '@/app/(app)/_components/ui/reminder-lead-field'
 import { Sheet, SheetClose } from '@/app/(app)/_components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/field'
@@ -62,6 +64,7 @@ export function RenewalSheet({ renewal, options, currency }: { renewal?: Renewal
       title: formText(data, 'title'),
       kind: kind.success ? kind.data : 'other',
       expiresOn: formText(data, 'expiresOn'),
+      remindFromDays: remindFromDaysOf(data),
       cadenceMonths: cadence === '' ? null : Number(cadence),
       autoRenews: data.get('autoRenews') === 'on',
       costCents: cost === '' ? null : Number(cost),
@@ -149,6 +152,8 @@ export function RenewalSheet({ renewal, options, currency }: { renewal?: Renewal
             ))}
           </NativeSelect>
         </Field>
+
+        <ReminderLeadField value={renewal?.remindFromDays} defaultLeadDays={DEFAULT_REMINDER_LEAD_DAYS} />
 
         <MoneyInput
           id={`${formId}-cost`}

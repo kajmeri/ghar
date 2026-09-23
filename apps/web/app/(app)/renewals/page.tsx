@@ -39,7 +39,7 @@ export default async function RenewalsPage({ searchParams }: PageProps<'/renewal
       description: showOlder ? undefined : 'In the past year',
       rows: live.filter(expiry => expiry.state === 'expired').toReversed(),
     },
-    { id: 'soon', title: 'Coming up', description: 'In the next 60 days', rows: live.filter(expiry => expiry.state === 'expiring') },
+    { id: 'soon', title: 'Coming up', description: 'Close enough that reminders have started', rows: live.filter(expiry => expiry.state === 'expiring') },
     { id: 'later', title: 'Later', rows: live.filter(expiry => expiry.state === 'current') },
     {
       id: 'not-renewing',
@@ -76,7 +76,7 @@ export default async function RenewalsPage({ searchParams }: PageProps<'/renewal
         <EmptyState
           illustration={<ChecklistIllustration />}
           title='Never get caught by a lapsed registration'
-          description='Add the car registration, the driver’s licenses and the memberships your household renews. Ghar emails a reminder 60, 30 and 7 days before each one runs out. Documents with an expiry date and warranties show up here too.'
+          description='Add the car registration, the driver’s licenses and the memberships your household renews. Ghar emails reminders as each one gets close, months ahead for a passport. Documents with an expiry date and warranties show up here too.'
           action={addButton}
         />
       ) : (

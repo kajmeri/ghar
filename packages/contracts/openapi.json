@@ -12887,6 +12887,12 @@
               }
             ]
           },
+          "warrantyRemindFromDays": {
+            "$ref": "#/components/schemas/RemindFromDays"
+          },
+          "warrantyReminderLeadDays": {
+            "$ref": "#/components/schemas/ReminderLeadDays"
+          },
           "location": {
             "type": [
               "string",
@@ -12917,6 +12923,8 @@
           "purchasePriceCents",
           "warrantyExpiresOn",
           "warrantyState",
+          "warrantyRemindFromDays",
+          "warrantyReminderLeadDays",
           "location",
           "notes",
           "createdAt",
@@ -13009,6 +13017,10 @@
                 "type": "null"
               }
             ]
+          },
+          "warrantyRemindFromDays": {
+            "default": null,
+            "$ref": "#/components/schemas/RemindFromDays"
           },
           "location": {
             "default": null,
@@ -13121,6 +13133,12 @@
               }
             ]
           },
+          "warrantyRemindFromDays": {
+            "$ref": "#/components/schemas/RemindFromDays"
+          },
+          "warrantyReminderLeadDays": {
+            "$ref": "#/components/schemas/ReminderLeadDays"
+          },
           "location": {
             "type": [
               "string",
@@ -13194,6 +13212,8 @@
           "purchasePriceCents",
           "warrantyExpiresOn",
           "warrantyState",
+          "warrantyRemindFromDays",
+          "warrantyReminderLeadDays",
           "location",
           "notes",
           "createdAt",
@@ -13276,6 +13296,9 @@
               "state": {
                 "$ref": "#/components/schemas/ExpiryState"
               },
+              "reminderLeadDays": {
+                "$ref": "#/components/schemas/ReminderLeadDays"
+              },
               "notRenewing": {
                 "type": "boolean"
               },
@@ -13299,6 +13322,7 @@
               "title",
               "expiresOn",
               "state",
+              "reminderLeadDays",
               "notRenewing",
               "suggestedRenewalOn",
               "documentKind"
@@ -13324,6 +13348,9 @@
               "state": {
                 "$ref": "#/components/schemas/ExpiryState"
               },
+              "reminderLeadDays": {
+                "$ref": "#/components/schemas/ReminderLeadDays"
+              },
               "notRenewing": {
                 "type": "boolean"
               },
@@ -13344,6 +13371,7 @@
               "title",
               "expiresOn",
               "state",
+              "reminderLeadDays",
               "notRenewing",
               "suggestedRenewalOn"
             ]
@@ -13367,6 +13395,9 @@
               },
               "state": {
                 "$ref": "#/components/schemas/ExpiryState"
+              },
+              "reminderLeadDays": {
+                "$ref": "#/components/schemas/ReminderLeadDays"
               },
               "notRenewing": {
                 "type": "boolean"
@@ -13404,6 +13435,7 @@
               "title",
               "expiresOn",
               "state",
+              "reminderLeadDays",
               "notRenewing",
               "suggestedRenewalOn",
               "renewalKind",
@@ -15738,6 +15770,10 @@
               }
             ]
           },
+          "remindFromDays": {
+            "default": null,
+            "$ref": "#/components/schemas/RemindFromDays"
+          },
           "issuer": {
             "default": null,
             "anyOf": [
@@ -16511,6 +16547,12 @@
               }
             ]
           },
+          "remindFromDays": {
+            "$ref": "#/components/schemas/RemindFromDays"
+          },
+          "reminderLeadDays": {
+            "$ref": "#/components/schemas/ReminderLeadDays"
+          },
           "issuer": {
             "type": [
               "string",
@@ -16576,6 +16618,8 @@
           "issuedOn",
           "expiresOn",
           "expiryState",
+          "remindFromDays",
+          "reminderLeadDays",
           "issuer",
           "referenceNumber",
           "assetId",
@@ -16618,6 +16662,10 @@
                 "type": "null"
               }
             ]
+          },
+          "remindFromDays": {
+            "default": null,
+            "$ref": "#/components/schemas/RemindFromDays"
           },
           "issuer": {
             "default": null,
@@ -20454,6 +20502,23 @@
           "refundable"
         ]
       },
+      "RemindFromDays": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 7,
+            "maximum": 365
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "ReminderLeadDays": {
+        "type": "integer",
+        "minimum": -9007199254740991,
+        "maximum": 9007199254740991
+      },
       "RenewExpiryBody": {
         "type": "object",
         "properties": {
@@ -20498,6 +20563,12 @@
           },
           "expiryState": {
             "$ref": "#/components/schemas/ExpiryState"
+          },
+          "remindFromDays": {
+            "$ref": "#/components/schemas/RemindFromDays"
+          },
+          "reminderLeadDays": {
+            "$ref": "#/components/schemas/ReminderLeadDays"
           },
           "cadenceMonths": {
             "anyOf": [
@@ -20615,6 +20686,8 @@
           "kind",
           "expiresOn",
           "expiryState",
+          "remindFromDays",
+          "reminderLeadDays",
           "cadenceMonths",
           "autoRenews",
           "costCents",
@@ -20646,6 +20719,10 @@
           },
           "expiresOn": {
             "$ref": "#/components/schemas/CalendarDate"
+          },
+          "remindFromDays": {
+            "default": null,
+            "$ref": "#/components/schemas/RemindFromDays"
           },
           "cadenceMonths": {
             "default": null,

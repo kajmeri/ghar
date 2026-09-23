@@ -23,7 +23,7 @@ import { runPriceWatch } from '@/lib/travel/price-watch'
 // calendar sync only asks Google for what changed since the first. The Gmail check never reads a
 // message twice, and only makes drafts for a person to review. Expiry reminders first move automatic
 // renewals past their date on to their current term, which a second run finds already done, then
-// claim each 60, 30 and 7 day reminder with a row before emailing, so a second run sends nothing. The bank jobs only
+// claim each reminder (at the lead time, then 30 and 7 days before) with a row before emailing, so a second run sends nothing. The bank jobs only
 // read from Plaid and overwrite what they stored, and the net worth snapshot comes last so it reads
 // the balances they brought in; a second run rewrites the same day's rows rather than adding more.
 // The transaction sync asks Plaid only for what changed since its stored cursor, and advances the

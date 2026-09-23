@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
-import { documentKindSchema, expiryStateSchema } from './documents'
+import { documentKindSchema, expiryStateSchema, reminderLeadDaysSchema, remindFromDaysSchema } from './documents'
 import {
   calendarDateSchema,
   centsSchema,
@@ -30,6 +30,8 @@ export const renewalSchema = z.object({
   /** When the current term ends. An automatic renewal's date moves on by itself once it passes. */
   expiresOn: calendarDateSchema,
   expiryState: expiryStateSchema,
+  remindFromDays: remindFromDaysSchema,
+  reminderLeadDays: reminderLeadDaysSchema,
   /** How many months a term lasts. Null when it doesn't renew on a schedule. */
   cadenceMonths: z.int().nullable(),
   /** It renews without anyone doing anything, and its date moves on a term once it passes. */
@@ -64,6 +66,7 @@ export const renewalBodySchema = z
     title: shortTextSchema.max(120),
     kind: renewalKindSchema.default('other'),
     expiresOn: calendarDateSchema,
+    remindFromDays: remindFromDaysSchema.default(null),
     cadenceMonths: z.int().min(1).max(RENEWAL_MAX_CADENCE_MONTHS).nullable().default(null),
     autoRenews: z.boolean().default(false),
     costCents: centsSchema.min(1).max(RENEWAL_MAX_CENTS).nullable().default(null),
@@ -119,6 +122,7 @@ const expiryFields = {
   title: z.string(),
   expiresOn: calendarDateSchema,
   state: expiryStateSchema,
+  reminderLeadDays: reminderLeadDaysSchema,
   /**
    * Someone said it won't be renewed, for this date. No reminders go out for it, and it's left off
    * the attention list and the digest. Renewing it, or any new date, clears this.

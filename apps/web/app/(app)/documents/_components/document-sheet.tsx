@@ -1,11 +1,13 @@
 'use client'
 
 import { createDocument, documentKindSchema, updateDocument, type HouseholdDocument } from '@ghar/contracts'
-import { DOCUMENT_KINDS } from '@ghar/core/documents'
+import { DOCUMENT_KINDS, type DocumentKind } from '@ghar/core/documents'
+import { defaultReminderLeadDays } from '@ghar/core/expiries'
 import { Camera, FileText, FileUp, Pencil, Plus } from 'lucide-react'
 import { useId, useRef, useState, type ChangeEvent, type SyntheticEvent } from 'react'
 import { CheckboxField } from '@/app/(app)/_components/ui/checkbox-field'
 import { DateField } from '@/app/(app)/_components/ui/date-field'
+import { ReminderLeadField, remindFromDaysOf } from '@/app/(app)/_components/ui/reminder-lead-field'
 import { Sheet, SheetClose } from '@/app/(app)/_components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/field'
@@ -60,6 +62,8 @@ export function DocumentSheet({
   const [picked, setPicked] = useState<Picked | null>(null)
   const [preparing, setPreparing] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
+  // The default reminder lead time depends on the kind: an ID needs months to renew.
+  const [kind, setKind] = useState<DocumentKind>(document?.kind ?? 'other')
   // A retry after the details failed to save reuses the file that already uploaded.
   const uploaded = useRef<{ file: PreparedFile; storagePath: string } | null>(null)
 
@@ -93,6 +97,7 @@ export function DocumentSheet({
 
   function onOpenChange(next: boolean) {
     setOpen(next)
+    setKind(document?.kind ?? 'other')
     if (!next) {
       replacePicked(null)
       uploaded.current = null
@@ -134,6 +139,7 @@ export function DocumentSheet({
         kind: kind.success ? kind.data : 'other',
         issuedOn: formText(data, 'issuedOn') || null,
         expiresOn: formText(data, 'expiresOn') || null,
+        remindFromDays: remindFromDaysOf(data),
         issuer: formText(data, 'issuer') || null,
         referenceNumber: formText(data, 'referenceNumber') || null,
         assetId: formText(data, 'assetId') || null,
@@ -238,7 +244,14 @@ export function DocumentSheet({
         </Field>
 
         <Field label='Kind'>
-          <NativeSelect name='kind' defaultValue={document?.kind ?? 'other'}>
+          <NativeSelect
+            name='kind'
+            defaultValue={document?.kind ?? 'other'}
+            onChange={event => {
+              const chosen = documentKindSchema.safeParse(event.currentTarget.value)
+              setKind(chosen.success ? chosen.data : 'other')
+            }}
+          >
             {DOCUMENT_KINDS.map(kind => (
               <option key={kind} value={kind}>
                 {DOCUMENT_KIND_LABELS[kind]}
@@ -256,6 +269,12 @@ export function DocumentSheet({
             defaultValue={document?.expiresOn ?? undefined}
           />
         </div>
+
+        <ReminderLeadField
+          value={document?.remindFromDays}
+          defaultLeadDays={defaultReminderLeadDays({ kind: 'document', documentKind: kind })}
+          hint='When it has an expiry date. The first email goes then, and more follow as the date gets closer.'
+        />
 
         <Field label='Reference number' hint='A policy, passport or account number.'>
           <Input name='referenceNumber' maxLength={200} defaultValue={document?.referenceNumber ?? undefined} autoComplete='off' />

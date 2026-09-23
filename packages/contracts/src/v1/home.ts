@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
-import { documentSchema, expiryStateSchema } from './documents'
+import { documentSchema, expiryStateSchema, reminderLeadDaysSchema, remindFromDaysSchema } from './documents'
 import { calendarDateSchema, centsSchema, instantSchema, longTextSchema, pageQuerySchema, pageSchema } from './shared'
 
 // These lists mirror @ghar/core/home. A test keeps them equal.
@@ -23,6 +23,8 @@ export const assetSchema = z.object({
   warrantyExpiresOn: calendarDateSchema.nullable(),
   /** Null when there's no warranty date. */
   warrantyState: expiryStateSchema.nullable(),
+  warrantyRemindFromDays: remindFromDaysSchema,
+  warrantyReminderLeadDays: reminderLeadDaysSchema,
   location: z.string().nullable(),
   notes: z.string().nullable(),
   createdAt: instantSchema,
@@ -57,6 +59,7 @@ export const assetBodySchema = z.object({
   purchasedOn: calendarDateSchema.nullable().default(null),
   purchasePriceCents: centsSchema.min(0).max(10_000_000_000).nullable().default(null),
   warrantyExpiresOn: calendarDateSchema.nullable().default(null),
+  warrantyRemindFromDays: remindFromDaysSchema.default(null),
   location: homeTextSchema.nullable().default(null),
   notes: longTextSchema.nullable().default(null),
 })

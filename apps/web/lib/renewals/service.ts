@@ -2,7 +2,7 @@ import 'server-only'
 import type { Expiry, PageQuery, Renewal, RenewalBody, RenewExpiryBody } from '@ghar/contracts'
 import { todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
 import { expiryState } from '@ghar/core/documents'
-import { suggestedRenewalDate, type ExpirySubjectKind } from '@ghar/core/expiries'
+import { reminderLeadDays, suggestedRenewalDate, type ExpirySubjectKind } from '@ghar/core/expiries'
 import * as queries from '@ghar/db/queries'
 import type { ExpiryRow, PageRequest, RenewalWithLinksRow } from '@ghar/db/queries'
 import { can } from '@ghar/core/auth'
@@ -18,12 +18,15 @@ import * as home from '@/lib/home/service'
 // decide who sees what; this file turns rows into the contract.
 
 export function toRenewal(row: RenewalWithLinksRow, today: CalendarDate): Renewal {
+  const leadDays = reminderLeadDays({ kind: 'renewal', renewalKind: row.kind }, row.remindFromDays)
   return {
     id: row.id,
     title: row.title,
     kind: row.kind,
     expiresOn: row.expiresOn,
-    expiryState: expiryState(row.expiresOn, today),
+    expiryState: expiryState(row.expiresOn, today, leadDays),
+    remindFromDays: row.remindFromDays,
+    reminderLeadDays: leadDays,
     cadenceMonths: row.cadenceMonths,
     autoRenews: row.autoRenews,
     costCents: row.costCents,
@@ -43,11 +46,25 @@ export function toRenewal(row: RenewalWithLinksRow, today: CalendarDate): Renewa
   }
 }
 
+/** The lead time in effect for one row of the list. */
+function leadDaysOf(row: ExpiryRow): number {
+  switch (row.kind) {
+    case 'document':
+      return reminderLeadDays({ kind: 'document', documentKind: row.documentKind }, row.remindFromDays)
+    case 'warranty':
+      return reminderLeadDays({ kind: 'warranty' }, row.remindFromDays)
+    case 'renewal':
+      return reminderLeadDays({ kind: 'renewal', renewalKind: row.renewalKind }, row.remindFromDays)
+  }
+}
+
 export function toExpiry(row: ExpiryRow, today: CalendarDate): Expiry {
+  const leadDays = leadDaysOf(row)
   const common = {
     title: row.title,
     expiresOn: row.expiresOn,
-    state: expiryState(row.expiresOn, today),
+    state: expiryState(row.expiresOn, today, leadDays),
+    reminderLeadDays: leadDays,
     notRenewing: row.notRenewing,
   }
   switch (row.kind) {

@@ -2,6 +2,7 @@ import { documentParamsSchema } from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
 import { formatCalendarDate, formatInstant, todayInTimeZone } from '@ghar/core/dates'
 import { expiryPhrase } from '@ghar/core/documents'
+import { reminderSchedulePhrase } from '@ghar/core/expiries'
 import { NotFoundError } from '@ghar/core/errors'
 import { ExternalLink } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -119,7 +120,9 @@ export default async function DocumentPage({ params }: PageProps<'/documents/[do
           {expiry?.notRenewing ? (
             <p className='text-sm text-ink-muted'>Marked not renewing, so no reminders go out for this date.</p>
           ) : expiry && expiry.state !== 'expired' ? (
-            <p className='text-sm text-ink-muted'>A reminder email goes out 60, 30 and 7 days before it expires.</p>
+            <p className='text-sm text-ink-muted'>
+              A reminder email goes out {reminderSchedulePhrase(document.reminderLeadDays)} before it expires.
+            </p>
           ) : null}
           {expiry && canManage ? <ExpiryActions expiry={expiry} /> : null}
         </section>

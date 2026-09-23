@@ -2,7 +2,8 @@ import 'server-only'
 import type { Attention, AttentionExpiry } from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
 import { addCalendarDays, todayInTimeZone } from '@ghar/core/dates'
-import { EXPIRED_VISIBLE_DAYS, EXPIRY_SOON_DAYS } from '@ghar/core/documents'
+import { EXPIRED_VISIBLE_DAYS, needsRenewal } from '@ghar/core/documents'
+import { REMINDER_LEAD_DAYS_MAX } from '@ghar/core/expiries'
 import { MAINTENANCE_DUE_SOON_DAYS } from '@ghar/core/home'
 import * as queries from '@ghar/db/queries'
 import type { ExpiryRow } from '@ghar/db/queries'
@@ -17,7 +18,8 @@ export async function getAttention(session: Session): Promise<Attention> {
   const { context, household } = session
   const db = getDb()
   const today = todayInTimeZone(household.timeZone)
-  const range = { from: addCalendarDays(today, -EXPIRED_VISIBLE_DAYS), to: addCalendarDays(today, EXPIRY_SOON_DAYS) }
+  // As far out as any lead time; each thing's own lead time decides below.
+  const range = { from: addCalendarDays(today, -EXPIRED_VISIBLE_DAYS), to: addCalendarDays(today, REMINDER_LEAD_DAYS_MAX) }
 
   const [tasks, bills, documents, warranties, renewals] = await Promise.all([
     // Only jobs already due or due within the due-soon window; the state filter below still decides.
@@ -36,6 +38,7 @@ export async function getAttention(session: Session): Promise<Attention> {
       id: asset.id,
       title: asset.name,
       expiresOn: asset.warrantyExpiresOn,
+      remindFromDays: asset.warrantyRemindFromDays,
       notRenewing: asset.notRenewing,
     })),
     ...renewals.map(renewal => ({ ...renewal, kind: 'renewal' as const, renewalKind: renewal.kind })),
@@ -43,6 +46,7 @@ export async function getAttention(session: Session): Promise<Attention> {
   const expiries: AttentionExpiry[] = rows
     .filter(row => !row.notRenewing)
     .map(row => toExpiry(row, today))
+    .filter(expiry => needsRenewal(expiry.expiresOn, today, expiry.reminderLeadDays))
     .toSorted((a, b) => a.expiresOn.localeCompare(b.expiresOn) || a.title.localeCompare(b.title))
 
 

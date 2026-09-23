@@ -1,17 +1,18 @@
 import 'server-only'
 import { addCalendarDays, todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
-import { EXPIRY_SOON_DAYS, reminderThreshold } from '@ghar/core/documents'
+import { REMINDER_LEAD_DAYS_MAX, reminderThreshold } from '@ghar/core/expiries'
 import * as queries from '@ghar/db/queries'
 import type { Db, ExpirySubject, ReminderHousehold, ReminderRecipient, SystemContext } from '@ghar/db/queries'
 import { documentExpiryEmail } from '@/lib/email/document-expiry'
 import type { EmailProvider } from '@/lib/providers/email'
 
 // The daily expiry reminders. First, automatic renewals whose date has passed move on to the end of
-// their current term. Then, for every document, warranty and renewal that runs out within 60 days, the
-// tightest reminder tier it has reached (60, 30 or 7 days, from @ghar/core/documents) is claimed
-// with a row, then emailed to the household's owners and adults. A tier already claimed is never
-// sent again, so a second run in a day sends nothing, and a day the job missed is caught up with
-// one reminder rather than several. One household's or one document's trouble never stops the rest.
+// their current term. Then, for every document, warranty and renewal inside its own lead time (six
+// months for a passport, two for most things, or whatever was picked for it), the tightest reminder
+// tier it has reached (the lead time, then 30 and 7 days, from @ghar/core/expiries) is claimed with
+// a row, then emailed to the household's owners and adults. A tier already claimed is never sent
+// again, so a second run in a day sends nothing, and a day the job missed is caught up with one
+// reminder rather than several. One household's or one document's trouble never stops the rest.
 
 export interface ExpiryReminderDeps {
   db: Db
@@ -25,7 +26,7 @@ export type ExpiryReminderResult = {
   households: number
   /** Automatic renewals whose date moved on to their current term. */
   renewed: number
-  /** Documents, warranties and renewals running out within the reminder window. */
+  /** Documents, warranties and renewals running out within the longest lead time. */
   subjects: number
   /** Subjects that got a reminder this run. */
   reminded: number
@@ -78,7 +79,7 @@ async function remindHousehold(deps: ExpiryReminderDeps, household: ReminderHous
   result.renewed += await queries.rollForwardRenewals(actor, deps.db, today)
   const subjects = await queries.listExpiriesForReminders(actor, deps.db, {
     from: today,
-    to: addCalendarDays(today, EXPIRY_SOON_DAYS),
+    to: addCalendarDays(today, REMINDER_LEAD_DAYS_MAX),
   })
 
   let recipients: Promise<ReminderRecipient[]> | undefined
@@ -103,7 +104,7 @@ async function remindHousehold(deps: ExpiryReminderDeps, household: ReminderHous
 async function remind(deps: ExpiryReminderDeps, run: HouseholdRun, subject: ExpirySubject, result: ExpiryReminderResult): Promise<void> {
   const { db } = deps
   const { actor, today } = run
-  const thresholdDays = reminderThreshold(subject.expiresOn, today)
+  const thresholdDays = reminderThreshold(subject.expiresOn, today, subject.leadDays)
   if (thresholdDays === null) {
     result.skipped += 1
     return

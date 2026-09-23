@@ -12,6 +12,7 @@ import type {
 } from '@ghar/contracts'
 import { todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
 import { expiryState } from '@ghar/core/documents'
+import { reminderLeadDays } from '@ghar/core/expiries'
 import { cadenceLabel, maintenanceState, searchAssets } from '@ghar/core/home'
 import * as queries from '@ghar/db/queries'
 import type { AssetRow, MaintenanceLogEntryRow, MaintenanceTaskRow, PageRequest } from '@ghar/db/queries'
@@ -24,6 +25,7 @@ import { toDocument } from '@/lib/documents/service'
 // permissions and the schedule arithmetic; this file joins an asset to its jobs, papers and history.
 
 export function toAsset(row: AssetRow, today: CalendarDate): Asset {
+  const leadDays = reminderLeadDays({ kind: 'warranty' }, row.warrantyRemindFromDays)
   return {
     id: row.id,
     name: row.name,
@@ -34,7 +36,9 @@ export function toAsset(row: AssetRow, today: CalendarDate): Asset {
     purchasedOn: row.purchasedOn,
     purchasePriceCents: row.purchasePriceCents,
     warrantyExpiresOn: row.warrantyExpiresOn,
-    warrantyState: row.warrantyExpiresOn === null ? null : expiryState(row.warrantyExpiresOn, today),
+    warrantyState: row.warrantyExpiresOn === null ? null : expiryState(row.warrantyExpiresOn, today, leadDays),
+    warrantyRemindFromDays: row.warrantyRemindFromDays,
+    warrantyReminderLeadDays: leadDays,
     location: row.location,
     notes: row.notes,
     createdAt: row.createdAt.toISOString(),

@@ -75,38 +75,25 @@ export function searchDocuments<T extends DocumentSearchFields>(documents: reado
   )
 }
 
-/** How far ahead an expiry starts to show on the dashboard. The first reminder goes out then too. */
-export const EXPIRY_SOON_DAYS = 60
 /** How long something that has already expired keeps showing, in case nobody renewed it. */
 export const EXPIRED_VISIBLE_DAYS = 30
-/** Days before an expiry that a reminder email goes out. Largest first. */
-export const EXPIRY_REMINDER_DAYS = [60, 30, 7] as const
 
 export type ExpiryState = 'expired' | 'expiring' | 'current'
 
-export function expiryState(expiresOn: CalendarDate, today: CalendarDate): ExpiryState {
+/**
+ * Where an expiry stands. It's expiring from its reminder lead time on, since that's when the
+ * reminders start: six months out for a passport, two for most things. See reminderLeadDays.
+ */
+export function expiryState(expiresOn: CalendarDate, today: CalendarDate, leadDays: number): ExpiryState {
   const daysLeft = daysBetween(today, expiresOn)
   if (daysLeft < 0) return 'expired'
-  return daysLeft <= EXPIRY_SOON_DAYS ? 'expiring' : 'current'
+  return daysLeft <= leadDays ? 'expiring' : 'current'
 }
 
-/** Whether an expiry belongs on the dashboard: coming up soon, or lapsed recently. */
-export function needsRenewal(expiresOn: CalendarDate, today: CalendarDate): boolean {
+/** Whether an expiry belongs on the dashboard: its reminders have started, or it lapsed recently. */
+export function needsRenewal(expiresOn: CalendarDate, today: CalendarDate, leadDays: number): boolean {
   const daysLeft = daysBetween(today, expiresOn)
-  return daysLeft >= -EXPIRED_VISIBLE_DAYS && daysLeft <= EXPIRY_SOON_DAYS
-}
-
-/**
- * The reminder tier an expiry is in today: the tightest threshold it has crossed, or null before
- * the first one and after it has expired. A day the job doesn't run can't skip a tier for good:
- * the next run finds the item in the same tier. Sending each tier once per expiry date is the
- * caller's job.
- */
-export function reminderThreshold(expiresOn: CalendarDate, today: CalendarDate): number | null {
-  const daysLeft = daysBetween(today, expiresOn)
-  if (daysLeft < 0) return null
-  const crossed = EXPIRY_REMINDER_DAYS.filter(days => daysLeft <= days)
-  return crossed.at(-1) ?? null
+  return daysLeft >= -EXPIRED_VISIBLE_DAYS && daysLeft <= leadDays
 }
 
 /** "Expires in 12 days", "Expires in 5 months", "Expired yesterday". */

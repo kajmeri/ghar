@@ -12,6 +12,7 @@ import {
   type DocumentKind,
   type DocumentMimeType,
 } from '@ghar/core/documents'
+import { reminderLeadDays } from '@ghar/core/expiries'
 import { ValidationError } from '@ghar/core/errors'
 import * as queries from '@ghar/db/queries'
 import type { DocumentFile, DocumentWithAssetRow, PageRequest } from '@ghar/db/queries'
@@ -26,6 +27,7 @@ import { getStorageProvider } from '@/lib/providers/storage'
 
 /** Rows in, contract out. The storage path stays behind. */
 export function toDocument(row: DocumentWithAssetRow, today: CalendarDate): HouseholdDocument {
+  const leadDays = reminderLeadDays({ kind: 'document', documentKind: row.kind }, row.remindFromDays)
   return {
     id: row.id,
     title: row.title,
@@ -34,7 +36,9 @@ export function toDocument(row: DocumentWithAssetRow, today: CalendarDate): Hous
     sizeBytes: row.sizeBytes,
     issuedOn: row.issuedOn,
     expiresOn: row.expiresOn,
-    expiryState: row.expiresOn === null ? null : expiryState(row.expiresOn, today),
+    expiryState: row.expiresOn === null ? null : expiryState(row.expiresOn, today, leadDays),
+    remindFromDays: row.remindFromDays,
+    reminderLeadDays: leadDays,
     issuer: row.issuer,
     referenceNumber: row.referenceNumber,
     assetId: row.assetId,

@@ -22,6 +22,8 @@ export interface DocumentInput {
   kind: DocumentKind
   issuedOn: CalendarDate | null
   expiresOn: CalendarDate | null
+  /** Days before it expires that reminders start. Null, or left out on create, for the default. */
+  remindFromDays?: number | null
   issuer: string | null
   referenceNumber: string | null
   assetId: string | null
@@ -209,6 +211,7 @@ export interface DocumentExpiryRow {
   kind: DocumentKind
   expiresOn: CalendarDate
   issuedOn: CalendarDate | null
+  remindFromDays: number | null
   assetId: string | null
   /** Someone said it won't be renewed, for this date. */
   notRenewing: boolean
@@ -228,6 +231,7 @@ export async function listDocumentExpiries(
       kind: documents.kind,
       expiresOn: documents.expiresOn,
       issuedOn: documents.issuedOn,
+      remindFromDays: documents.remindFromDays,
       assetId: documents.assetId,
       notRenewing: notRenewingSql('document', documents.id, documents.expiresOn),
     })

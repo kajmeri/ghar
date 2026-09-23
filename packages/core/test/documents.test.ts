@@ -7,7 +7,6 @@ import {
   fitWithin,
   isDocumentMimeType,
   needsRenewal,
-  reminderThreshold,
   searchDocuments,
   storagePathHousehold,
 } from '../src/documents'
@@ -75,29 +74,23 @@ describe('canSeeDocument', () => {
 describe('expiry', () => {
   const today = '2026-09-14'
 
-  it('names the state', () => {
-    expect(expiryState('2026-09-13', today)).toBe('expired')
-    expect(expiryState('2026-09-14', today)).toBe('expiring')
-    expect(expiryState('2026-11-13', today)).toBe('expiring')
-    expect(expiryState('2026-11-14', today)).toBe('current')
+  it('names the state, expiring from its lead time', () => {
+    expect(expiryState('2026-09-13', today, 60)).toBe('expired')
+    expect(expiryState('2026-09-14', today, 60)).toBe('expiring')
+    expect(expiryState('2026-11-13', today, 60)).toBe('expiring')
+    expect(expiryState('2026-11-14', today, 60)).toBe('current')
+    // A passport is expiring six months out.
+    expect(expiryState('2027-03-13', today, 180)).toBe('expiring')
+    expect(expiryState('2027-03-14', today, 180)).toBe('current')
   })
 
-  it('shows on the dashboard from 60 days ahead to 30 days after', () => {
-    expect(needsRenewal('2026-11-13', today)).toBe(true)
-    expect(needsRenewal('2026-11-14', today)).toBe(false)
-    expect(needsRenewal('2026-08-15', today)).toBe(true)
-    expect(needsRenewal('2026-08-14', today)).toBe(false)
-  })
-
-  it('picks the tightest reminder tier crossed', () => {
-    expect(reminderThreshold('2026-11-14', today)).toBeNull()
-    expect(reminderThreshold('2026-11-13', today)).toBe(60)
-    expect(reminderThreshold('2026-10-14', today)).toBe(30)
-    // A missed run on day 30 still finds the 30-day tier on day 25.
-    expect(reminderThreshold('2026-10-09', today)).toBe(30)
-    expect(reminderThreshold('2026-09-21', today)).toBe(7)
-    expect(reminderThreshold('2026-09-14', today)).toBe(7)
-    expect(reminderThreshold('2026-09-13', today)).toBeNull()
+  it('shows on the dashboard from its lead time ahead to 30 days after', () => {
+    expect(needsRenewal('2026-11-13', today, 60)).toBe(true)
+    expect(needsRenewal('2026-11-14', today, 60)).toBe(false)
+    expect(needsRenewal('2026-08-15', today, 60)).toBe(true)
+    expect(needsRenewal('2026-08-14', today, 60)).toBe(false)
+    expect(needsRenewal('2027-03-13', today, 180)).toBe(true)
+    expect(needsRenewal('2026-10-01', today, 14)).toBe(false)
   })
 
   it('says it plainly', () => {

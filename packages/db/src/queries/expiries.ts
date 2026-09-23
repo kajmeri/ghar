@@ -59,6 +59,7 @@ export async function getExpiry(ctx: RequestContext, db: Db, subject: ExpirySubj
           expiresOn: documents.expiresOn,
           issuedOn: documents.issuedOn,
           documentKind: documents.kind,
+          remindFromDays: documents.remindFromDays,
           notRenewing: notRenewingSql('document', documents.id, documents.expiresOn),
         })
         .from(documents)
@@ -73,6 +74,7 @@ export async function getExpiry(ctx: RequestContext, db: Db, subject: ExpirySubj
           id: assets.id,
           title: assets.name,
           expiresOn: assets.warrantyExpiresOn,
+          remindFromDays: assets.warrantyRemindFromDays,
           notRenewing: notRenewingSql('warranty', assets.id, assets.warrantyExpiresOn),
         })
         .from(assets)
@@ -91,6 +93,7 @@ export async function getExpiry(ctx: RequestContext, db: Db, subject: ExpirySubj
           autoRenews: renewals.autoRenews,
           costCents: renewals.costCents,
           cadenceMonths: renewals.cadenceMonths,
+          remindFromDays: renewals.remindFromDays,
           notRenewing: notRenewingSql('renewal', renewals.id, renewals.expiresOn),
         })
         .from(renewals)

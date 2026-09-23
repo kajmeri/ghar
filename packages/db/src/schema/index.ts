@@ -28,7 +28,6 @@ import {
   DOCUMENT_MIME_TYPES,
   DOCUMENT_NOTES_MAX_LENGTH,
   DOCUMENT_TITLE_MAX_LENGTH,
-  EXPIRY_REMINDER_DAYS,
   MAX_DOCUMENT_BYTES,
   type DocumentMimeType,
 } from '@ghar/core/documents'
@@ -91,6 +90,7 @@ import {
   RENEWAL_NOTES_MAX_LENGTH,
   RENEWAL_TITLE_MAX_LENGTH,
 } from '@ghar/core/renewals'
+import { REMINDER_LEAD_DAYS_MAX, REMINDER_LEAD_DAYS_MIN } from '@ghar/core/expiries'
 import { TRIP_STATUSES } from '@ghar/core/trips'
 import { DIGEST_SECTIONS, ONE_TAP_ACTIONS, oneTapActionHasDate, type DigestSection } from '@ghar/core/digest'
 import { BOOKING_DRAFT_STATUSES, MAIL_LINK_STATUSES, MAIL_MESSAGE_OUTCOMES, MAIL_SUBJECT_MAX_LENGTH } from '@ghar/core/mail'
@@ -173,6 +173,8 @@ const metadata = () =>
     .notNull()
     .default(sql`'{}'::jsonb`)
 const cents = () => bigint({ mode: 'number' })
+/** A reminder lead time, or a reminder sent at one: `between` this. */
+const REMINDER_LEAD_RANGE = `${String(REMINDER_LEAD_DAYS_MIN)} and ${String(REMINDER_LEAD_DAYS_MAX)}`
 
 /** `column in ('a', 'b')` for a fixed list from @ghar/core. Never for request input. */
 function inList(column: AnyPgColumn, values: readonly string[]): SQL {
@@ -1486,6 +1488,8 @@ export const assets = pgTable(
     purchasedOn: date({ mode: 'string' }),
     purchasePriceCents: cents(),
     warrantyExpiresOn: date({ mode: 'string' }),
+    /** Days before the warranty ends that reminders start. Null for the default, from reminderLeadDays. */
+    warrantyRemindFromDays: smallint(),
     /** Where it is, so someone can find the shutoff: "Basement, north wall". */
     location: text(),
     notes: text(),
@@ -1507,6 +1511,7 @@ export const assets = pgTable(
         and char_length(${table.notes}) <= ${sql.raw(String(HOME_NOTES_MAX_LENGTH))}`
     ),
     check('assets_purchase_price', sql`${table.purchasePriceCents} between 0 and ${sql.raw(String(MAX_ASSET_CENTS))}`),
+    check('assets_warranty_remind_from', sql`${table.warrantyRemindFromDays} between ${sql.raw(REMINDER_LEAD_RANGE)}`),
   ]
 ).enableRLS()
 
@@ -1530,6 +1535,8 @@ export const documents = pgTable(
     sizeBytes: integer().notNull(),
     issuedOn: date({ mode: 'string' }),
     expiresOn: date({ mode: 'string' }),
+    /** Days before it expires that reminders start. Null for the default, from reminderLeadDays. */
+    remindFromDays: smallint(),
     issuer: text(),
     referenceNumber: text(),
     /** The thing it's about. Removing the asset keeps the paperwork. */
@@ -1561,6 +1568,7 @@ export const documents = pgTable(
     ),
     check('documents_mime_type', inList(table.mimeType, DOCUMENT_MIME_TYPES)),
     check('documents_size', sql`${table.sizeBytes} between 1 and ${sql.raw(String(MAX_DOCUMENT_BYTES))}`),
+    check('documents_remind_from', sql`${table.remindFromDays} between ${sql.raw(REMINDER_LEAD_RANGE)}`),
     // A row can only ever point at its own household's folder.
     check('documents_storage_path_household', sql`split_part(${table.storagePath}, '/', 1) = ${table.householdId}::text`),
     check('documents_expires_after_issued', sql`${table.expiresOn} >= ${table.issuedOn}`),
@@ -1717,6 +1725,8 @@ export const renewals = pgTable(
     title: text().notNull(),
     kind: renewalKind().notNull().default('other'),
     expiresOn: date({ mode: 'string' }).notNull(),
+    /** Days before it runs out that reminders start. Null for the default, from reminderLeadDays. */
+    remindFromDays: smallint(),
     /** Null when it doesn't renew on a schedule. */
     cadenceMonths: smallint(),
     autoRenews: boolean().notNull().default(false),
@@ -1753,6 +1763,7 @@ export const renewals = pgTable(
     ),
     check('renewals_cadence', sql`${table.cadenceMonths} between 1 and ${sql.raw(String(MAX_RENEWAL_CADENCE_MONTHS))}`),
     check('renewals_cost', sql`${table.costCents} between 1 and ${sql.raw(String(MAX_RENEWAL_CENTS))}`),
+    check('renewals_remind_from', sql`${table.remindFromDays} between ${sql.raw(REMINDER_LEAD_RANGE)}`),
     // Moving the date on by itself needs to know how far.
     check('renewals_auto_renews_cadence', sql`not ${table.autoRenews} or ${table.cadenceMonths} is not null`),
   ]
@@ -1776,7 +1787,7 @@ export const expiryReminders = pgTable(
     /** For a warranty. */
     assetId: uuid().references(() => assets.id, { onDelete: 'cascade' }),
     renewalId: uuid().references(() => renewals.id, { onDelete: 'cascade' }),
-    /** One of EXPIRY_REMINDER_DAYS. */
+    /** Days before the expiry: a lead time, or one of the follow-ups after it. See reminderTiers. */
     thresholdDays: smallint().notNull(),
     expiresOn: date({ mode: 'string' }).notNull(),
     sentAt: timestamptz().notNull().defaultNow(),
@@ -1793,7 +1804,7 @@ export const expiryReminders = pgTable(
       .on(table.renewalId, table.thresholdDays, table.expiresOn)
       .where(sql`${table.renewalId} is not null`),
     check('expiry_reminders_one_subject', sql`num_nonnulls(${table.documentId}, ${table.assetId}, ${table.renewalId}) = 1`),
-    check('expiry_reminders_threshold', sql`${table.thresholdDays} in (${sql.raw(EXPIRY_REMINDER_DAYS.join(', '))})`),
+    check('expiry_reminders_threshold', sql`${table.thresholdDays} between ${sql.raw(REMINDER_LEAD_RANGE)}`),
   ]
 ).enableRLS()
 
