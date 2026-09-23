@@ -4,7 +4,7 @@ import { Rows2, Rows3 } from 'lucide-react'
 import { useItinerary } from './itinerary-context'
 
 const BUTTON =
-  'flex size-tap items-center justify-center text-ink-muted hover:bg-paper aria-pressed:bg-paper aria-pressed:text-ink [&_svg]:size-5'
+  'flex size-tap items-center justify-center text-ink-muted hover:bg-paper focus-visible:-outline-offset-2 aria-pressed:bg-paper aria-pressed:text-ink [&_svg]:size-5'
 
 /** One line per slot, or a second line with where and what. Remembered per person. */
 export function DensityToggle() {

@@ -5,7 +5,7 @@ import { NavLink } from './nav-link'
 
 // Rendered on the server; NavLink and MoreSheet are the only parts that run in the browser.
 const TAB_CLASS =
-  'flex min-h-14 w-full flex-col items-center justify-center gap-1 text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset'
+  'flex min-h-14 w-full flex-col items-center justify-center gap-1 text-xs active:bg-ink/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset'
 // The icons render with the idle stroke; the current tab thickens it from CSS.
 const TAB_ACTIVE = 'font-medium text-ink [&_svg]:[stroke-width:2.25]'
 const TAB_IDLE = 'text-ink-muted'

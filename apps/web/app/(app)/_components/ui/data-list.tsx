@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { ROW_LINK as ROW_LINK_BASE } from './row-link'
 
 export interface DataListColumn<Row> {
   id: string
@@ -46,8 +47,8 @@ const HEADER_CELL = 'px-4 py-3 text-sm font-medium text-ink-muted'
 const SHOW_FROM = { md: '', lg: 'hidden lg:table-cell' } as const
 /** Columns left out of the stacked rows only appear once the table does. */
 const UNSTACKED = { md: 'hidden md:table-cell', lg: 'hidden lg:table-cell' } as const
-const ROW_LINK =
-  'after:absolute after:inset-0 focus-visible:outline-hidden focus-visible:after:rounded-[inherit] focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset'
+/** The row's own corners, so the focus ring and the press tint follow a stacked card's radius. */
+const ROW_LINK = cn(ROW_LINK_BASE, 'after:rounded-[inherit]')
 
 /**
  * Tabular data that works on a phone. A real table from md up; below md the same rows stack, with

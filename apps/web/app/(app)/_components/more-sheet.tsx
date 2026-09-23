@@ -60,7 +60,7 @@ export function MoreSheetLink({ href, children }: { href: string; children: Reac
         aria-current={current ? 'page' : undefined}
         className={cn(
           'flex min-h-tap items-center gap-3 rounded-control px-2 py-3 text-base focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden',
-          current ? 'bg-paper font-medium text-ink' : 'text-ink'
+          current ? 'bg-paper font-medium text-ink' : 'text-ink active:bg-paper'
         )}
       >
         {children}

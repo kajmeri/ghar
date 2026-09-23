@@ -13,12 +13,13 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/85',
-        outline: 'border border-border bg-surface text-ink hover:bg-paper',
-        ghost: 'text-ink hover:bg-surface',
+        default: 'bg-primary text-primary-foreground hover:bg-primary/85 active:bg-primary/75',
+        outline: 'border border-border bg-surface text-ink hover:bg-paper active:bg-ink/10',
+        // A tint of ink, so the hover shows on paper and on a card alike.
+        ghost: 'text-ink hover:bg-ink/5 active:bg-ink/10',
         // Only for actions that destroy something. Neutral actions stay monochrome.
-        destructive: 'bg-destructive text-surface hover:bg-destructive/85',
-        link: 'text-ink underline underline-offset-4 hover:text-ink-muted',
+        destructive: 'bg-destructive text-surface hover:bg-destructive/85 active:bg-destructive/75',
+        link: 'text-ink underline underline-offset-4 hover:text-ink-muted active:text-ink-muted',
       },
       size: {
         default: 'h-tap px-5 has-[>svg]:px-4',

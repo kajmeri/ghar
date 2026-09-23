@@ -107,7 +107,7 @@ export function PackingPanel({
                 className={
                   grouping === value
                     ? 'inline-flex min-h-tap items-center rounded-pill border border-ink px-4'
-                    : 'inline-flex min-h-tap items-center rounded-pill border border-line px-4 text-ink-muted'
+                    : 'inline-flex min-h-tap items-center rounded-pill border border-line px-4 text-ink-muted hover:border-ink/40 hover:text-ink'
                 }
               >
                 {value === 'person' ? 'Person' : 'Category'}
@@ -135,7 +135,7 @@ export function PackingPanel({
                   {group.items.map((item, index) => (
                     <li key={item.id} className={index === 0 ? '' : 'border-t border-line'}>
                       <div className='flex items-center gap-3 px-3 py-2'>
-                        <label className='flex min-h-tap flex-1 items-center gap-3'>
+                        <label className='flex min-h-tap flex-1 items-center gap-3 has-disabled:opacity-40'>
                           <input
                             type='checkbox'
                             checked={item.isPacked}
@@ -174,7 +174,7 @@ export function PackingPanel({
                         <button
                           type='button'
                           aria-label={`Remove ${item.label}`}
-                          className='inline-flex min-h-tap shrink-0 items-center px-2 text-sm text-ink-muted underline underline-offset-4'
+                          className='inline-flex min-h-tap shrink-0 items-center px-2 text-sm text-ink-muted underline underline-offset-4 hover:text-ink disabled:opacity-40'
                           disabled={remove.pending}
                           onClick={() => {
                             remove.mutate(item.id)

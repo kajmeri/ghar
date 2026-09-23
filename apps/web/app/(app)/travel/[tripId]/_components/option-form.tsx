@@ -78,7 +78,7 @@ export function OptionFields({ option }: { option?: ItineraryOption }) {
         <legend className='text-sm font-medium'>Closed on</legend>
         <div className='flex flex-wrap gap-x-4'>
           {WEEKDAYS.map((name, day) => (
-            <label key={name} className='flex min-h-tap cursor-pointer items-center gap-2 text-base'>
+            <label key={name} className='flex min-h-tap items-center gap-2 text-base'>
               <input
                 type='checkbox'
                 name='closedDays'
@@ -91,7 +91,7 @@ export function OptionFields({ option }: { option?: ItineraryOption }) {
           ))}
         </div>
       </fieldset>
-      <label className='flex min-h-tap cursor-pointer items-center gap-3 self-start text-base md:col-span-2'>
+      <label className='flex min-h-tap items-center gap-3 self-start text-base md:col-span-2'>
         <input type='checkbox' name='bookingRequired' defaultChecked={option?.bookingRequired ?? false} className='size-5 shrink-0 accent-ink' />
         Needs a reservation
       </label>

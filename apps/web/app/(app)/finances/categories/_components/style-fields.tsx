@@ -9,7 +9,7 @@ import { CATEGORY_COLOR_CLASSES, CATEGORY_ICON_COMPONENTS } from './category-ico
 // fixed list rather than typed, so the form never has to guess at what someone meant.
 
 const CHOICE =
-  'flex size-11 items-center justify-center rounded-input border transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden'
+  'flex size-11 items-center justify-center rounded-control border transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden'
 const CHOSEN = 'border-ink bg-paper'
 const UNCHOSEN = 'border-line hover:bg-paper'
 

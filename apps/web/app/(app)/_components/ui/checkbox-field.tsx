@@ -7,7 +7,7 @@ export function CheckboxField({
   ...props
 }: Omit<React.ComponentProps<'input'>, 'type'> & { label: string; hint?: string }) {
   return (
-    <label className='flex min-h-tap cursor-pointer items-start gap-3 py-2.5'>
+    <label className='flex min-h-tap items-start gap-3 py-2.5 has-disabled:opacity-40'>
       <input type='checkbox' className='mt-0.5 size-5 shrink-0 accent-ink' {...props} />
       <span className='flex min-w-0 flex-col'>
         <span className='text-base'>{label}</span>

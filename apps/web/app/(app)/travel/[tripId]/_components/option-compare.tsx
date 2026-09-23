@@ -127,7 +127,7 @@ export function RejectedOptions({ slot }: { slot: ItinerarySlot }) {
 
   return (
     <details className='group rounded-card border border-line'>
-      <summary className='flex min-h-tap cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm text-ink-muted [&::-webkit-details-marker]:hidden'>
+      <summary className='flex min-h-tap list-none items-center justify-between gap-3 px-4 text-sm text-ink-muted [&::-webkit-details-marker]:hidden'>
         {rejected.length} rejected
         <ChevronDown aria-hidden className='size-4 group-open:rotate-180' />
       </summary>
@@ -215,7 +215,7 @@ function VoteButtons({
           onClick={() => {
             onVote({ type: 'vote', slotId, optionId: option.id, vote: nextOptionVote(mine, vote) })
           }}
-          className='flex min-h-tap flex-1 items-center justify-center rounded-control border border-line bg-surface px-2 text-sm text-ink-muted hover:bg-paper disabled:opacity-40 aria-pressed:border-ink aria-pressed:font-medium aria-pressed:text-ink'
+          className='flex min-h-tap flex-1 items-center justify-center rounded-control border border-line bg-surface px-2 text-sm text-ink-muted enabled:hover:bg-paper disabled:opacity-40 aria-pressed:border-ink aria-pressed:font-medium aria-pressed:text-ink'
         >
           {VOTE_LABELS[vote]}
         </button>

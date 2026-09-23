@@ -137,7 +137,7 @@ function TaggedTransactions({ budget }: { budget: Budget }) {
                 </p>
                 <button
                   type='button'
-                  className='inline-flex min-h-tap shrink-0 items-center px-1 text-sm text-ink-muted underline underline-offset-4'
+                  className='inline-flex min-h-tap shrink-0 items-center px-1 text-sm text-ink-muted underline underline-offset-4 hover:text-ink disabled:opacity-40'
                   disabled={untag.pending}
                   onClick={() => {
                     untag.mutate(transaction.id)

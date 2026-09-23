@@ -116,6 +116,23 @@
     @apply bg-background text-foreground;
   }
 
+  /*
+   * Tailwind v4 leaves buttons with the default arrow. Everything that acts on a click gets the
+   * pointer here, once, so no component has to remember it. A disabled control keeps the arrow.
+   */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='tab']:not([aria-disabled='true']),
+  [role='menuitem']:not([data-disabled]),
+  [role='option']:not([aria-disabled='true']),
+  summary,
+  select:not(:disabled),
+  input:is([type='checkbox'], [type='radio'], [type='file'], [type='color']):not(:disabled),
+  input:is([type='checkbox'], [type='radio'], [type='file'], [type='color']):not(:disabled)::file-selector-button,
+  label:has(input:is([type='checkbox'], [type='radio'], [type='file']):not(:disabled)) {
+    cursor: pointer;
+  }
+
   /* A backstop for anything that forgets motion-safe: no movement when reduced motion is on. */
   @media (prefers-reduced-motion: reduce) {
     *,

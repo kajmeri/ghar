@@ -98,7 +98,7 @@ export function BookingForm({
           {BOOKING_KINDS.map(option => (
             <label
               key={option}
-              className='flex min-h-tap cursor-pointer items-center justify-center rounded-control border border-line bg-surface px-2 text-center text-base has-checked:border-ink has-checked:bg-ink has-checked:text-paper has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-surface'
+              className='flex min-h-tap items-center justify-center rounded-control border border-line bg-surface px-2 text-center text-base hover:border-ink/40 has-checked:border-ink has-checked:bg-ink has-checked:text-paper has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-surface'
             >
               <input
                 type='radio'
@@ -405,7 +405,7 @@ function CheckboxField({
 }) {
   return (
     <div className={className}>
-      <label htmlFor={id} className='flex min-h-tap cursor-pointer items-center gap-3 text-base'>
+      <label htmlFor={id} className='flex min-h-tap items-center gap-3 text-base'>
         <input
           id={id}
           name={name}

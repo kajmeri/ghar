@@ -316,7 +316,7 @@ function FilePicker({
     <label
       className={cn(
         buttonVariants({ variant: 'outline' }),
-        'cursor-pointer px-3 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
+        'px-3 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
         disabled && 'pointer-events-none opacity-40'
       )}
     >

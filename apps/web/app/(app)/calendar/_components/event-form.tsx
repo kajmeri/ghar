@@ -41,7 +41,7 @@ const DATETIME_CLASS =
   'block appearance-none [&::-webkit-calendar-picker-indicator]:opacity-60 [&::-webkit-date-and-time-value]:min-h-6 [&::-webkit-date-and-time-value]:text-left'
 
 const PILL =
-  'flex min-h-tap cursor-pointer items-center justify-center gap-2 rounded-control border border-line bg-surface px-2 text-center text-base has-checked:border-ink has-checked:bg-ink has-checked:text-paper has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-surface'
+  'flex min-h-tap items-center justify-center gap-2 rounded-control border border-line bg-surface px-2 text-center text-base hover:border-ink/40 has-checked:border-ink has-checked:bg-ink has-checked:text-paper has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-surface'
 
 const LEGEND = 'mb-1.5 text-sm font-medium text-ink'
 
@@ -125,7 +125,7 @@ export function EventForm({
       />
 
       <div className='flex flex-col gap-4 border-t border-line pt-6'>
-        <label className='flex min-h-tap cursor-pointer items-center gap-3 self-start text-base'>
+        <label className='flex min-h-tap items-center gap-3 self-start text-base'>
           <input
             type='checkbox'
             name='allDay'
@@ -364,7 +364,7 @@ export function EventForm({
           </p>
           <div className='grid gap-x-4 md:grid-cols-2'>
             {members.map(member => (
-              <label key={member.userId} className='flex min-h-tap cursor-pointer items-center gap-3 text-base'>
+              <label key={member.userId} className='flex min-h-tap items-center gap-3 text-base'>
                 <input
                   type='checkbox'
                   name='attendeeIds'

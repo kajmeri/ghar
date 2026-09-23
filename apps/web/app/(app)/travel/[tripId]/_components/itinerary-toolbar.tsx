@@ -87,7 +87,7 @@ function LayoutLink({ href, active, className, children }: { href: string; activ
       href={href}
       scroll={false}
       aria-current={active ? 'page' : undefined}
-      className={cn('flex h-tap items-center px-3 text-sm', active ? 'bg-paper font-medium text-ink' : 'text-ink-muted hover:bg-paper', className)}
+      className={cn('flex h-tap items-center px-3 text-sm focus-visible:-outline-offset-2', active ? 'bg-paper font-medium text-ink' : 'text-ink-muted hover:bg-paper', className)}
     >
       {children}
     </Link>

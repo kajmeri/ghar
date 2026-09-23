@@ -12,7 +12,7 @@ import { SlotKindIcon } from './slot-kind-icon'
 import { SlotWarnings } from './slot-warnings'
 
 const TIME = 'w-[4.5rem] shrink-0 text-sm tabular-nums text-ink-muted'
-const LINE = 'flex min-h-tap w-full items-center gap-3 py-1.5 text-left'
+const LINE = 'flex min-h-tap w-full items-center gap-3 rounded-control py-1.5 text-left active:bg-ink/5'
 
 /**
  * One slot on the day timeline, and almost always one line. Decided reads as what is happening;
@@ -101,7 +101,7 @@ export function SlotRow({ slot }: { slot: ItinerarySlot }) {
     ) : (
       <button
         type='button'
-        className={cn(LINE, 'text-ink-muted')}
+        className={cn(LINE, 'text-ink-muted hover:text-ink')}
         onClick={() => {
           openSheet({ kind: 'slot', slotId: slot.id })
         }}
@@ -115,7 +115,7 @@ export function SlotRow({ slot }: { slot: ItinerarySlot }) {
     body = (
       <button
         type='button'
-        className={cn(LINE, 'text-ink-muted')}
+        className={cn(LINE, 'text-ink-muted hover:text-ink')}
         onClick={() => {
           openSheet({ kind: 'slot', slotId: slot.id })
         }}
@@ -152,7 +152,7 @@ function ExpandedOptions({ slot }: { slot: ItinerarySlot }) {
             <li key={option.id}>
               <button
                 type='button'
-                className='flex min-h-tap w-full items-center gap-3 px-3 py-1.5 text-left'
+                className='flex min-h-tap w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-paper active:bg-ink/5'
                 onClick={() => {
                   openSheet({ kind: 'compare', slotId: slot.id, focusOptionId: option.id })
                 }}

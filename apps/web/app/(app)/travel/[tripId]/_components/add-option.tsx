@@ -114,7 +114,7 @@ export function AddOptionSheet({ slot }: { slot: ItinerarySlot }) {
           </Field>
           <CostFields idPrefix={formId} kind={slot.kind} />
           <details className='group'>
-            <summary className='flex min-h-tap cursor-pointer list-none items-center gap-2 text-sm font-medium [&::-webkit-details-marker]:hidden'>
+            <summary className='flex min-h-tap list-none items-center gap-2 text-sm font-medium [&::-webkit-details-marker]:hidden'>
               More details
               <ChevronDown aria-hidden className='size-4 text-ink-muted group-open:rotate-180' />
             </summary>
@@ -122,7 +122,7 @@ export function AddOptionSheet({ slot }: { slot: ItinerarySlot }) {
               <OptionFields />
             </div>
           </details>
-          <label className='flex min-h-tap cursor-pointer items-center gap-3 self-start text-base'>
+          <label className='flex min-h-tap items-center gap-3 self-start text-base'>
             <input type='checkbox' name='choose' className='size-5 shrink-0 accent-ink' />
             Choose it now
           </label>

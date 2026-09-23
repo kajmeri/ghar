@@ -55,7 +55,7 @@ export function SimulateForm({ bookingId, currency }: { bookingId: string; curre
 
 function Checkbox({ id, name, label }: { id: string; name: string; label: string }) {
   return (
-    <label htmlFor={id} className='flex min-h-tap cursor-pointer items-center gap-3 text-base'>
+    <label htmlFor={id} className='flex min-h-tap items-center gap-3 text-base'>
       <input id={id} name={name} type='checkbox' className='size-5 shrink-0 accent-ink' />
       {label}
     </label>

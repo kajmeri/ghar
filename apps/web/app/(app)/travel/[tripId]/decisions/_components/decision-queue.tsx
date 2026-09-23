@@ -229,7 +229,10 @@ function DecisionRow({
         type='button'
         aria-expanded={open}
         onClick={onToggle}
-        className='flex min-h-tap w-full items-center gap-3 px-3 py-2 text-left md:px-4'
+        className={cn(
+          'flex min-h-tap w-full items-center gap-3 px-3 py-2 text-left hover:bg-paper active:bg-ink/5 md:px-4',
+          open ? 'rounded-t-card' : 'rounded-card'
+        )}
       >
         <SlotKindIcon kind={slot.kind} />
         <span className='flex min-w-0 flex-1 flex-col'>
