@@ -25,6 +25,6 @@ export async function GET(request: Request, { params }: RouteContext<'/documents
       },
     })
   } catch (error) {
-    return errorResponse(error, requestId)
+    return errorResponse(error, requestId, { request })
   }
 }

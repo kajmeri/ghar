@@ -1,8 +1,8 @@
 import 'server-only'
 import type { EndpointDefinition, EndpointParsedInput, EndpointResponse } from '@ghar/contracts'
-import { getHousehold } from '@ghar/db/queries'
+import { cache } from 'react'
 import { getPageContext, getRequestContext, type RequestContext } from '@/lib/auth/context'
-import { getDb } from '@/lib/db'
+import { currentHousehold } from '@/lib/households/current'
 import { route } from './handler'
 
 /**
@@ -11,14 +11,14 @@ import { route } from './handler'
  */
 export interface Session {
   readonly context: RequestContext
-  readonly household: { readonly id: string; readonly name: string; readonly timeZone: string }
+  readonly household: { readonly id: string; readonly name: string; readonly timeZone: string; readonly currency: string }
 }
 
 async function sessionFor(context: RequestContext): Promise<Session> {
-  const household = await getHousehold(context, getDb())
+  const household = await currentHousehold(context)
   return {
     context,
-    household: { id: household.id, name: household.name, timeZone: household.timezone },
+    household: { id: household.id, name: household.name, timeZone: household.timezone, currency: household.currency },
   }
 }
 
@@ -27,11 +27,14 @@ export async function requireSession(): Promise<Session> {
   return sessionFor(await getRequestContext())
 }
 
-/** For pages. Redirects to sign-in or onboarding instead of throwing. */
-export async function getPageSession(): Promise<Session> {
+/**
+ * For pages. Redirects to sign-in or onboarding instead of throwing. Resolved once per render, so
+ * the layout and the page share it.
+ */
+export const getPageSession = cache(async (): Promise<Session> => {
   const { ctx } = await getPageContext()
   return sessionFor(ctx)
-}
+})
 
 /**
  * `route`, with the session resolved first. Every endpoint under /api/v1 except health

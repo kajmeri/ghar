@@ -5,7 +5,7 @@ import { formatCalendarDate } from '@ghar/core/dates'
 import { leadingOptionId, partitionOptions, type DeadlineState } from '@ghar/core/itinerary'
 import { ChevronDown } from 'lucide-react'
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FormError } from '@/components/ui/form-error'
@@ -23,7 +23,7 @@ export interface Decision {
 
 const DEADLINE_TEXT: Record<DeadlineState, string> = {
   passed: 'text-negative',
-  soon: 'text-caution',
+  soon: 'text-caution-ink',
   later: 'text-ink-muted',
 }
 
@@ -63,63 +63,88 @@ export function DecisionQueue({ decisions }: { decisions: readonly Decision[] })
     })
   }
 
-  // Keys live on the window so they work without first clicking into the list. An effect,
-  // because the keyboard is outside React; it re-binds when what the keys act on changes.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (sheet !== null || event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return
-      const focus = (index: number) => {
-        const row = rows[index]
-        if (!row) return
-        setActive(index)
-        setRejecting(false)
-        rowRefs.current.get(row.slot.id)?.focus()
-      }
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  // Set when a decision is sent; the effect below moves focus once it has landed.
+  const settling = useRef(false)
 
-      if (event.key === 'j' || event.key === 'ArrowDown') {
-        event.preventDefault()
-        focus(Math.min(current + 1, rows.length - 1))
-      } else if (event.key === 'k' || event.key === 'ArrowUp') {
-        event.preventDefault()
-        focus(Math.max(current - 1, 0))
-      } else if (event.key === 'Escape') {
-        setRejecting(false)
-      } else if (currentRow && event.key === 'e') {
-        toggle(currentRow.slot.id)
-      } else if (currentRow && canEdit && event.key === 'r') {
-        toggle(currentRow.slot.id, true)
-        setRejecting(value => !value)
-      } else if (currentRow && canEdit && /^[1-9]$/.test(event.key) && !action.pending) {
-        const option = partitionOptions(currentRow.slot.options).active[Number(event.key) - 1]
-        if (!option) return
-        event.preventDefault()
-        action.mutate({ type: rejecting ? 'reject' : 'choose', slotId: currentRow.slot.id, optionId: option.id })
-        setRejecting(false)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('keydown', onKey)
-    }
+  const decide = (type: 'choose' | 'reject', slotId: string, optionId: string) => {
+    settling.current = true
+    action.mutate({ type, slotId, optionId })
+  }
+
+  // Deciding removes the button that was pressed: a chosen slot leaves the queue, a ruled-out
+  // option leaves its row. Once the page has re-read, focus goes to the row now at this place,
+  // or to the heading when nothing is left, instead of falling back to the top of the page.
+  useEffect(() => {
+    if (!settling.current || action.pending) return
+    settling.current = false
+    if (action.error) return
+    const row = rows[current]
+    if (row) rowRefs.current.get(row.slot.id)?.focus()
+    else headingRef.current?.focus()
   })
+
+  // Keys belong to the list, so they act only once focus is on a row and never fire from
+  // elsewhere on the page.
+  const onKeyDown = (event: KeyboardEvent<HTMLOListElement>) => {
+    if (sheet !== null || event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return
+    const focus = (index: number) => {
+      const row = rows[index]
+      if (!row) return
+      setActive(index)
+      setRejecting(false)
+      rowRefs.current.get(row.slot.id)?.focus()
+    }
+
+    if (event.key === 'j' || event.key === 'ArrowDown') {
+      event.preventDefault()
+      focus(Math.min(current + 1, rows.length - 1))
+    } else if (event.key === 'k' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      focus(Math.max(current - 1, 0))
+    } else if (event.key === 'Escape') {
+      setRejecting(false)
+    } else if (currentRow && event.key === 'e') {
+      toggle(currentRow.slot.id)
+    } else if (currentRow && canEdit && event.key === 'r') {
+      toggle(currentRow.slot.id, true)
+      setRejecting(value => !value)
+    } else if (currentRow && canEdit && /^[1-9]$/.test(event.key) && !action.pending) {
+      const option = partitionOptions(currentRow.slot.options).active[Number(event.key) - 1]
+      if (!option) return
+      event.preventDefault()
+      decide(rejecting ? 'reject' : 'choose', currentRow.slot.id, option.id)
+      setRejecting(false)
+    }
+  }
+
+  const heading = (
+    <h2 ref={headingRef} tabIndex={-1} className='sr-only'>
+      Still to decide
+    </h2>
+  )
 
   if (rows.length === 0) {
     return (
-      <EmptyState
-        title='Nothing left to decide'
-        action={
-          <Button asChild variant='outline'>
-            <Link href={`/travel/${tripId}`}>Back to the itinerary</Link>
-          </Button>
-        }
-      >
-        Every slot has a choice. Add options to a slot to weigh them up here.
-      </EmptyState>
+      <div>
+        {heading}
+        <EmptyState
+          title='Nothing left to decide'
+          action={
+            <Button asChild variant='outline'>
+              <Link href={`/travel/${tripId}`}>Back to the itinerary</Link>
+            </Button>
+          }
+        >
+          Every slot has a choice. Add options to a slot to weigh them up here.
+        </EmptyState>
+      </div>
     )
   }
 
   return (
     <div className='flex flex-col gap-4'>
+      {heading}
       <p className='hidden text-sm text-ink-muted md:block' aria-live='polite'>
         {rejecting ? (
           <>
@@ -127,15 +152,15 @@ export function DecisionQueue({ decisions }: { decisions: readonly Decision[] })
           </>
         ) : (
           <>
-            <Key>j</Key> <Key>k</Key> to move · <Key>e</Key> to open · <Key>1</Key>–<Key>9</Key> to choose · <Key>r</Key> then a number to
-            rule one out
+            On a row: <Key>j</Key> <Key>k</Key> to move · <Key>e</Key> to open · <Key>1</Key>–<Key>9</Key> to choose · <Key>r</Key> then a
+            number to rule one out
           </>
         )}
       </p>
 
       <FormError>{action.error}</FormError>
 
-      <ol className='flex flex-col gap-2'>
+      <ol className='flex flex-col gap-2' onKeyDown={onKeyDown}>
         {rows.map(({ slot, deadline }, index) => (
           <li key={slot.id}>
             <DecisionRow
@@ -156,11 +181,11 @@ export function DecisionQueue({ decisions }: { decisions: readonly Decision[] })
               }}
               onChoose={option => {
                 setActive(index)
-                action.mutate({ type: 'choose', slotId: slot.id, optionId: option.id })
+                decide('choose', slot.id, option.id)
               }}
               onReject={option => {
                 setActive(index)
-                action.mutate({ type: 'reject', slotId: slot.id, optionId: option.id })
+                decide('reject', slot.id, option.id)
               }}
             />
           </li>

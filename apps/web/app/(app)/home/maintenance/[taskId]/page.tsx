@@ -11,7 +11,6 @@ import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Pill } from '@/components/ui/pill'
 import { getPageSession } from '@/lib/api/authed'
-import { getPageContext } from '@/lib/auth/context'
 import * as contacts from '@/lib/contacts/service'
 import { dueText, MAINTENANCE_TONES } from '@/lib/home/display'
 import * as home from '@/lib/home/service'
@@ -35,21 +34,20 @@ const EMPTY_CARD = 'rounded-card border border-line bg-surface p-4 text-ink-mute
 export default async function MaintenancePage({ params }: PageProps<'/home/maintenance/[taskId]'>) {
   const { taskId } = await params
   if (!maintenanceParamsSchema.safeParse({ taskId }).success) notFound()
-  const { ctx, session: sessionContext } = await getPageContext()
   const session = await getPageSession()
+  const { context: ctx, household } = session
   const canManage = can(ctx.role, 'home.manage')
 
-  const [{ task, history }, { household }, members, assets, contactList] = await Promise.all([
+  const [{ task, history }, members, assetOptions, contactList] = await Promise.all([
     home.getMaintenanceDetail(session, taskId).catch((error: unknown) => {
       if (error instanceof NotFoundError) notFound()
       throw error
     }),
-    households.getMyHousehold(ctx, sessionContext),
     households.listMembers(ctx),
-    canManage ? home.listAssets(session) : [],
+    canManage ? home.listAssetOptions(session) : [],
     canManage ? contacts.listContacts(session) : [],
   ])
-  const today = todayInTimeZone(household.timezone)
+  const today = todayInTimeZone(household.timeZone)
   const names = new Map(members.map(member => [member.userId, memberName(member)]))
   const assignee = task.assignedUserId ? names.get(task.assignedUserId) : undefined
   const urgent = task.state === 'overdue' || task.state === 'due_soon'
@@ -99,7 +97,7 @@ export default async function MaintenancePage({ params }: PageProps<'/home/maint
               <LogCompletionSheet taskId={task.id} today={today} currency={household.currency} />
               <MaintenanceSheet
                 task={task}
-                assets={assets.map(asset => ({ id: asset.id, name: asset.name }))}
+                assets={assetOptions}
                 members={members.map(member => ({ userId: member.userId, name: memberName(member) }))}
                 contacts={contactList.map(contact => ({ id: contact.id, name: contact.name, role: contact.role }))}
               />

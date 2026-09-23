@@ -41,5 +41,7 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // API routes authenticate themselves, with cookies or a bearer token, and answer 401 as JSON.
   // /styleguide needs no session: it shows sample data, and it 404s outside development.
-  matcher: ['/((?!api/|styleguide(?:/|$)|_next/static|_next/image|favicon.ico|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
+  // The manifest is fetched without cookies, so it must never redirect to /login.
+  // The service worker script and the offline page it precaches are the same for everyone and need no session.
+  matcher: ['/((?!api/|styleguide(?:/|$)|offline$|sw\\.js$|_next/static|_next/image|favicon.ico|robots.txt|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
 }

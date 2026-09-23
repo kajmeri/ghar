@@ -6,7 +6,7 @@ import { parseMoneyInput } from '@ghar/core/money'
 import { TRIP_STATUSES, type TripStatus } from '@ghar/core/trips'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState, type SyntheticEvent } from 'react'
+import { useEffect, useId, useRef, useState, type SyntheticEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Field, Input, Select, Textarea } from '@/components/ui/field'
@@ -60,6 +60,30 @@ export function TripSettings({ trip, members, currentUserId }: { trip: Trip; mem
     router.push('/travel')
   })
 
+  // Each of these swaps one control for another in place. Focus goes with the swap, so a
+  // keyboard or screen reader user isn't dropped back at the top of the page.
+  const editRef = useRef<HTMLButtonElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+  const keepRef = useRef<HTMLButtonElement>(null)
+  const deleteRef = useRef<HTMLButtonElement>(null)
+  const consequenceId = useId()
+  const wasOpen = useRef(open)
+  const wasConfirming = useRef(confirmingDelete)
+
+  useEffect(() => {
+    if (wasOpen.current === open) return
+    wasOpen.current = open
+    if (open) nameRef.current?.focus()
+    else editRef.current?.focus()
+  }, [open])
+
+  useEffect(() => {
+    if (wasConfirming.current === confirmingDelete) return
+    wasConfirming.current = confirmingDelete
+    if (confirmingDelete) keepRef.current?.focus()
+    else deleteRef.current?.focus()
+  }, [confirmingDelete])
+
   const onSubmit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault()
     setBudgetError(null)
@@ -80,6 +104,7 @@ export function TripSettings({ trip, members, currentUserId }: { trip: Trip; mem
   if (!open) {
     return (
       <Button
+        ref={editRef}
         variant='ghost'
         onClick={() => {
           setOpen(true)
@@ -93,11 +118,11 @@ export function TripSettings({ trip, members, currentUserId }: { trip: Trip; mem
   return (
     <Card className='w-full p-4 md:p-5'>
       <form onSubmit={onSubmit} className='flex flex-col gap-4'>
-        <p className='text-base font-semibold'>Edit trip</p>
+        <h2 className='text-base font-semibold'>Edit trip</h2>
 
         <div className='grid gap-4 md:grid-cols-2'>
           <Field label='Name'>
-            <Input name='name' required maxLength={200} defaultValue={trip.name} />
+            <Input ref={nameRef} name='name' required maxLength={200} defaultValue={trip.name} />
           </Field>
           <Field label='Destination'>
             <Input name='destination' maxLength={200} defaultValue={trip.destination ?? ''} />
@@ -168,10 +193,13 @@ export function TripSettings({ trip, members, currentUserId }: { trip: Trip; mem
           <div className='ml-auto flex items-center gap-2'>
             {confirmingDelete ? (
               <>
-                <p className='text-sm text-ink-muted'>This removes the itinerary and packing list. Bookings and charges stay.</p>
+                <p id={consequenceId} className='text-sm text-ink-muted'>
+                  This removes the itinerary and packing list. Bookings and charges stay.
+                </p>
                 <Button
                   type='button'
                   variant='destructive'
+                  aria-describedby={consequenceId}
                   disabled={remove.pending}
                   onClick={() => {
                     remove.mutate()
@@ -180,8 +208,10 @@ export function TripSettings({ trip, members, currentUserId }: { trip: Trip; mem
                   {remove.pending ? 'Deleting…' : 'Delete it'}
                 </Button>
                 <Button
+                  ref={keepRef}
                   type='button'
                   variant='ghost'
+                  aria-describedby={consequenceId}
                   onClick={() => {
                     setConfirmingDelete(false)
                   }}
@@ -191,6 +221,7 @@ export function TripSettings({ trip, members, currentUserId }: { trip: Trip; mem
               </>
             ) : (
               <Button
+                ref={deleteRef}
                 type='button'
                 variant='ghost'
                 onClick={() => {

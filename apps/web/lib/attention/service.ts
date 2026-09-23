@@ -3,6 +3,7 @@ import type { Attention, AttentionExpiry } from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
 import { addCalendarDays, todayInTimeZone } from '@ghar/core/dates'
 import { EXPIRED_VISIBLE_DAYS, EXPIRY_SOON_DAYS, expiryState } from '@ghar/core/documents'
+import { MAINTENANCE_DUE_SOON_DAYS } from '@ghar/core/home'
 import * as queries from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
 import { listBillsWithStatus } from '@/lib/bills/service'
@@ -16,9 +17,9 @@ export async function getAttention(session: Session): Promise<Attention> {
   const today = todayInTimeZone(household.timeZone)
   const range = { from: addCalendarDays(today, -EXPIRED_VISIBLE_DAYS), to: addCalendarDays(today, EXPIRY_SOON_DAYS) }
 
-  const [{ currency }, tasks, bills, documents, warranties] = await Promise.all([
-    queries.getHousehold(context, db),
-    queries.listMaintenanceTasks(context, db),
+  const [tasks, bills, documents, warranties] = await Promise.all([
+    // Only jobs already due or due within the due-soon window; the state filter below still decides.
+    queries.listMaintenanceTasks(context, db, { dueTo: addCalendarDays(today, MAINTENANCE_DUE_SOON_DAYS) }),
     can(context.role, 'finances.view') ? listBillsWithStatus(context, db, household.timeZone) : null,
     queries.listDocumentExpiries(context, db, range),
     queries.listWarrantyExpiries(context, db, range),
@@ -43,7 +44,7 @@ export async function getAttention(session: Session): Promise<Attention> {
 
   return {
     today,
-    currency,
+    currency: household.currency,
     maintenance: tasks
       .map(task => toMaintenanceTask(task, today))
       .filter(task => task.state === 'overdue' || task.state === 'due_soon'),

@@ -22,7 +22,7 @@ export function StopMap({ stops, className }: { stops: readonly MapStop[]; class
 
   return (
     <Card className={cn('p-4', className)}>
-      <p className='text-sm font-medium'>Stops</p>
+      <h2 className='text-sm font-medium'>Stops</h2>
 
       {numbered.length === 0 ? (
         <p className='mt-2 text-sm text-ink-muted'>Choose an option with a location and it lands on this map.</p>
@@ -98,15 +98,15 @@ function Plot({ stops }: { stops: Stop[] }) {
 
       <p className='text-xs text-ink-muted'>{scaleLabel}</p>
 
-      <ol className='flex flex-col gap-1 text-sm'>
+      <ol className='flex flex-col text-sm'>
         {stops.map(stop => (
-          <li key={stop.id} className='flex gap-2'>
+          <li key={stop.id} className='flex items-center gap-2'>
             <span className='w-5 shrink-0 tabular-nums text-ink-muted'>{stop.number}</span>
             <a
               href={`https://www.openstreetmap.org/?mlat=${stop.lat}&mlon=${stop.lng}#map=15/${stop.lat}/${stop.lng}`}
               target='_blank'
               rel='noreferrer noopener'
-              className='min-w-0 truncate underline underline-offset-4'
+              className='block min-h-tap min-w-0 truncate leading-11 underline underline-offset-4'
             >
               {stop.title}
             </a>

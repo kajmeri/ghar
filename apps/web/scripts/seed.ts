@@ -1,10 +1,12 @@
 /**
- * Seeds a demo household so the UI is never built against empty tables, with a five-day trip whose
- * itinerary is half decided. Safe to run again: everything it creates is looked up first.
+ * Seeds a demo household so the UI is never built against empty tables: a five-day trip whose
+ * itinerary is half decided, eighteen months of net worth history, and every other section filled in
+ * (seed-records.ts and seed-travel.ts). Safe to run again: everything it creates is looked up first.
+ * Documents are uploaded to the Supabase documents bucket, so set STORAGE_PROVIDER=supabase to open them.
  *
  *   pnpm --filter web db:seed
  *
- * Reads DATABASE_URL, SUPABASE_URL and SUPABASE_SECRET_KEY from apps/web/.env.local or .env.
+ * Reads DATABASE_URL, SUPABASE_URL, SUPABASE_SECRET_KEY and ENCRYPTION_KEY from apps/web/.env.local or .env.
  * SEED_OWNER_EMAIL and SEED_ADULT_EMAIL override the demo addresses.
  */
 import { existsSync } from 'node:fs'
@@ -18,7 +20,11 @@ import * as queries from '@ghar/db/queries'
 import type { RequestContext, SessionContext } from '@ghar/db/queries'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import { encryptSecret, parseEncryptionKey } from '@/lib/crypto'
 import { createInvitationToken } from '@/lib/households/tokens'
+import { ensureNetWorthHistory } from './seed-networth'
+import { ensureHouseholdRecords } from './seed-records'
+import { ensureTravelExtras } from './seed-travel'
 
 const DEMO_HOUSEHOLD = { name: 'Rivera household', timezone: 'America/New_York', currency: 'USD' }
 const PEOPLE = {
@@ -31,6 +37,7 @@ const seedEnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   SUPABASE_URL: z.url(),
   SUPABASE_SECRET_KEY: z.string().min(1),
+  ENCRYPTION_KEY: z.string().min(1),
   APP_URL: z.url().default('http://localhost:3000'),
   SEED_OWNER_EMAIL: z.email().default(PEOPLE.owner.defaultEmail),
   SEED_ADULT_EMAIL: z.email().default(PEOPLE.adult.defaultEmail),
@@ -70,7 +77,18 @@ async function main(): Promise<void> {
     await ensureMember(db, ctx, adult, 'adult')
     await ensurePendingInvitation(db, ctx, PENDING_INVITATION.email, PENDING_INVITATION.role)
     const household = await queries.getHousehold(ctx, db)
-    const tripId = await ensureDemoTrip(db, ctx, await contextFor(db, adult), household.timezone)
+    const adultCtx = await contextFor(db, adult)
+    const tripId = await ensureDemoTrip(db, ctx, adultCtx, household.timezone)
+    const encryptionKey = parseEncryptionKey(env.ENCRYPTION_KEY)
+    const netWorth = await ensureNetWorthHistory(db, ctx, {
+      today: todayInTimeZone(household.timezone),
+      sealToken: token => encryptSecret(token, encryptionKey),
+    })
+    const today = todayInTimeZone(household.timezone)
+    const seeded = { owner: ctx, adult: adultCtx, timeZone: household.timezone, today }
+    // After the net worth history, so bills can be paid from its checking account.
+    const records = await ensureHouseholdRecords(db, { ...seeded, supabase })
+    const travel = await ensureTravelExtras(db, { ...seeded, montrealTripId: tripId })
 
     await queries.finishJobRun(db, run.id, {
       status: 'succeeded',
@@ -82,6 +100,10 @@ async function main(): Promise<void> {
     console.log(`  Adult   ${adult.email}`)
     console.log(`  Invited ${PENDING_INVITATION.email} (${PENDING_INVITATION.role}, pending)`)
     console.log(`  Trip    ${new URL(`/travel/${tripId}`, env.APP_URL).toString()}`)
+    console.log(
+      `  History ${netWorth.written ? `${String(netWorth.days)} days of net worth, with a lapsed bank login and a paid-off car loan` : `net worth left alone, since ${netWorth.reason}`}`
+    )
+    for (const line of [...records, ...travel]) console.log(`  ${line}`)
     console.log('\nOne-time sign-in links. Each works once, within the hour:')
     console.log(`  Owner   ${await signInLink(supabase, env.APP_URL, owner.email)}`)
     console.log(`  Adult   ${await signInLink(supabase, env.APP_URL, adult.email)}\n`)

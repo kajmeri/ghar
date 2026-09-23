@@ -15,20 +15,19 @@ export {
   type ListChangesInput,
 } from './types'
 
+/** Without a Google OAuth client, local development links a made-up calendar. */
 export function usesFakeCalendar(): boolean {
-  return env().CALENDAR_PROVIDER === 'fake'
+  const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = env()
+  return !GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET
 }
 
 export function getGoogleCalendarClient(): GoogleCalendarClient {
-  const { CALENDAR_PROVIDER, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = env()
-  if (CALENDAR_PROVIDER === 'fake') {
+  const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = env()
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('CALENDAR_PROVIDER is fake, and production cannot link a made-up calendar.')
+      throw new Error('GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set, and production cannot link a made-up calendar.')
     }
     return createFakeGoogleCalendarClient()
-  }
-  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-    throw new Error('CALENDAR_PROVIDER is google, but GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set.')
   }
   return createGoogleCalendarClient({
     clientId: GOOGLE_CLIENT_ID,

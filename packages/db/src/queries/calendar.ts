@@ -18,6 +18,7 @@ import { and, asc, eq, gt, gte, inArray, isNotNull, lt, ne, notInArray, or, sql 
 import { bookings, calendarLinks, eventAttendees, events, householdMembers } from '../schema'
 import { recordAudit } from './audit'
 import { authorize } from './authorize'
+import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import type { Actor, Db, RequestContext } from './types'
 
 // Native events, the calendars people link, and what a sync writes back. People reach events and
@@ -286,6 +287,20 @@ export async function listCalendarLinks(ctx: RequestContext, db: Db): Promise<Ca
     .from(calendarLinks)
     .where(eq(calendarLinks.householdId, ctx.householdId))
     .orderBy(asc(calendarLinks.createdAt), asc(calendarLinks.id))
+}
+
+const linkOrder: Keyset = { keys: [{ expr: calendarLinks.createdAt, kind: 'timestamp' }], id: calendarLinks.id }
+
+/** One page of listCalendarLinks, in the same order. */
+export async function listCalendarLinksPage(ctx: RequestContext, db: Db, page: PageRequest): Promise<Page<CalendarLinkRow>> {
+  requirePermission(ctx, 'calendar.view')
+  const rows = await db
+    .select({ ...linkColumns, pageKeys: pageKeys(linkOrder) })
+    .from(calendarLinks)
+    .where(and(eq(calendarLinks.householdId, ctx.householdId), keysetAfter(linkOrder, page.after)))
+    .orderBy(...keysetOrder(linkOrder))
+    .limit(page.limit + 1)
+  return toPage(rows, page.limit)
 }
 
 /**

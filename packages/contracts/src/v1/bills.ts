@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
-import { calendarDateSchema, centsSchema, httpUrlSchema, instantSchema, longTextSchema } from './shared'
+import { calendarDateSchema, centsSchema, httpUrlSchema, instantSchema, longTextSchema, pageQuerySchema, pageSchema } from './shared'
 
 // These lists mirror @ghar/core/bills. A test keeps them equal.
 export const billCadenceSchema = z.enum(['monthly', 'quarterly', 'annual'])
@@ -9,17 +9,18 @@ export const billStatusSchema = z.enum(['paid', 'due', 'overdue'])
 export type BillStatusValue = z.infer<typeof billStatusSchema>
 
 export const billPaymentSchema = z.object({
-  transactionId: z.uuid(),
+  /** The transaction that paid it. Null when someone marked the due date paid themselves. */
+  transactionId: z.uuid().nullable(),
   paidOn: calendarDateSchema,
-  /** Positive. */
-  amountCents: centsSchema,
+  /** Positive. Null when marked paid by hand. */
+  amountCents: centsSchema.nullable(),
 })
 export type BillPayment = z.infer<typeof billPaymentSchema>
 
 export const billOccurrenceSchema = z.object({
   dueOn: calendarDateSchema,
   status: billStatusSchema,
-  /** The transaction that paid it. Bills are never marked paid by hand. */
+  /** What paid it: a matching transaction, or a mark by hand. */
   payment: billPaymentSchema.nullable(),
 })
 export type BillOccurrence = z.infer<typeof billOccurrenceSchema>
@@ -81,11 +82,15 @@ export const billBodySchema = z
   })
 export type BillBody = z.output<typeof billBodySchema>
 
-/** Owners and adults. Late bills first, then by next due date. */
+/**
+ * Owners and adults. By name, ignoring case, each with its current due date and status. The bills
+ * page puts late bills first; that order moves as payments arrive, so pages can't follow it.
+ */
 export const listBills = defineEndpoint({
   method: 'GET',
   path: '/api/v1/bills',
-  response: z.object({ currency: z.string(), bills: z.array(billSchema) }),
+  query: pageQuerySchema,
+  response: pageSchema(billSchema).extend({ currency: z.string() }),
 })
 
 /** The bill with its due dates over the last year and the next one, newest first. */
@@ -116,4 +121,34 @@ export const deleteBill = defineEndpoint({
   path: '/api/v1/bills/:billId',
   params: billParamsSchema,
   response: z.object({ billId: z.uuid() }),
+})
+
+export const billPaymentParamsSchema = billParamsSchema.extend({ dueOn: calendarDateSchema })
+
+export const markBillPaidBodySchema = z.object({
+  /** One of the bill's due dates. */
+  dueOn: calendarDateSchema,
+  /** When it was paid. Defaults to today in the household's zone; never later than today. */
+  paidOn: calendarDateSchema.optional(),
+})
+export type MarkBillPaidBody = z.output<typeof markBillPaidBodySchema>
+
+/**
+ * Marks a due date paid for a payment no transaction shows (cash, a card that isn't linked).
+ * Marking one already marked keeps the first mark. Answers with the bill as getBill does.
+ */
+export const markBillPaid = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/bills/:billId/payments',
+  params: billParamsSchema,
+  body: markBillPaidBodySchema,
+  response: getBill.response,
+})
+
+/** Takes a mark back. A transaction that pays the due date still counts. */
+export const unmarkBillPaid = defineEndpoint({
+  method: 'DELETE',
+  path: '/api/v1/bills/:billId/payments/:dueOn',
+  params: billPaymentParamsSchema,
+  response: getBill.response,
 })

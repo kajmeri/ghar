@@ -11,7 +11,7 @@ import {
 } from '@ghar/contracts'
 import { compareIdeasByVotes, tallyVotes, voteOf } from '@ghar/core/ideas'
 import { useRouter } from 'next/navigation'
-import { useState, type SyntheticEvent } from 'react'
+import { useRef, useState, type SyntheticEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -27,10 +27,17 @@ import { api, errorMessage } from '@/lib/api/client'
  */
 export function IdeaBoard({ ideas, currentUserId }: { ideas: TripIdea[]; currentUserId: string }) {
   const ranked = [...ideas].sort(compareIdeasByVotes)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const [announcement, setAnnouncement] = useState('')
 
   return (
     <section className='flex flex-col gap-3'>
-      <h2 className='text-lg font-semibold'>Ideas</h2>
+      <h2 ref={headingRef} tabIndex={-1} className='text-lg font-semibold'>
+        Ideas
+      </h2>
+      <p role='status' className='sr-only'>
+        {announcement}
+      </p>
       <IdeaForm />
 
       {ranked.length === 0 ? (
@@ -41,7 +48,15 @@ export function IdeaBoard({ ideas, currentUserId }: { ideas: TripIdea[]; current
         <ul className='grid gap-3 md:grid-cols-2'>
           {ranked.map(idea => (
             <li key={idea.id}>
-              <IdeaCard idea={idea} currentUserId={currentUserId} />
+              <IdeaCard
+                idea={idea}
+                currentUserId={currentUserId}
+                onRemoved={() => {
+                  // The card and its Remove button are about to go, so focus lands somewhere that stays.
+                  setAnnouncement(`Removed ${idea.title}`)
+                  headingRef.current?.focus()
+                }}
+              />
             </li>
           ))}
         </ul>
@@ -135,7 +150,14 @@ function IdeaForm() {
 
         {preview?.imageUrl ? (
           <div className='flex items-center gap-3 rounded-control border border-line p-2'>
-            <img src={preview.imageUrl} alt='' className='size-16 shrink-0 rounded-control object-cover' />
+            <img
+              src={preview.imageUrl}
+              alt=''
+              width={64}
+              height={64}
+              decoding='async'
+              className='size-16 shrink-0 rounded-control object-cover'
+            />
             <p className='min-w-0 text-sm text-ink-muted'>{preview.siteName ?? 'Found a picture for this one.'}</p>
           </div>
         ) : null}
@@ -165,13 +187,16 @@ function IdeaForm() {
   )
 }
 
-function IdeaCard({ idea, currentUserId }: { idea: TripIdea; currentUserId: string }) {
+function IdeaCard({ idea, currentUserId, onRemoved }: { idea: TripIdea; currentUserId: string; onRemoved: () => void }) {
   const router = useRouter()
   const tally = tallyVotes(idea.votes)
   const mine = voteOf(idea.votes, currentUserId)
 
   const vote = useMutation((next: 'up' | 'down') => api.request(voteOnTripIdea, { params: { ideaId: idea.id }, body: { vote: next } }))
-  const remove = useMutation(() => api.request(deleteTripIdea, { params: { ideaId: idea.id } }))
+  const remove = useMutation(async () => {
+    await api.request(deleteTripIdea, { params: { ideaId: idea.id } })
+    onRemoved()
+  })
   const promote = useMutation(async () => {
     const { tripId } = await api.request(promoteTripIdea, {
       params: { ideaId: idea.id },
@@ -182,7 +207,10 @@ function IdeaCard({ idea, currentUserId }: { idea: TripIdea; currentUserId: stri
 
   return (
     <Card className='flex h-full flex-col overflow-hidden'>
-      {idea.imageUrl ? <img src={idea.imageUrl} alt='' className='h-32 w-full object-cover' /> : null}
+      {/* Remote pictures from any site, so next/image can't size them; the attributes still reserve the space. */}
+      {idea.imageUrl ? (
+        <img src={idea.imageUrl} alt='' width={400} height={128} loading='lazy' decoding='async' className='h-32 w-full object-cover' />
+      ) : null}
 
       <div className='flex flex-1 flex-col gap-3 p-4 md:p-5'>
         <div>
@@ -193,7 +221,7 @@ function IdeaCard({ idea, currentUserId }: { idea: TripIdea; currentUserId: stri
               href={idea.url}
               target='_blank'
               rel='noreferrer noopener'
-              className='mt-1 inline-block max-w-full truncate text-sm text-ink underline underline-offset-4'
+              className='inline-block min-h-tap max-w-full truncate align-top text-sm leading-11 text-ink underline underline-offset-4'
             >
               {idea.url}
             </a>

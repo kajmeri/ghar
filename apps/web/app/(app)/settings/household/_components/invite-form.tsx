@@ -1,11 +1,12 @@
 'use client'
 
 import { Mail } from 'lucide-react'
-import { useActionState } from 'react'
+import { useActionState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { describedBy, Field, FormMessage } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
+import { useFocusFirstInvalid } from '@/hooks/use-focus-first-invalid'
 import { fieldError, IDLE, submittedValue } from '@/lib/actions/state'
 import { inviteAction } from '../actions'
 
@@ -17,10 +18,12 @@ export interface RoleOption {
 
 export function InviteForm({ roles }: { roles: RoleOption[] }) {
   const [state, formAction, pending] = useActionState(inviteAction, IDLE)
+  const formRef = useRef<HTMLFormElement>(null)
+  useFocusFirstInvalid(formRef, state)
   const errors = { email: fieldError(state, 'email'), role: fieldError(state, 'role') }
 
   return (
-    <form action={formAction} noValidate className='flex flex-col gap-4 rounded-card border border-line bg-surface p-4 md:p-6'>
+    <form ref={formRef} action={formAction} noValidate className='flex flex-col gap-4 rounded-card border border-line bg-surface p-4 md:p-6'>
       <div className='grid gap-4 md:grid-cols-[minmax(0,1fr)_14rem]'>
         <Field id='invite-email' label='Email' error={errors.email}>
           <Input

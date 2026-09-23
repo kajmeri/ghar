@@ -69,6 +69,16 @@ export function occurrenceText(occurrence: BillOccurrence, today: CalendarDate):
   return days === -1 ? '1 day late' : `${Math.abs(days)} days late`
 }
 
+/** A card or loan payment's due date in words. A passed date without Plaid's overdue flag was most likely paid. */
+export function debtPaymentText(payment: { nextPaymentDueOn: CalendarDate; isOverdue: boolean }, today: CalendarDate): string {
+  const days = daysBetween(today, payment.nextPaymentDueOn)
+  if (payment.isOverdue) return `Overdue since ${formatCalendarDate(payment.nextPaymentDueOn, 'MMM d')}`
+  if (days < 0) return `Was due ${formatCalendarDate(payment.nextPaymentDueOn, 'MMM d')}`
+  if (days === 0) return 'Due today'
+  if (days === 1) return 'Due tomorrow'
+  return days <= 30 ? `Due in ${days} days` : `Due ${formatCalendarDate(payment.nextPaymentDueOn, 'MMM d')}`
+}
+
 type Tone = 'positive' | 'caution' | 'negative' | 'neutral'
 
 export function occurrenceTone(occurrence: BillOccurrence): Tone {

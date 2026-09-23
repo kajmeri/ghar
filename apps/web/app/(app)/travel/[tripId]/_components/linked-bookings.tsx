@@ -53,7 +53,7 @@ export function LinkedBookings({ tripId, bookings, timeZone }: { tripId: string;
 
                 <button
                   type='button'
-                  className='text-sm text-ink-muted underline underline-offset-4'
+                  className='inline-flex min-h-tap shrink-0 items-center text-sm text-ink-muted underline underline-offset-4'
                   disabled={unlink.pending}
                   onClick={() => {
                     unlink.mutate(booking.id)

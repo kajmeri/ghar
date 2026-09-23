@@ -5,6 +5,7 @@ import { initialNextDueOn, scheduleAfterCompletion, scheduleAfterRemoval, type A
 import { and, asc, desc, eq, getTableColumns, gte, lte, sql } from 'drizzle-orm'
 import { assets, contacts, documents, maintenance, maintenanceLog } from '../schema'
 import { recordAudit } from './audit'
+import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { requireHouseholdMembers } from './scope'
 import type { Db, RequestContext } from './types'
 
@@ -46,6 +47,20 @@ export async function listAssets(ctx: RequestContext, db: Db): Promise<AssetRow[
     .from(assets)
     .where(eq(assets.householdId, ctx.householdId))
     .orderBy(sql`lower(${assets.name})`, asc(assets.id))
+}
+
+const assetOrder: Keyset = { keys: [{ expr: sql`lower(${assets.name})`, kind: 'text' }], id: assets.id }
+
+/** One page of listAssets, in the same order. */
+export async function listAssetsPage(ctx: RequestContext, db: Db, page: PageRequest): Promise<Page<AssetRow>> {
+  requirePermission(ctx, 'home.view')
+  const rows = await db
+    .select({ ...getTableColumns(assets), pageKeys: pageKeys(assetOrder) })
+    .from(assets)
+    .where(and(eq(assets.householdId, ctx.householdId), keysetAfter(assetOrder, page.after)))
+    .orderBy(...keysetOrder(assetOrder))
+    .limit(page.limit + 1)
+  return toPage(rows, page.limit)
 }
 
 export async function getAsset(ctx: RequestContext, db: Db, assetId: string): Promise<AssetRow> {
@@ -175,11 +190,14 @@ function selectTasks(db: Db) {
     .leftJoin(contacts, eq(contacts.id, maintenance.vendorContactId))
 }
 
-/** Soonest due first; jobs with no due date last. */
+/**
+ * Soonest due first; jobs with no due date last. `dueFrom` and `dueTo` keep only jobs due in that
+ * range (inclusive), which leaves out unscheduled ones.
+ */
 export async function listMaintenanceTasks(
   ctx: RequestContext,
   db: Db,
-  filter: { assetId?: string; vendorContactId?: string } = {}
+  filter: { assetId?: string; vendorContactId?: string; dueFrom?: CalendarDate; dueTo?: CalendarDate } = {}
 ): Promise<MaintenanceTaskRow[]> {
   requirePermission(ctx, 'home.view')
   const rows = await selectTasks(db)
@@ -187,12 +205,37 @@ export async function listMaintenanceTasks(
       and(
         eq(maintenance.householdId, ctx.householdId),
         filter.assetId === undefined ? undefined : eq(maintenance.assetId, filter.assetId),
-        filter.vendorContactId === undefined ? undefined : eq(maintenance.vendorContactId, filter.vendorContactId)
+        filter.vendorContactId === undefined ? undefined : eq(maintenance.vendorContactId, filter.vendorContactId),
+        filter.dueFrom === undefined ? undefined : gte(maintenance.nextDueOn, filter.dueFrom),
+        filter.dueTo === undefined ? undefined : lte(maintenance.nextDueOn, filter.dueTo)
       )
     )
     // Ascending puts nulls last in Postgres.
     .orderBy(asc(maintenance.nextDueOn), sql`lower(${maintenance.title})`, asc(maintenance.id))
   return rows.map(toTask)
+}
+
+const taskOrder: Keyset = {
+  keys: [
+    { expr: maintenance.nextDueOn, kind: 'date', nullable: true },
+    { expr: sql`lower(${maintenance.title})`, kind: 'text' },
+  ],
+  id: maintenance.id,
+}
+
+/** One page of the household's jobs, in listMaintenanceTasks's order. */
+export async function listMaintenanceTasksPage(ctx: RequestContext, db: Db, page: PageRequest): Promise<Page<MaintenanceTaskRow>> {
+  requirePermission(ctx, 'home.view')
+  const fetched = await db
+    .select({ ...taskColumns, pageKeys: pageKeys(taskOrder) })
+    .from(maintenance)
+    .leftJoin(assets, eq(assets.id, maintenance.assetId))
+    .leftJoin(contacts, eq(contacts.id, maintenance.vendorContactId))
+    .where(and(eq(maintenance.householdId, ctx.householdId), keysetAfter(taskOrder, page.after)))
+    .orderBy(...keysetOrder(taskOrder))
+    .limit(page.limit + 1)
+  const { rows, ...position } = toPage(fetched, page.limit)
+  return { ...position, rows: rows.map(toTask) }
 }
 
 export async function getMaintenanceTask(ctx: RequestContext, db: Db, taskId: string): Promise<MaintenanceTaskRow> {

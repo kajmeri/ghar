@@ -88,7 +88,7 @@ function LinkStatus({ link, timeZone }: { link: CalendarLink; timeZone: string }
       : (link.lastError ?? 'The last sync didn’t finish. It tries again every morning.')
   return (
     <p className='flex items-start gap-1.5 text-sm text-ink'>
-      <TriangleAlert aria-hidden className='mt-0.5 size-4 shrink-0 text-caution' />
+      <TriangleAlert aria-hidden className='mt-0.5 size-4 shrink-0 text-caution-ink' />
       <span className='min-w-0'>
         {message}
         {link.lastSyncedAt === null ? null : <span className='text-ink-muted'> {linkSyncedText(link, timeZone)}.</span>}

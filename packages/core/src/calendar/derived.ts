@@ -43,6 +43,15 @@ export interface ExpiryDue {
   expiresOn: CalendarDate
 }
 
+/** A connected card or loan's next payment, as Plaid Liabilities last reported it. */
+export interface DebtDue {
+  accountId: string
+  name: string
+  dueOn: CalendarDate
+  /** Plaid's own flag. A passed date without it usually means the payment went through and the date hasn't rolled yet. */
+  overdue: boolean
+}
+
 /** Days before an expiry that its calendar item turns to caution. */
 export const EXPIRY_CAUTION_DAYS = 30
 
@@ -120,6 +129,28 @@ export function billItems(bills: readonly BillDue[], today: CalendarDate): Calen
     tone: dueTone(bill.dueOn, bill.paid, today),
     recurring: false,
     ref: { kind: 'bill', billId: bill.id },
+  }))
+}
+
+/** A debt payment's tone: negative only on Plaid's overdue flag, caution when it's due within a few days. */
+export function debtDueTone(dueOn: CalendarDate, overdue: boolean, today: CalendarDate): 'default' | 'caution' | 'negative' {
+  if (overdue) return 'negative'
+  if (dueOn >= today && dueOn <= addCalendarDays(today, DUE_SOON_DAYS)) return 'caution'
+  return 'default'
+}
+
+export function debtItems(debts: readonly DebtDue[], today: CalendarDate): CalendarItemInput[] {
+  return debts.map(debt => ({
+    id: `bills:debt:${debt.accountId}:${debt.dueOn}`,
+    source: 'bills',
+    title: debt.overdue ? `${debt.name} payment overdue` : `${debt.name} payment due`,
+    location: null,
+    ...allDayRange(debt.dueOn, debt.dueOn),
+    allDay: true,
+    category: 'bill',
+    tone: debtDueTone(debt.dueOn, debt.overdue, today),
+    recurring: false,
+    ref: { kind: 'debt', accountId: debt.accountId },
   }))
 }
 

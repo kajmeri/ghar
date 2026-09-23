@@ -1,23 +1,26 @@
 import { requirePermission } from '@ghar/core/auth'
 import {
   assertCanCreateBankItem,
+  assertCanDisconnectBankItem,
   isTransferTransaction,
   planTransactionSync,
   transactionIdsToLoad,
   type BankAccount,
   type BankEnvironment,
+  type BankHolding,
   type BankItemState,
+  type BankLiability,
   type BankTransaction,
   type StoredTransaction,
   type TransactionChanges,
-  type TransactionListCursor,
 } from '@ghar/core/banking'
 import { ConflictError, NotFoundError, ValidationError } from '@ghar/core/errors'
 import type { CategorySource } from '@ghar/core/finances'
-import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm'
-import { accounts, categories, plaidItems, transactionEdits, transactions } from '../schema'
+import { and, asc, count, eq, gte, ilike, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
+import { accounts, categories, holdings, liabilityDetails, plaidItems, transactionEdits, transactions } from '../schema'
 import { recordAudit } from './audit'
 import { authorize } from './authorize'
+import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { isUniqueViolation } from './pg-errors'
 import type { Actor, Db, RequestContext } from './types'
 
@@ -43,6 +46,7 @@ export interface BankItemRow {
   errorCode: string | null
   consentExpiresAt: Date | null
   lastSyncedAt: Date | null
+  disconnectedAt: Date | null
   createdAt: Date
 }
 
@@ -57,10 +61,12 @@ const bankItemColumns = {
   errorCode: plaidItems.errorCode,
   consentExpiresAt: plaidItems.consentExpiresAt,
   lastSyncedAt: plaidItems.lastSyncedAt,
+  disconnectedAt: plaidItems.disconnectedAt,
   createdAt: plaidItems.createdAt,
 }
 
 const ITEM_NOT_FOUND = 'That bank connection no longer exists.'
+const ITEM_DISCONNECTED = 'That connection is turned off. Connect the bank again to start syncing it.'
 
 function itemKey(actor: Actor, itemId: string) {
   return and(eq(plaidItems.id, itemId), eq(plaidItems.householdId, actor.householdId))
@@ -99,7 +105,10 @@ export async function getBankItemCredentials(
     .where(itemKey(actor, input.itemId))
     .limit(1)
   if (!row) throw new NotFoundError(ITEM_NOT_FOUND)
-  return row
+  const { accessTokenEncrypted } = row
+  // A disconnected connection kept everything but its credential, which was revoked at Plaid.
+  if (accessTokenEncrypted === null) throw new ConflictError(ITEM_DISCONNECTED)
+  return { ...row, accessTokenEncrypted }
 }
 
 /**
@@ -111,9 +120,25 @@ export async function countBankItemsByEnvironment(db: Db, environment: BankEnvir
   return row?.total ?? 0
 }
 
+/** A connection as the cron sync sees it: with the kinds of account it holds so far. */
+export interface BankItemSyncTarget extends BankItemRow {
+  /** Plaid account types, distinct and sorted. Empty until a sync first brings accounts in. */
+  accountTypes: string[]
+}
+
 /** For the cron sync: every connection in every household, oldest first. */
-export async function listBankItemsForSync(db: Db): Promise<BankItemRow[]> {
-  return db.select(bankItemColumns).from(plaidItems).orderBy(asc(plaidItems.createdAt))
+export async function listBankItemsForSync(db: Db): Promise<BankItemSyncTarget[]> {
+  return db
+    .select({
+      ...bankItemColumns,
+      // Every column names its table: Drizzle leaves a single-table select list unqualified, and both
+      // tables have a plaid_item_id.
+      accountTypes: sql<
+        string[]
+      >`array(select distinct ${accounts}.${sql.identifier('type')} from ${accounts} where ${accounts}.${sql.identifier('plaid_item_id')} = ${plaidItems}.${sql.identifier('id')} order by 1)`,
+    })
+    .from(plaidItems)
+    .orderBy(asc(plaidItems.createdAt))
 }
 
 /** For webhooks, which name Plaid's Item ID. The household comes from the row found. */
@@ -210,6 +235,123 @@ export async function setBankItemState(
       })
     }
     return item
+  })
+}
+
+/**
+ * Turns a connection off. The access token has already been revoked at Plaid by the time this
+ * runs, so the sealed copy is dropped along with the sync cursor: nothing left here can call the
+ * bank. Everything the connection brought in — accounts, charges, their categories, notes and trip
+ * tags — is left exactly as it is. Only deleteBankItemHistory ever removes those.
+ */
+export async function disconnectBankItem(ctx: RequestContext, db: Db, input: { itemId: string; now: Date }): Promise<BankItemRow> {
+  requirePermission(ctx, 'finances.manage')
+  return db.transaction(async tx => {
+    const [current] = await tx
+      .select({ status: plaidItems.status })
+      .from(plaidItems)
+      .where(itemKey(ctx, input.itemId))
+      .limit(1)
+      .for('update')
+    if (!current) throw new NotFoundError(ITEM_NOT_FOUND)
+    assertCanDisconnectBankItem(current)
+
+    const [item] = await tx
+      .update(plaidItems)
+      .set({
+        status: 'disconnected',
+        disconnectedAt: input.now,
+        errorCode: null,
+        consentExpiresAt: null,
+        accessTokenEncrypted: null,
+        cursor: null,
+      })
+      .where(itemKey(ctx, input.itemId))
+      .returning(bankItemColumns)
+    if (!item) throw new NotFoundError(ITEM_NOT_FOUND)
+
+    await recordAudit(ctx, tx, {
+      action: 'bank.disconnected',
+      entity: 'plaid_item',
+      entityId: item.id,
+      metadata: { institutionName: item.institutionName, from: current.status },
+    })
+    return item
+  })
+}
+
+/** What a connection holds: what turning it off keeps, and what deleting its history would remove. */
+export interface BankItemContents {
+  accounts: number
+  transactions: number
+}
+
+const NO_CONTENTS: BankItemContents = { accounts: 0, transactions: 0 }
+
+async function readContents(db: Db, householdId: string, itemId?: string): Promise<Map<string, BankItemContents>> {
+  const forItem = itemId === undefined ? undefined : eq(accounts.plaidItemId, itemId)
+  const [accountRows, transactionRows] = await Promise.all([
+    db
+      .select({ itemId: accounts.plaidItemId, total: count() })
+      .from(accounts)
+      .where(and(eq(accounts.householdId, householdId), forItem))
+      .groupBy(accounts.plaidItemId),
+    db
+      .select({ itemId: accounts.plaidItemId, total: count() })
+      .from(transactions)
+      .innerJoin(accounts, eq(accounts.id, transactions.accountId))
+      .where(and(eq(transactions.householdId, householdId), forItem))
+      .groupBy(accounts.plaidItemId),
+  ])
+
+  const contents = new Map<string, BankItemContents>()
+  for (const row of accountRows) contents.set(row.itemId, { accounts: row.total, transactions: 0 })
+  for (const row of transactionRows) {
+    contents.set(row.itemId, { accounts: contents.get(row.itemId)?.accounts ?? 0, transactions: row.total })
+  }
+  return contents
+}
+
+/** Contents for every connection in the household, keyed by connection id. A connection with nothing is absent. */
+export async function listBankItemContents(ctx: RequestContext, db: Db): Promise<Map<string, BankItemContents>> {
+  requirePermission(ctx, 'finances.view')
+  return readContents(db, ctx.householdId)
+}
+
+export async function getBankItemContents(ctx: RequestContext, db: Db, input: { itemId: string }): Promise<BankItemContents> {
+  requirePermission(ctx, 'finances.view')
+  return (await readContents(db, ctx.householdId, input.itemId)).get(input.itemId) ?? NO_CONTENTS
+}
+
+/**
+ * Removes everything a turned-off connection brought in. This is the one path in Ghar that deletes
+ * an account: its transactions, snapshots, holdings and liability details go with it through the
+ * cascades, a goal or bill that pointed at it is left pointing at nothing, and the connection's own
+ * row stays so its Plaid Item is never counted twice. Asked for by name, never as a side effect.
+ */
+export async function deleteBankItemHistory(
+  ctx: RequestContext,
+  db: Db,
+  input: { itemId: string }
+): Promise<{ item: BankItemRow; removed: BankItemContents }> {
+  requirePermission(ctx, 'finances.manage')
+  return db.transaction(async tx => {
+    const [item] = await tx.select(bankItemColumns).from(plaidItems).where(itemKey(ctx, input.itemId)).limit(1).for('update')
+    if (!item) throw new NotFoundError(ITEM_NOT_FOUND)
+    if (item.status !== 'disconnected') {
+      throw new ConflictError('Turn the connection off before deleting what it brought in.')
+    }
+
+    const removed = (await readContents(tx, ctx.householdId, item.id)).get(item.id) ?? NO_CONTENTS
+    await tx.delete(accounts).where(and(eq(accounts.householdId, ctx.householdId), eq(accounts.plaidItemId, item.id)))
+
+    await recordAudit(ctx, tx, {
+      action: 'bank.history_deleted',
+      entity: 'plaid_item',
+      entityId: item.id,
+      metadata: { institutionName: item.institutionName, ...removed },
+    })
+    return { item, removed }
   })
 }
 
@@ -338,6 +480,129 @@ export async function applyTransactionSync(
   })
 }
 
+/** Locks the household's item for the rest of the transaction, so two syncs of it apply in turn. */
+async function lockItem(actor: Actor, tx: Db, itemId: string): Promise<string> {
+  const [item] = await tx.select({ id: plaidItems.id }).from(plaidItems).where(itemKey(actor, itemId)).limit(1).for('update')
+  if (!item) throw new NotFoundError(ITEM_NOT_FOUND)
+  return item.id
+}
+
+/**
+ * Applies /accounts/get: fresh balances for every account on the item, stamped `now`. A successful
+ * call proves the login works, so it clears a stored error the same way a transaction sync does.
+ */
+export async function applyBalanceSync(
+  actor: Actor,
+  db: Db,
+  input: { itemId: string; accounts: readonly BankAccount[]; now: Date }
+): Promise<{ accounts: number }> {
+  authorize(actor, 'finances.manage')
+  return db.transaction(async tx => {
+    const itemId = await lockItem(actor, tx, input.itemId)
+    await upsertAccounts(actor, tx, itemId, input.accounts, input.now)
+    await tx.update(plaidItems).set({ status: 'good', errorCode: null }).where(eq(plaidItems.id, itemId))
+    return { accounts: input.accounts.length }
+  })
+}
+
+/**
+ * Applies /investments/holdings/get. The accounts' balances refresh as with a balance sync; the
+ * holdings replace what the item's accounts held before, since a sold position simply stops appearing.
+ * Holdings are composition only and never change an account's balance.
+ */
+export async function applyInvestmentsSync(
+  actor: Actor,
+  db: Db,
+  input: { itemId: string; accounts: readonly BankAccount[]; holdings: readonly BankHolding[]; now: Date }
+): Promise<{ accounts: number; holdings: number }> {
+  authorize(actor, 'finances.manage')
+  return db.transaction(async tx => {
+    const itemId = await lockItem(actor, tx, input.itemId)
+    await upsertAccounts(actor, tx, itemId, input.accounts, input.now)
+    const accountIds = await accountIdsForItem(tx, itemId)
+    const rows = input.holdings.map(holding => ({
+      householdId: actor.householdId,
+      accountId: knownAccountId(accountIds, holding.plaidAccountId),
+      plaidSecurityId: holding.plaidSecurityId,
+      ticker: holding.ticker,
+      name: holding.name,
+      securityType: holding.securityType,
+      quantity: holding.quantity,
+      costBasisCents: holding.costBasisCents,
+      valueCents: holding.valueCents,
+      asOf: holding.asOf,
+      createdAt: input.now,
+      updatedAt: input.now,
+    }))
+    if (accountIds.size > 0) await tx.delete(holdings).where(inArray(holdings.accountId, [...accountIds.values()]))
+    for (const chunk of chunks(rows)) await tx.insert(holdings).values(chunk)
+    return { accounts: input.accounts.length, holdings: rows.length }
+  })
+}
+
+/**
+ * Applies /liabilities/get. Balances refresh as with a balance sync; the detail for each liability
+ * replaces the last, and an account Plaid no longer describes loses its stale detail.
+ */
+export async function applyLiabilitiesSync(
+  actor: Actor,
+  db: Db,
+  input: { itemId: string; accounts: readonly BankAccount[]; liabilities: readonly BankLiability[]; now: Date }
+): Promise<{ accounts: number; liabilities: number }> {
+  authorize(actor, 'finances.manage')
+  return db.transaction(async tx => {
+    const itemId = await lockItem(actor, tx, input.itemId)
+    await upsertAccounts(actor, tx, itemId, input.accounts, input.now)
+    const accountIds = await accountIdsForItem(tx, itemId)
+    const rows = input.liabilities.map(liability => ({
+      householdId: actor.householdId,
+      accountId: knownAccountId(accountIds, liability.plaidAccountId),
+      kind: liability.kind,
+      aprPercent: liability.aprPercent,
+      minimumPaymentCents: liability.minimumPaymentCents,
+      nextPaymentDueOn: liability.nextPaymentDueOn,
+      lastPaymentCents: liability.lastPaymentCents,
+      lastPaymentOn: liability.lastPaymentOn,
+      originationDate: liability.originationDate,
+      originalPrincipalCents: liability.originalPrincipalCents,
+      isOverdue: liability.isOverdue,
+      createdAt: input.now,
+      updatedAt: input.now,
+    }))
+    const described = new Set(rows.map(row => row.accountId))
+    const undescribed = [...accountIds.values()].filter(id => !described.has(id))
+    if (undescribed.length > 0) await tx.delete(liabilityDetails).where(inArray(liabilityDetails.accountId, undescribed))
+    for (const chunk of chunks(rows)) {
+      await tx
+        .insert(liabilityDetails)
+        .values(chunk)
+        .onConflictDoUpdate({
+          target: liabilityDetails.accountId,
+          set: {
+            kind: excluded('kind'),
+            aprPercent: excluded('apr_percent'),
+            minimumPaymentCents: excluded('minimum_payment_cents'),
+            nextPaymentDueOn: excluded('next_payment_due_on'),
+            lastPaymentCents: excluded('last_payment_cents'),
+            lastPaymentOn: excluded('last_payment_on'),
+            originationDate: excluded('origination_date'),
+            originalPrincipalCents: excluded('original_principal_cents'),
+            isOverdue: excluded('is_overdue'),
+            updatedAt: excluded('updated_at'),
+          },
+        })
+    }
+    return { accounts: input.accounts.length, liabilities: rows.length }
+  })
+}
+
+function knownAccountId(accountIds: ReadonlyMap<string, string>, plaidAccountId: string): string {
+  const accountId = accountIds.get(plaidAccountId)
+  // Plaid described an account it didn't list. Fail the sync rather than guess.
+  if (accountId === undefined) throw new Error('Sync returned detail for an unknown account')
+  return accountId
+}
+
 async function upsertAccounts(actor: Actor, tx: Db, itemId: string, bankAccounts: readonly BankAccount[], now: Date): Promise<void> {
   if (bankAccounts.length === 0) return
   await tx
@@ -437,25 +702,24 @@ export interface AccountRow {
   balanceUpdatedAt: Date | null
 }
 
+const accountColumns = {
+  id: accounts.id,
+  plaidItemId: accounts.plaidItemId,
+  institutionName: plaidItems.institutionName,
+  name: accounts.name,
+  officialName: accounts.officialName,
+  mask: accounts.mask,
+  type: accounts.type,
+  subtype: accounts.subtype,
+  currentBalanceCents: accounts.currentBalanceCents,
+  availableBalanceCents: accounts.availableBalanceCents,
+  isoCurrency: accounts.isoCurrency,
+  isHidden: accounts.isHidden,
+  balanceUpdatedAt: accounts.balanceUpdatedAt,
+}
+
 function selectAccounts(db: Db) {
-  return db
-    .select({
-      id: accounts.id,
-      plaidItemId: accounts.plaidItemId,
-      institutionName: plaidItems.institutionName,
-      name: accounts.name,
-      officialName: accounts.officialName,
-      mask: accounts.mask,
-      type: accounts.type,
-      subtype: accounts.subtype,
-      currentBalanceCents: accounts.currentBalanceCents,
-      availableBalanceCents: accounts.availableBalanceCents,
-      isoCurrency: accounts.isoCurrency,
-      isHidden: accounts.isHidden,
-      balanceUpdatedAt: accounts.balanceUpdatedAt,
-    })
-    .from(accounts)
-    .innerJoin(plaidItems, eq(plaidItems.id, accounts.plaidItemId))
+  return db.select(accountColumns).from(accounts).innerJoin(plaidItems, eq(plaidItems.id, accounts.plaidItemId))
 }
 
 const ACCOUNT_NOT_FOUND = 'That account no longer exists.'
@@ -465,6 +729,38 @@ export async function listAccounts(ctx: RequestContext, db: Db): Promise<Account
   return selectAccounts(db)
     .where(eq(accounts.householdId, ctx.householdId))
     .orderBy(asc(plaidItems.createdAt), asc(accounts.name), asc(accounts.id))
+}
+
+const accountOrder: Keyset = {
+  keys: [
+    { expr: plaidItems.createdAt, kind: 'timestamp' },
+    { expr: accounts.name, kind: 'text' },
+  ],
+  id: accounts.id,
+}
+
+/** One page of listAccounts, in the same order. Hidden accounts are left out unless asked for. */
+export async function listAccountsPage(
+  ctx: RequestContext,
+  db: Db,
+  filter: { includeHidden: boolean },
+  page: PageRequest
+): Promise<Page<AccountRow>> {
+  requirePermission(ctx, 'finances.view')
+  const rows = await db
+    .select({ ...accountColumns, pageKeys: pageKeys(accountOrder) })
+    .from(accounts)
+    .innerJoin(plaidItems, eq(plaidItems.id, accounts.plaidItemId))
+    .where(
+      and(
+        eq(accounts.householdId, ctx.householdId),
+        filter.includeHidden ? undefined : eq(accounts.isHidden, false),
+        keysetAfter(accountOrder, page.after)
+      )
+    )
+    .orderBy(...keysetOrder(accountOrder))
+    .limit(page.limit + 1)
+  return toPage(rows, page.limit)
 }
 
 export async function setAccountHidden(ctx: RequestContext, db: Db, input: { accountId: string; isHidden: boolean }): Promise<AccountRow> {
@@ -494,10 +790,13 @@ export async function setAccountHidden(ctx: RequestContext, db: Db, input: { acc
 
 export interface TransactionRow {
   id: string
-  accountId: string
-  accountName: string
+  /** Null on a charge typed in by hand, which belongs to no account. */
+  accountId: string | null
+  accountName: string | null
   accountMask: string | null
   institutionName: string | null
+  /** The trip this charge is tagged to, which is what makes a trip's actual spend add up. */
+  tripId: string | null
   amountCents: number
   isoCurrency: string | null
   date: string
@@ -522,16 +821,19 @@ export interface TransactionRow {
   updatedAt: Date
 }
 
-function selectTransactions(db: Db) {
+/** `extra` is how the paged list adds its `pageKeys` without a second copy of the joins. */
+function selectTransactions<Extra extends Record<string, SQL>>(db: Db, extra: Extra = {} as Extra) {
   return db
     .select({
+      ...extra,
       id: transactions.id,
-      // The inner join below means an account is always there; the transaction's own column is
-      // nullable because charges typed in by hand have none.
+      // Left joined: a charge typed in by hand belongs to no account, and is still the household's
+      // money. Everything about an account is null on those.
       accountId: accounts.id,
       accountName: accounts.name,
       accountMask: accounts.mask,
       institutionName: plaidItems.institutionName,
+      tripId: transactions.tripId,
       amountCents: transactions.amountCents,
       isoCurrency: transactions.isoCurrency,
       date: transactions.date,
@@ -555,9 +857,17 @@ function selectTransactions(db: Db) {
       updatedAt: transactions.updatedAt,
     })
     .from(transactions)
-    .innerJoin(accounts, eq(accounts.id, transactions.accountId))
-    .innerJoin(plaidItems, eq(plaidItems.id, accounts.plaidItemId))
+    .leftJoin(accounts, eq(accounts.id, transactions.accountId))
+    .leftJoin(plaidItems, eq(plaidItems.id, accounts.plaidItemId))
     .leftJoin(categories, eq(categories.id, transactions.categoryId))
+}
+
+/**
+ * A charge on a hidden account is out of sight everywhere it isn't asked for by name. One typed in
+ * by hand has no account at all, and is always the household's own.
+ */
+function visibleAccount() {
+  return or(isNull(transactions.accountId), eq(accounts.isHidden, false))
 }
 
 export interface TransactionFilters {
@@ -566,6 +876,10 @@ export interface TransactionFilters {
   to?: string
   /** Without one, transactions on hidden accounts are left out. */
   accountId?: string
+  /** One category exactly, or the literal 'none' for everything still uncategorized. */
+  categoryId?: string
+  /** One trip exactly, or the literal 'none' for everything tagged to no trip. */
+  tripId?: string
   /** Bounds on the size of the amount, in or out. */
   minCents?: number
   maxCents?: number
@@ -573,8 +887,6 @@ export interface TransactionFilters {
   q?: string
   /** Only the review queue: see reviewConditions. */
   review?: boolean
-  cursor?: TransactionListCursor
-  limit: number
 }
 
 /**
@@ -590,22 +902,36 @@ export async function countReviewQueue(ctx: RequestContext, db: Db): Promise<num
   const [row] = await db
     .select({ total: count() })
     .from(transactions)
-    .innerJoin(accounts, eq(accounts.id, transactions.accountId))
-    .where(and(eq(transactions.householdId, ctx.householdId), eq(accounts.isHidden, false), ...reviewConditions()))
+    .leftJoin(accounts, eq(accounts.id, transactions.accountId))
+    .where(and(eq(transactions.householdId, ctx.householdId), visibleAccount(), ...reviewConditions()))
   return row?.total ?? 0
 }
 
-/** Newest first. `next` is the cursor for the following page, or null on the last. */
-export async function listTransactions(
-  ctx: RequestContext,
-  db: Db,
-  filters: TransactionFilters
-): Promise<{ transactions: TransactionRow[]; next: TransactionListCursor | null }> {
-  requirePermission(ctx, 'finances.view')
+/**
+ * The order the money screen and every trip list share: newest first, ties broken by when the row
+ * arrived and then by its id.
+ */
+const transactionOrder: Keyset = {
+  keys: [
+    { expr: transactions.date, kind: 'date', desc: true },
+    { expr: transactions.createdAt, kind: 'timestamp', desc: true },
+  ],
+  id: transactions.id,
+  idDesc: true,
+}
+
+function transactionConditions(ctx: RequestContext, filters: TransactionFilters): (SQL | undefined)[] {
   const conditions = [eq(transactions.householdId, ctx.householdId)]
   if (filters.from !== undefined) conditions.push(gte(transactions.date, filters.from))
   if (filters.to !== undefined) conditions.push(lte(transactions.date, filters.to))
-  conditions.push(filters.accountId === undefined ? eq(accounts.isHidden, false) : eq(transactions.accountId, filters.accountId))
+  const account = filters.accountId === undefined ? visibleAccount() : eq(transactions.accountId, filters.accountId)
+  if (account) conditions.push(account)
+  if (filters.categoryId !== undefined) {
+    conditions.push(filters.categoryId === 'none' ? isNull(transactions.categoryId) : eq(transactions.categoryId, filters.categoryId))
+  }
+  if (filters.tripId !== undefined) {
+    conditions.push(filters.tripId === 'none' ? isNull(transactions.tripId) : eq(transactions.tripId, filters.tripId))
+  }
   if (filters.minCents !== undefined) {
     conditions.push(sql`abs(${transactions.amountCents}) >= ${filters.minCents}`)
   }
@@ -619,25 +945,22 @@ export async function listTransactions(
     if (matches) conditions.push(matches)
   }
   if (filters.review) conditions.push(...reviewConditions())
-  if (filters.cursor) {
-    const after = or(
-      lt(transactions.date, filters.cursor.date),
-      and(eq(transactions.date, filters.cursor.date), lt(transactions.id, filters.cursor.id))
-    )
-    if (after) conditions.push(after)
-  }
+  return conditions
+}
 
-  const rows = await selectTransactions(db)
-    .where(and(...conditions))
-    .orderBy(desc(transactions.date), desc(transactions.id))
-    .limit(filters.limit + 1)
-
-  const page = rows.slice(0, filters.limit)
-  const last = page.at(-1)
-  return {
-    transactions: page,
-    next: rows.length > filters.limit && last ? { date: last.date, id: last.id } : null,
-  }
+/** One page of charges, newest first. */
+export async function listTransactions(
+  ctx: RequestContext,
+  db: Db,
+  filters: TransactionFilters,
+  page: PageRequest
+): Promise<Page<TransactionRow>> {
+  requirePermission(ctx, 'finances.view')
+  const rows = await selectTransactions(db, { pageKeys: pageKeys(transactionOrder) })
+    .where(and(...transactionConditions(ctx, filters), keysetAfter(transactionOrder, page.after)))
+    .orderBy(...keysetOrder(transactionOrder))
+    .limit(page.limit + 1)
+  return toPage(rows, page.limit)
 }
 
 const TRANSACTION_NOT_FOUND = 'That transaction no longer exists.'

@@ -6,6 +6,13 @@ import { itemHref, itemStartOnDay, TONE_BAR, TONE_DOT } from '@/lib/calendar/dis
 import { cn } from '@/lib/utils'
 
 /**
+ * Month cells are too dense for 44px rows, so a linked chip's hit area grows past it without
+ * moving anything: sideways into the cell padding, and up and down to meet the next chip's in the
+ * gap between them, never over it. Each chip still clears the 24px minimum.
+ */
+const TAP_AREA = 'relative after:absolute after:-inset-x-1 after:-inset-y-px'
+
+/**
  * One item in a month cell. All-day and multi-day items are bars; timed ones are a dot and a start
  * time. Used by the grid and by its "more" popover, so it stays free of server-only code.
  */
@@ -17,14 +24,15 @@ export function CalendarItemChip({ item, date, timeZone }: { item: CalendarItem;
   const content = (
     <>
       {bar ? null : <span aria-hidden className={cn('size-2 shrink-0 rounded-pill', TONE_DOT[item.tone])} />}
-      {start ? <span className='shrink-0 text-ink-muted tabular-nums'>{start}</span> : null}
+      {/* Muted text fails on the darker hover fill, so the time turns ink with it. */}
+      {start ? <span className='shrink-0 text-ink-muted tabular-nums group-hover/chip:text-ink'>{start}</span> : null}
       <span className='truncate'>{item.title}</span>
     </>
   )
   const className = cn(
-    'flex min-w-0 items-center gap-1.5 rounded-control px-1.5 py-0.5 text-sm text-ink outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+    'flex min-w-0 items-center gap-1.5 rounded-control px-1.5 py-0.5 text-sm text-ink outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
     bar && ['border-l-2 bg-line/40', TONE_BAR[item.tone]],
-    href && 'hover:bg-line/60'
+    href && ['group/chip hover:bg-line/60', TAP_AREA]
   )
 
   return href ? (

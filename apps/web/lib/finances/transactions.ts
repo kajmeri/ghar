@@ -1,0 +1,134 @@
+import 'server-only'
+import type { Transaction } from '@ghar/contracts'
+import * as queries from '@ghar/db/queries'
+import type { RequestContext, TransactionFilters, TransactionRow } from '@ghar/db/queries'
+import type { Session } from '@/lib/api/authed'
+import { pageRequest, pageResponse, type CursorScope, type PageResult } from '@/lib/api/cursor'
+import { getDb } from '@/lib/db'
+import { accountLabel } from '@/lib/finances/service'
+
+// Charges as /api/v1/transactions lists and edits them: one list for the money screen, for a trip
+// looking for what it cost, and for the digest's review queue. Everything that decides which rows
+// are in the list is a filter, and every filter is part of the cursor's scope, so changing one
+// starts the list again rather than skipping rows.
+
+export function toTransaction(row: TransactionRow): Transaction {
+  return {
+    id: row.id,
+    postedOn: row.date,
+    description: row.name,
+    merchant: row.merchantName,
+    amountCents: row.amountCents,
+    tripId: row.tripId,
+    accountId: row.accountId,
+    accountLabel: row.accountName === null ? null : accountLabel({ name: row.accountName, mask: row.accountMask }),
+    categoryId: row.categoryId,
+    categoryName: row.categoryName,
+    categorySource: row.categorySource,
+    categoryConfidence: row.categoryConfidence,
+    suggestedCategoryId: row.suggestedCategoryId,
+    needsReview: row.needsReview,
+    isPending: row.isPending,
+    isTransfer: row.isTransfer,
+    isExcluded: row.isExcluded,
+    notes: row.notes,
+  }
+}
+
+export interface TransactionQuery {
+  cursor?: string
+  limit: number
+  tripId?: string
+  untagged?: boolean
+  accountId?: string
+  categoryId?: string
+  from?: string
+  to?: string
+  q?: string
+  review?: boolean
+}
+
+/** `untagged` is the older spelling of `tripId=none`, which the trip budget panel still sends. */
+function filtersFor(query: TransactionQuery): TransactionFilters {
+  return {
+    tripId: query.untagged ? 'none' : query.tripId,
+    accountId: query.accountId,
+    categoryId: query.categoryId,
+    from: query.from,
+    to: query.to,
+    q: query.q,
+    review: query.review,
+  }
+}
+
+function scopeFor(filters: TransactionFilters): CursorScope {
+  return { sort: 'transactions:date-desc', filters: { ...filters } }
+}
+
+/**
+ * One page of charges, newest first, with the size of the review queue beside it. The count
+ * ignores this page's filters on purpose: it is the household's whole queue, which is what the
+ * "N to review" link offers to open.
+ */
+export async function loadTransactionsPage(
+  session: Session,
+  query: TransactionQuery
+): Promise<PageResult<Transaction> & { reviewCount: number }> {
+  const db = getDb()
+  const filters = filtersFor(query)
+  const scope = scopeFor(filters)
+  const [page, reviewCount] = await Promise.all([
+    queries.listTransactions(session.context, db, filters, pageRequest(query, scope)),
+    queries.countReviewQueue(session.context, db),
+  ])
+  return { ...pageResponse(page, scope, toTransaction), reviewCount }
+}
+
+/** How many charges are waiting for someone to file them. What the Money page's link counts. */
+export async function countTransactionsToReview(ctx: RequestContext): Promise<number> {
+  return queries.countReviewQueue(ctx, getDb())
+}
+
+/** A charge typed in by hand. It has no account, and is read back the way the list shows it. */
+export async function addTransaction(
+  session: Session,
+  input: { postedOn: string; description: string; merchant: string | null; amountCents: number; tripId: string | null }
+): Promise<Transaction> {
+  const { context } = session
+  const row = await getDb().transaction(async tx => {
+    const created = await queries.createManualTransaction(context, tx, {
+      date: input.postedOn,
+      name: input.description,
+      merchantName: input.merchant,
+      amountCents: input.amountCents,
+      tripId: input.tripId,
+    })
+    return queries.getTransaction(context, tx, { transactionId: created.id })
+  })
+  return toTransaction(row)
+}
+
+export interface TransactionChange {
+  categoryId?: string | null
+  tripId?: string | null
+  isExcluded?: boolean
+  notes?: string | null
+}
+
+/**
+ * What a person owns on a charge, changed together. The category goes through the same edit as the
+ * digest's one-tap link, so it is logged in transaction_edits and categorization leaves it alone
+ * after. The trip tag is its own audited change, which is what makes a trip's spend add up.
+ */
+export async function editTransaction(session: Session, transactionId: string, change: TransactionChange): Promise<Transaction> {
+  const { context } = session
+  const { tripId, ...owned } = change
+  const row = await getDb().transaction(async tx => {
+    if (owned.categoryId !== undefined || owned.isExcluded !== undefined || owned.notes !== undefined) {
+      await queries.updateTransaction(context, tx, { transactionId, ...owned })
+    }
+    if (tripId !== undefined) await queries.tagTransactionTrip(context, tx, transactionId, tripId)
+    return queries.getTransaction(context, tx, { transactionId })
+  })
+  return toTransaction(row)
+}

@@ -16,10 +16,13 @@ export function DeleteButton({
   label,
   title,
   description,
+  accessibleLabel,
   redirectTo,
   onDelete,
 }: {
   label: string
+  /** For a button repeated down a list, where "Delete" alone doesn't say which. */
+  accessibleLabel?: string
   title: string
   description: string
   /** Where to go once it's gone. Leave it out to stay and refresh. */
@@ -36,7 +39,7 @@ export function DeleteButton({
     <div className='flex flex-col items-start gap-2'>
       <ConfirmDialog
         trigger={
-          <Button variant='outline' disabled={pending}>
+          <Button variant='outline' disabled={pending} aria-label={pending ? undefined : accessibleLabel}>
             <Trash2 aria-hidden />
             {pending ? 'Deleting…' : label}
           </Button>

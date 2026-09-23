@@ -2,10 +2,12 @@ import { startOfDayInTimeZone, toCalendarDate, type CalendarDate, type TimeZone 
 import { allDayDate, allDayLastDate } from './all-day'
 import {
   billItems,
+  debtItems,
   expiryItems,
   maintenanceItems,
   tripItems,
   type BillDue,
+  type DebtDue,
   type ExpiryDue,
   type MaintenanceDue,
   type TripBooking,
@@ -31,6 +33,7 @@ export type CalendarItemRef =
   | { kind: 'event'; eventId: string; occurrenceStart: Date }
   | { kind: 'booking'; bookingId: string }
   | { kind: 'bill'; billId: string }
+  | { kind: 'debt'; accountId: string }
   | { kind: 'maintenance'; taskId: string; assetId: string | null }
   | { kind: 'document'; documentId: string }
   | { kind: 'asset'; assetId: string }
@@ -80,6 +83,8 @@ export interface CalendarFeedInput {
   events: readonly FeedEvent[]
   bookings?: readonly TripBooking[]
   bills?: readonly BillDue[]
+  /** Card and loan payments. They come under the bills source. */
+  debts?: readonly DebtDue[]
   maintenance?: readonly MaintenanceDue[]
   expiries?: readonly ExpiryDue[]
   /** Which sources to include. Everything when omitted. */
@@ -187,7 +192,7 @@ export function buildCalendarFeed(input: CalendarFeedInput): CalendarItem[] {
     if (wanted.has(source)) raw.push(...eventItems(event, input.window, input.timeZone))
   }
   if (wanted.has('trips')) raw.push(...tripItems(input.bookings ?? []))
-  if (wanted.has('bills')) raw.push(...billItems(input.bills ?? [], input.today))
+  if (wanted.has('bills')) raw.push(...billItems(input.bills ?? [], input.today), ...debtItems(input.debts ?? [], input.today))
   if (wanted.has('maintenance')) raw.push(...maintenanceItems(input.maintenance ?? [], input.today))
   if (wanted.has('expiries')) raw.push(...expiryItems(input.expiries ?? [], input.today))
 

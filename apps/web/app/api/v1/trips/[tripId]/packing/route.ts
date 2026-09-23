@@ -1,12 +1,11 @@
 import { createPackingItem, listPacking } from '@ghar/contracts'
-import { createPackingItem as insertItem, listPackingItems } from '@ghar/db/queries'
+import { createPackingItem as insertItem } from '@ghar/db/queries'
 import { authedRoute } from '@/lib/api/authed'
 import { getDb } from '@/lib/db'
 import { toPackingItem } from '@/lib/travel/serialize'
+import { loadPackingPage } from '@/lib/travel/trips'
 
-export const GET = authedRoute(listPacking, async ({ params }, { context }) => ({
-  items: (await listPackingItems(context, getDb(), params.tripId)).map(toPackingItem),
-}))
+export const GET = authedRoute(listPacking, ({ params, query }, session) => loadPackingPage(session, params.tripId, query))
 
 export const POST = authedRoute(
   createPackingItem,

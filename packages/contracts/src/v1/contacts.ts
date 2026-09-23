@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
 import { maintenanceStateSchema } from './home'
-import { calendarDateSchema, httpUrlSchema, instantSchema, longTextSchema } from './shared'
+import { calendarDateSchema, httpUrlSchema, instantSchema, longTextSchema, pageQuerySchema, pageSchema } from './shared'
 
 export const contactSchema = z.object({
   id: z.uuid(),
@@ -44,15 +44,18 @@ export const contactBodySchema = z.object({
 })
 export type ContactBody = z.output<typeof contactBodySchema>
 
-/** By name. With `q`, only contacts matching every word, names starting with the first word leading. */
+/**
+ * By name, ignoring case. With `q`, only contacts matching every word, still by name so pages
+ * hold still (the contacts page also puts names starting with the first word first).
+ */
 export const listContacts = defineEndpoint({
   method: 'GET',
   path: '/api/v1/contacts',
-  query: z.object({
+  query: pageQuerySchema.extend({
     /** Words to find in the name, role, phone, email, notes or tags. */
     q: z.string().max(200).optional(),
   }),
-  response: z.object({ contacts: z.array(contactSchema) }),
+  response: pageSchema(contactSchema),
 })
 
 export const getContact = defineEndpoint({

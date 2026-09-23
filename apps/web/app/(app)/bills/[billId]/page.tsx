@@ -1,6 +1,6 @@
-import { billParamsSchema } from '@ghar/contracts'
+import { billParamsSchema, type BillOccurrence } from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
-import { formatCalendarDate, todayInTimeZone } from '@ghar/core/dates'
+import { addCalendarDays, formatCalendarDate, todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
 import { NotFoundError } from '@ghar/core/errors'
 import { formatCents } from '@ghar/core/money'
 import { ExternalLink } from 'lucide-react'
@@ -18,11 +18,20 @@ import { SectionHeader } from '../../_components/ui/section-header'
 import { BillSheet } from '../_components/bill-sheet'
 import { DeleteBill } from '../_components/delete-bill'
 import { FinancesLocked } from '../_components/finances-locked'
+import { MarkPaid } from '../_components/mark-paid'
 
 export const metadata: Metadata = { title: 'Bill' }
 
 const CARD = 'rounded-card border border-line bg-surface p-4 md:p-6'
 const EMPTY_CARD = 'rounded-card border border-line bg-surface p-4 text-ink-muted'
+/** A due date this close can be marked paid ahead of time. Further out, it's clutter. */
+const MARK_AHEAD_DAYS = 31
+
+/** Unpaid and due by `until`, or marked paid by hand. A payment matched from a transaction can't be unmarked. */
+function isMarkable(occurrence: BillOccurrence, until: CalendarDate): boolean {
+  if (occurrence.payment) return occurrence.payment.transactionId === null
+  return occurrence.dueOn <= until
+}
 
 export default async function BillPage({ params }: PageProps<'/bills/[billId]'>) {
   const { billId } = await params
@@ -49,6 +58,7 @@ export default async function BillPage({ params }: PageProps<'/bills/[billId]'>)
     canManage ? bills.listBillFormOptions(session) : null,
   ])
   const today = todayInTimeZone(session.household.timeZone)
+  const markableUntil = addCalendarDays(today, MARK_AHEAD_DAYS)
   const { current, lastPayment } = bill
 
   const rows: { label: string; value: ReactNode }[] = [
@@ -66,7 +76,9 @@ export default async function BillPage({ params }: PageProps<'/bills/[billId]'>)
       label: 'Last paid',
       value: lastPayment ? (
         <span className='tabular-nums'>
-          {formatCents(lastPayment.amountCents, { currency })} on {formatCalendarDate(lastPayment.paidOn)}
+          {lastPayment.amountCents === null
+            ? `Marked paid on ${formatCalendarDate(lastPayment.paidOn)}`
+            : `${formatCents(lastPayment.amountCents, { currency })} on ${formatCalendarDate(lastPayment.paidOn)}`}
         </span>
       ) : (
         <span className='text-ink-muted'>No payment found yet</span>
@@ -113,7 +125,7 @@ export default async function BillPage({ params }: PageProps<'/bills/[billId]'>)
           <p className='text-sm text-ink-muted'>
             It’s marked paid when a payment to “{bill.payee}”
             {bill.amountCents === null ? '' : bill.isVariable ? ' for roughly the usual amount' : ' for the usual amount'} shows up in
-            your transactions within a few days of the due date.
+            your transactions within a few days of the due date.{canManage ? ' Paid some other way? Mark the due date paid below.' : ''}
           </p>
         </div>
 
@@ -126,7 +138,14 @@ export default async function BillPage({ params }: PageProps<'/bills/[billId]'>)
                   <div className='min-w-0'>
                     <p className='font-medium tabular-nums'>{formatCalendarDate(occurrence.dueOn)}</p>
                     {occurrence.payment ? (
-                      <p className='text-sm text-ink-muted tabular-nums'>{formatCents(occurrence.payment.amountCents, { currency })}</p>
+                      <p className='text-sm text-ink-muted tabular-nums'>
+                        {occurrence.payment.amountCents === null
+                          ? `Marked paid on ${formatCalendarDate(occurrence.payment.paidOn)}`
+                          : formatCents(occurrence.payment.amountCents, { currency })}
+                      </p>
+                    ) : null}
+                    {canManage && isMarkable(occurrence, markableUntil) ? (
+                      <MarkPaid billId={bill.id} dueOn={occurrence.dueOn} marked={occurrence.payment !== null} />
                     ) : null}
                   </div>
                   <Pill tone={occurrenceTone(occurrence)}>{occurrenceText(occurrence, today)}</Pill>

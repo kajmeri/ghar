@@ -43,7 +43,7 @@ export function route<T extends EndpointDefinition>(
       }
       return Response.json(output.data, { status, headers: { 'x-request-id': requestId } })
     } catch (error) {
-      return errorResponse(error, requestId)
+      return errorResponse(error, requestId, { request })
     }
   }
 }

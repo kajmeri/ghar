@@ -1,7 +1,9 @@
-import { isCalendarDate, type CalendarDate } from '../dates'
+import { differenceInCalendarMonths, parseISO } from 'date-fns'
+import { assertCalendarDate, isCalendarDate, type CalendarDate } from '../dates'
 import { ValidationError } from '../errors'
 import type { Cents } from '../money'
 import { MAX_PLANNED_CENTS } from './budget'
+import { balanceSide } from './networth'
 
 export const GOAL_NAME_MAX_LENGTH = 80
 export const GOAL_NOTES_MAX_LENGTH = 500
@@ -48,7 +50,7 @@ export function validateGoal(input: GoalFields): GoalFields {
  */
 export function goalSavedCents(account: { type: string; currentBalanceCents: Cents | null } | null): Cents | null {
   if (account === null || account.currentBalanceCents === null) return null
-  if (account.type === 'credit' || account.type === 'loan') return null
+  if (balanceSide(account.type) === 'liability') return null
   return Math.max(account.currentBalanceCents, 0)
 }
 
@@ -71,4 +73,46 @@ export function goalProgress(targetCents: Cents, savedCents: Cents | null): Goal
     fraction: Math.min(Math.max(savedCents / targetCents, 0), 1),
     reached: savedCents >= targetCents,
   }
+}
+
+export interface GoalSchedule {
+  /** Whole months from today to the target date, never below zero. Null without a date. */
+  monthsLeft: number | null
+  /** Putting the rest aside evenly: what that is a month. Null when there is nothing to work it out from. */
+  perMonthCents: Cents | null
+  /** The date has gone and the goal isn't reached. */
+  overdue: boolean
+}
+
+/**
+ * What is left to do, spread over the months left. The month the target falls in counts, so a
+ * target at the end of this month asks for all of it now. A goal already reached asks for nothing.
+ */
+export function goalSchedule(input: { remainingCents: Cents | null; targetDate: CalendarDate | null; today: CalendarDate }): GoalSchedule {
+  const { remainingCents, targetDate } = input
+  if (targetDate === null) return { monthsLeft: null, perMonthCents: null, overdue: false }
+
+  const months = differenceInCalendarMonths(parseISO(assertCalendarDate(targetDate)), parseISO(assertCalendarDate(input.today)))
+  const monthsLeft = Math.max(months, 0)
+  const done = remainingCents === null || remainingCents <= 0
+  return {
+    monthsLeft,
+    // Past the date, or inside its last month, what is left is what this month asks for.
+    perMonthCents: done ? null : Math.ceil(remainingCents / Math.max(monthsLeft, 1)),
+    overdue: !done && targetDate < input.today,
+  }
+}
+
+/** Every goal added up: what they are all for, and what stands against them today. */
+export function goalTotals(goals: readonly { targetCents: Cents; savedCents: Cents | null }[]): {
+  targetCents: Cents
+  savedCents: Cents
+} {
+  return goals.reduce<{ targetCents: Cents; savedCents: Cents }>(
+    (totals, goal) => ({
+      targetCents: totals.targetCents + goal.targetCents,
+      savedCents: totals.savedCents + (goal.savedCents ?? 0),
+    }),
+    { targetCents: 0, savedCents: 0 }
+  )
 }

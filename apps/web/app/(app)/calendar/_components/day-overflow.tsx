@@ -24,7 +24,9 @@ export function DayOverflow({
       <Popover.Trigger asChild>
         <button
           type='button'
-          className='mt-0.5 w-full rounded-control px-1.5 py-0.5 text-left text-sm font-medium text-ink-muted outline-none hover:bg-line/60 hover:text-ink focus-visible:ring-[3px] focus-visible:ring-ring/50'
+          // Last thing in a fixed-height cell, so the hit area reaches down through the empty space
+          // below it to about 44px, without covering the chip above.
+          className='relative mt-0.5 w-full rounded-control px-1.5 py-0.5 text-left text-sm font-medium text-ink-muted outline-hidden after:absolute after:-inset-x-1 after:-top-px after:-bottom-5 hover:bg-line/60 hover:text-ink focus-visible:ring-2 focus-visible:ring-ring'
         >
           {count} more<span className='sr-only'> on {label}</span>
         </button>
@@ -34,7 +36,7 @@ export function DayOverflow({
           align='start'
           sideOffset={4}
           collisionPadding={16}
-          className='z-50 w-72 rounded-card border border-line bg-surface p-3 shadow-overlay outline-none motion-safe:animate-fade-in'
+          className='z-50 w-72 rounded-card border border-line bg-surface p-3 shadow-overlay outline-hidden motion-safe:animate-fade-in'
         >
           <p className='px-1.5 pb-2 font-semibold'>{label}</p>
           <ul className='flex flex-col gap-0.5'>

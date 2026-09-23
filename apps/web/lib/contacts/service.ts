@@ -1,11 +1,12 @@
 import 'server-only'
-import type { Contact, ContactBody, ContactJob } from '@ghar/contracts'
+import type { Contact, ContactBody, ContactJob, PageQuery } from '@ghar/contracts'
 import { searchContacts } from '@ghar/core/contacts'
 import { todayInTimeZone } from '@ghar/core/dates'
 import { maintenanceState } from '@ghar/core/home'
 import * as queries from '@ghar/db/queries'
-import type { ContactRow } from '@ghar/db/queries'
+import type { ContactRow, PageRequest } from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
+import { collectPage, pageRequest, pageResponse, type PageResult } from '@/lib/api/cursor'
 import { getDb } from '@/lib/db'
 
 // The plumber, the pediatrician, the insurance agent. What the /api/v1/contacts routes and the
@@ -30,6 +31,20 @@ export async function listContacts(session: Session, query: { q?: string } = {})
   const rows = await queries.listContacts(session.context, getDb())
   const q = query.q?.trim()
   return (q ? searchContacts(rows, q) : rows).map(toContact)
+}
+
+/**
+ * A page of contacts for the API, by name. Matches for `q` stay in name order so pages hold still;
+ * putting names that start with the first word first needs the whole list, so only the page does it.
+ */
+export async function listContactsPage(session: Session, query: PageQuery & { q?: string }): Promise<PageResult<Contact>> {
+  const db = getDb()
+  const q = query.q?.trim() || undefined
+  const scope = { sort: 'contacts:name', filters: { q } }
+  const fetchPage = (request: PageRequest) => queries.listContactsPage(session.context, db, request)
+  const request = pageRequest(query, scope)
+  const page = q ? await collectPage(fetchPage, request, row => searchContacts([row], q).length > 0) : await fetchPage(request)
+  return pageResponse(page, scope, toContact)
 }
 
 /** The contact, and the maintenance jobs they're the vendor for. */

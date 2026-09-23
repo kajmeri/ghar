@@ -3,9 +3,7 @@ import { route } from '@/lib/api/handler'
 import { getRequestContext } from '@/lib/auth/context'
 import * as travel from '@/lib/travel/service'
 
-export const GET = route(listBookings, async () => ({
-  bookings: await travel.listBookings(await getRequestContext()),
-}))
+export const GET = route(listBookings, async ({ query }) => travel.listBookingsPage(await getRequestContext(), query))
 
 export const POST = route(
   createBooking,

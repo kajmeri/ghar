@@ -41,6 +41,11 @@ export interface FormatCentsOptions {
   signDisplay?: 'auto' | 'always' | 'exceptZero' | 'never'
   /** false leaves the currency symbol off, for an input that shows it beside the field. */
   symbol?: boolean
+  /**
+   * "compact" rounds to a short label, "$1.3M", for a chart axis where the room is a few
+   * characters. Never for an amount someone reads as the figure itself.
+   */
+  notation?: 'standard' | 'compact'
 }
 
 const currencyFormatters = new Map<string, Intl.NumberFormat>()
@@ -84,6 +89,29 @@ function numberFormatter(
   return formatter
 }
 
+const compactFormatters = new Map<string, Intl.NumberFormat>()
+
+function compactFormatter(
+  locale: string,
+  currency: string,
+  signDisplay: NonNullable<FormatCentsOptions['signDisplay']>,
+  symbol: boolean
+): Intl.NumberFormat {
+  const key = `${locale}|${currency}|${signDisplay}|${symbol}`
+  let formatter = compactFormatters.get(key)
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale, {
+      ...(symbol ? { style: 'currency', currency } : {}),
+      notation: 'compact',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 1,
+      signDisplay,
+    })
+    compactFormatters.set(key, formatter)
+  }
+  return formatter
+}
+
 /** The symbol a currency shows in a locale: "$" for USD in en-US, "CA$" for CAD. */
 export function currencySymbol(currency = 'USD', locale = 'en-US'): string {
   const parts = currencyFormatter(locale, currency, 'auto').formatToParts(0)
@@ -99,12 +127,13 @@ export function formatCents(cents: Cents, options: FormatCentsOptions = {}): str
     })
   }
 
-  const { currency = 'USD', locale = 'en-US', signDisplay = 'auto', symbol = true } = options
+  const { currency = 'USD', locale = 'en-US', signDisplay = 'auto', symbol = true, notation = 'standard' } = options
   const formatter = currencyFormatter(locale, currency, signDisplay)
   const minorUnitDigits = formatter.resolvedOptions().maximumFractionDigits ?? 2
 
   // Normalize -0 so it never renders as "-$0.00".
   const amount = cents === 0 ? 0 : cents / 10 ** minorUnitDigits
+  if (notation === 'compact') return compactFormatter(locale, currency, signDisplay, symbol).format(amount)
   if (symbol) return formatter.format(amount)
   return numberFormatter(locale, minorUnitDigits, signDisplay).format(amount)
 }

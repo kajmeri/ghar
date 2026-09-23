@@ -2,7 +2,6 @@ import { can } from '@ghar/core/auth'
 import { todayInTimeZone } from '@ghar/core/dates'
 import type { Metadata } from 'next'
 import { getPageSession } from '@/lib/api/authed'
-import { getPageContext } from '@/lib/auth/context'
 import * as contacts from '@/lib/contacts/service'
 import * as home from '@/lib/home/service'
 import { memberName } from '@/lib/households/names'
@@ -20,19 +19,17 @@ export const metadata: Metadata = { title: 'House' }
 
 const EMPTY_CARD = 'rounded-card border border-line bg-surface p-4 text-ink-muted'
 
-export default async function HousePage() {
-  const { ctx, session: sessionContext } = await getPageContext()
-  const session = await getPageSession()
+export default async function HousePage({ searchParams }: PageProps<'/home'>) {
+  const [session, { q }] = await Promise.all([getPageSession(), searchParams])
+  const { context: ctx, household } = session
   const canManage = can(ctx.role, 'home.manage')
 
-  const [assets, tasks, { household }, members, contactList] = await Promise.all([
-    home.listAssets(session),
-    home.listMaintenance(session),
-    households.getMyHousehold(ctx, sessionContext),
+  const [{ assets, tasks }, members, contactList] = await Promise.all([
+    home.getHouseOverview(session),
     canManage ? households.listMembers(ctx) : [],
     canManage ? contacts.listContacts(session) : [],
   ])
-  const today = todayInTimeZone(household.timezone)
+  const today = todayInTimeZone(household.timeZone)
 
   const addThing = <AssetSheet currency={household.currency} />
   const addJob = (
@@ -85,7 +82,7 @@ export default async function HousePage() {
         <section aria-labelledby='things-heading'>
           <SectionHeader id='things-heading' title='Things' />
           {assets.length > 0 ? (
-            <AssetList assets={assets} today={today} />
+            <AssetList assets={assets} query={typeof q === 'string' ? q : ''} today={today} />
           ) : (
             <p className={EMPTY_CARD}>
               Add the things these jobs are for, with their model and serial numbers, so they’re here when something breaks.

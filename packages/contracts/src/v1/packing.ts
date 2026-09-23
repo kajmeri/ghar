@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
-import { shortTextSchema, tripParamsSchema } from './shared'
+import { pageQuerySchema, pageSchema, shortTextSchema, tripParamsSchema } from './shared'
 
 export const packingItemSchema = z.object({
   id: z.uuid(),
@@ -30,11 +30,13 @@ export type PackingTemplate = z.infer<typeof packingTemplateSchema>
 
 const itemParamsSchema = tripParamsSchema.extend({ itemId: z.uuid() })
 
+/** In the list's own order, then by label. */
 export const listPacking = defineEndpoint({
   method: 'GET',
   path: '/api/v1/trips/:tripId/packing',
   params: tripParamsSchema,
-  response: z.object({ items: z.array(packingItemSchema) }),
+  query: pageQuerySchema,
+  response: pageSchema(packingItemSchema),
 })
 
 export const createPackingItem = defineEndpoint({
@@ -71,10 +73,12 @@ export const deletePackingItem = defineEndpoint({
   response: z.object({ deleted: z.literal(true) }),
 })
 
+/** By name, each with its items. */
 export const listPackingTemplates = defineEndpoint({
   method: 'GET',
   path: '/api/v1/packing-templates',
-  response: z.object({ templates: z.array(packingTemplateSchema) }),
+  query: pageQuerySchema,
+  response: pageSchema(packingTemplateSchema),
 })
 
 /**

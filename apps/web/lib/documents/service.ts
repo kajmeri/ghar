@@ -1,5 +1,5 @@
 import 'server-only'
-import type { CreateDocumentBody, DocumentBody, DocumentUpload, HouseholdDocument } from '@ghar/contracts'
+import type { CreateDocumentBody, DocumentBody, DocumentUpload, HouseholdDocument, PageQuery } from '@ghar/contracts'
 import { requirePermission } from '@ghar/core/auth'
 import { todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
 import {
@@ -14,8 +14,9 @@ import {
 } from '@ghar/core/documents'
 import { ValidationError } from '@ghar/core/errors'
 import * as queries from '@ghar/db/queries'
-import type { DocumentWithAssetRow } from '@ghar/db/queries'
+import type { DocumentWithAssetRow, PageRequest } from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
+import { collectPage, pageRequest, pageResponse, type PageResult } from '@/lib/api/cursor'
 import { getDb } from '@/lib/db'
 import { getStorageProvider } from '@/lib/providers/storage'
 
@@ -56,6 +57,22 @@ export async function listDocuments(
   const q = query.q?.trim()
   const today = householdToday(session)
   return (q ? searchDocuments(rows, q) : rows).map(row => toDocument(row, today))
+}
+
+/** A page of documents for the API, newest first, with the same filters and sensitivity rule as the page. */
+export async function listDocumentsPage(
+  session: Session,
+  query: PageQuery & { q?: string; kind?: DocumentKind; assetId?: string }
+): Promise<PageResult<HouseholdDocument>> {
+  const db = getDb()
+  const q = query.q?.trim() || undefined
+  const filter = { kind: query.kind, assetId: query.assetId }
+  const scope = { sort: 'documents:created-desc', filters: { ...filter, q } }
+  const fetchPage = (request: PageRequest) => queries.listDocumentsPage(session.context, db, filter, request)
+  const request = pageRequest(query, scope)
+  const page = q ? await collectPage(fetchPage, request, row => searchDocuments([row], q).length > 0) : await fetchPage(request)
+  const today = householdToday(session)
+  return pageResponse(page, scope, row => toDocument(row, today))
 }
 
 export async function getDocument(session: Session, documentId: string): Promise<HouseholdDocument> {

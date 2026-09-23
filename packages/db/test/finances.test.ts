@@ -14,6 +14,7 @@ import {
   getTransaction,
   listAccounts,
   listTransactions,
+  setAccountHidden,
   updateTransaction,
 } from '../src/queries/banking'
 import {
@@ -32,6 +33,7 @@ import {
   getBudgetPeriod,
   listCategories,
   listCategoryRules,
+  listCategorySpend,
   listGoals,
   listMonthlyCategorySpend,
   listTopMerchants,
@@ -42,6 +44,7 @@ import {
   type CategoryRow,
 } from '../src/queries/finances'
 import { createInvitation } from '../src/queries/invitations'
+import { createManualTransaction } from '../src/queries/trip-transactions'
 import { acceptInvitation, createHousehold } from '../src/queries/session'
 import type { Db, SystemContext } from '../src/queries/types'
 import { createAuthUser, createTestDatabase, queryAs } from './support/database'
@@ -399,8 +402,8 @@ describe('categorization', () => {
     ).toEqual({ byRule: 0, byPfc: 0 })
 
     expect(await countReviewQueue(a, db)).toBe(3)
-    const queue = await listTransactions(a, db, { review: true, limit: 10 })
-    expect(queue.transactions.map(row => row.id).sort()).toEqual([ids['tj-2'], ids['tj-3'], ids.mystery].sort())
+    const queue = await listTransactions(a, db, { review: true }, { limit: 10 })
+    expect(queue.rows.map(row => row.id).sort()).toEqual([ids['tj-2'], ids['tj-3'], ids.mystery].sort())
     // Flagged rows aren't sent to the model a second time.
     expect((await loadCategorizationInput(system, db)).candidates.map(row => row.id)).toEqual([ids['tj-2']])
   })
@@ -663,5 +666,38 @@ describe('access', () => {
       .from(categories)
       .where(and(eq(categories.householdId, a.householdId), eq(categories.name, 'Renamed')))
     expect(row).toBeUndefined()
+  })
+})
+
+describe('charges typed in by hand', () => {
+  // July is otherwise empty, so these figures are this test's own.
+  const july = { from: '2026-07-01', to: '2026-08-01' }
+
+  it('counts towards spending, and is offered to the categorizer, though it is on no account', async () => {
+    expect(await listCategorySpend(a, db, july)).toEqual([])
+
+    const dinner = await createManualTransaction(a, db, {
+      date: '2026-07-15',
+      name: 'Dinner, split in cash',
+      merchantName: null,
+      amountCents: -4200,
+      tripId: null,
+    })
+
+    expect(await listCategorySpend(a, db, july)).toEqual([{ categoryId: null, spentCents: 4200 }])
+    expect((await loadCategorizationInput(system, db)).candidates.map(row => row.id)).toContain(dinner.id)
+    expect(await listCategorySpend(b, db, july)).toEqual([])
+
+    const groceries = await categoryByKey(a, 'groceries')
+    await updateTransaction(a, db, { transactionId: dinner.id, categoryId: groceries.id })
+    expect(await listCategorySpend(a, db, july)).toEqual([{ categoryId: groceries.id, spentCents: 4200 }])
+  })
+
+  it('still counts once every bank account is hidden, having none of its own', async () => {
+    const [checking] = await listAccounts(a, db)
+    if (!checking) throw new Error('No account')
+    await setAccountHidden(a, db, { accountId: checking.id, isHidden: true })
+    expect(await listCategorySpend(a, db, july)).toHaveLength(1)
+    await setAccountHidden(a, db, { accountId: checking.id, isHidden: false })
   })
 })

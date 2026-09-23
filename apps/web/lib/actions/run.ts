@@ -2,6 +2,7 @@ import 'server-only'
 import { describeError, ValidationError } from '@ghar/core/errors'
 import { unstable_rethrow } from 'next/navigation'
 import type { z } from 'zod'
+import { getMonitoring } from '@/lib/providers/monitoring'
 import type { ActionState } from './state'
 
 /**
@@ -15,7 +16,8 @@ export async function runAction(formData: FormData, work: () => Promise<string |
   } catch (error) {
     unstable_rethrow(error)
     const described = describeError(error)
-    if (!described.expected) console.error('Unhandled error in server action', error)
+    // Next's onRequestError never sees this one, since it's caught here, so it's reported here.
+    if (!described.expected) getMonitoring().captureException(error, { tags: { kind: 'server_action' } })
     return {
       status: 'error',
       message: described.message,

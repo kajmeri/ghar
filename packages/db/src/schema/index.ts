@@ -38,10 +38,23 @@ import {
   CATEGORY_KINDS,
   CATEGORY_MATCHER_TYPES,
   CATEGORY_SOURCES,
+  isLiabilityKind,
+  LIABILITY_KINDS,
+  MANUAL_ACCOUNT_KINDS,
+  MANUAL_ACCOUNT_NAME_MAX_LENGTH,
+  MANUAL_NOTES_MAX_LENGTH,
+  MANUAL_VALUE_SOURCES,
   MATCHER_VALUE_MAX_LENGTH,
+  MAX_MANUAL_VALUE_CENTS,
   MAX_PLANNED_CENTS,
+  MAX_REMINDER_CADENCE_MONTHS,
+  NETWORTH_SNAPSHOT_SOURCES,
   type CategoryColorToken,
   type CategoryIcon,
+  type LiabilityKind,
+  type ManualAccountKind,
+  type ManualValueSource,
+  type NetWorthSnapshotSource,
 } from '@ghar/core/finances'
 import {
   ASSET_FIELD_MAX_LENGTH,
@@ -71,6 +84,9 @@ import {
 } from '@ghar/core/travel'
 import { COST_BASES, OPTION_SOURCES, OPTION_STATUSES, OPTION_VOTES, SLOT_BANDS, SLOT_KINDS, SLOT_STATUSES } from '@ghar/core/itinerary'
 import { TRIP_STATUSES } from '@ghar/core/trips'
+import { DIGEST_SECTIONS, ONE_TAP_ACTIONS, type DigestSection } from '@ghar/core/digest'
+import { BOOKING_DRAFT_STATUSES, MAIL_LINK_STATUSES, MAIL_MESSAGE_OUTCOMES, MAIL_SUBJECT_MAX_LENGTH } from '@ghar/core/mail'
+import { SYNC_ENTITIES, type SyncEntity } from '@ghar/core/sync'
 import { sql, type SQL } from 'drizzle-orm'
 import {
   bigint,
@@ -83,6 +99,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -100,6 +117,11 @@ import { authUsers } from 'drizzle-orm/supabase'
 // each table in packages/db/drizzle. Every table here has RLS enabled. No table has a write
 // policy: writes go through the data access layer on the server connection, never through
 // PostgREST.
+//
+// Sync (migration 0008): `updated_at` is set by a trigger on insert and on any update that changes the
+// row, so app code never has to remember it. Deleting a row a client can hold writes a tombstone to
+// sync_tombstones, and a change to a child a client sees inside its parent (a vote inside an itinerary
+// slot) bumps the parent's `updated_at`.
 
 export const householdRole = pgEnum('household_role', HOUSEHOLD_ROLES)
 export const jobStatus = pgEnum('job_status', ['running', 'succeeded', 'failed'])
@@ -130,6 +152,10 @@ export const optionVoteValue = pgEnum('option_vote', OPTION_VOTES)
 export const documentKind = pgEnum('document_kind', DOCUMENT_KINDS)
 export const assetKind = pgEnum('asset_kind', ASSET_KINDS)
 export const billCadence = pgEnum('bill_cadence', BILL_CADENCES)
+export const mailLinkStatus = pgEnum('mail_link_status', MAIL_LINK_STATUSES)
+export const mailMessageOutcome = pgEnum('mail_message_outcome', MAIL_MESSAGE_OUTCOMES)
+export const bookingDraftStatus = pgEnum('booking_draft_status', BOOKING_DRAFT_STATUSES)
+export const oneTapAction = pgEnum('one_tap_action', ONE_TAP_ACTIONS)
 
 const timestamptz = () => timestamp({ withTimezone: true })
 const metadata = () =>
@@ -154,6 +180,7 @@ export const households = pgTable(
     /** ISO 4217 code. */
     currency: char({ length: 3 }).notNull(),
     createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
   },
   table => [
     check('households_name_length', sql`char_length(${table.name}) between 1 and 80`),
@@ -182,6 +209,7 @@ export const householdMembers = pgTable(
       .references(() => profiles.id, { onDelete: 'cascade' }),
     role: householdRole().notNull(),
     joinedAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
   },
   table => [
     primaryKey({ columns: [table.householdId, table.userId] }),
@@ -205,8 +233,13 @@ export const invitations = pgTable(
     acceptedAt: timestamptz(),
     invitedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
     createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
   },
   table => [
+    index('invitations_household_idx').on(table.householdId),
+    index('invitations_invited_by_idx')
+      .on(table.invitedBy)
+      .where(sql`${table.invitedBy} is not null`),
     unique('invitations_token_hash_unique').on(table.tokenHash),
     check('invitations_email_lowercase', sql`${table.email} = lower(${table.email})`),
     check('invitations_role_not_owner', sql`${table.role} <> 'owner'`),
@@ -233,7 +266,12 @@ export const auditLog = pgTable(
     metadata: metadata(),
     createdAt: timestamptz().notNull().defaultNow(),
   },
-  table => [index('audit_log_household_created_idx').on(table.householdId, table.createdAt.desc())]
+  table => [
+    index('audit_log_household_created_idx').on(table.householdId, table.createdAt.desc()),
+    index('audit_log_actor_idx')
+      .on(table.actorUserId)
+      .where(sql`${table.actorUserId} is not null`),
+  ]
 ).enableRLS()
 
 /** One row per cron run. Not household-scoped, so no policy: only the server reads it. */
@@ -274,6 +312,7 @@ export const categories = pgTable(
     sortOrder: integer().notNull().default(0),
     isArchived: boolean().notNull().default(false),
     createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
   },
   table => [
     uniqueIndex('categories_household_name_unique').on(table.householdId, sql`lower(${table.name})`),
@@ -311,6 +350,9 @@ export const categoryRules = pgTable(
   table => [
     unique('category_rules_matcher_unique').on(table.householdId, table.matcherType, table.matcherValue),
     index('category_rules_category_idx').on(table.categoryId),
+    index('category_rules_created_by_idx')
+      .on(table.createdByUserId)
+      .where(sql`${table.createdByUserId} is not null`),
     check(
       'category_rules_matcher_value_length',
       sql`char_length(${table.matcherValue}) between 1 and ${sql.raw(String(MATCHER_VALUE_MAX_LENGTH))}`
@@ -337,8 +379,12 @@ export const plaidItems = pgTable(
     plaidItemId: text().notNull(),
     institutionId: text(),
     institutionName: text(),
-    /** AES-256-GCM ciphertext from apps/web/lib/crypto.ts. Never select into a response. */
-    accessTokenEncrypted: text().notNull(),
+    /**
+     * AES-256-GCM ciphertext from apps/web/lib/crypto.ts. Never select into a response. Null once
+     * the connection is disconnected: the token is revoked at Plaid, and a dead credential is not
+     * worth keeping.
+     */
+    accessTokenEncrypted: text(),
     /** The /transactions/sync cursor after the last applied sync. Null before the first. */
     cursor: text(),
     status: plaidItemStatus().notNull().default('good'),
@@ -346,6 +392,8 @@ export const plaidItems = pgTable(
     consentExpiresAt: timestamptz(),
     /** Plaid's error_code from the last failure, cleared by a successful sync. */
     errorCode: text(),
+    /** When somebody turned the connection off. What it brought in stays until asked to go. */
+    disconnectedAt: timestamptz(),
     createdAt: timestamptz().notNull().defaultNow(),
   },
   table => [unique('plaid_items_plaid_item_id_unique').on(table.plaidItemId), index('plaid_items_household_idx').on(table.householdId)]
@@ -376,6 +424,7 @@ export const accounts = pgTable(
     isHidden: boolean().notNull().default(false),
     balanceUpdatedAt: timestamptz(),
     createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
   },
   table => [
     unique('accounts_item_plaid_account_unique').on(table.plaidItemId, table.plaidAccountId),
@@ -439,6 +488,15 @@ export const transactions = pgTable(
     check('transactions_manual_or_plaid', sql`(${table.accountId} is null) = (${table.plaidTransactionId} is null)`),
     index('transactions_household_date_idx').on(table.householdId, table.date.desc(), table.id.desc()),
     index('transactions_account_date_idx').on(table.accountId, table.date.desc()),
+    index('transactions_category_idx')
+      .on(table.categoryId)
+      .where(sql`${table.categoryId} is not null`),
+    index('transactions_category_rule_idx')
+      .on(table.categoryRuleId)
+      .where(sql`${table.categoryRuleId} is not null`),
+    index('transactions_suggested_category_idx')
+      .on(table.suggestedCategoryId)
+      .where(sql`${table.suggestedCategoryId} is not null`),
     // The review queue and rule backfills.
     index('transactions_household_uncategorized_idx')
       .on(table.householdId, table.date.desc())
@@ -466,6 +524,9 @@ export const transactionEdits = pgTable(
   },
   table => [
     index('transaction_edits_transaction_idx').on(table.transactionId, table.createdAt.desc()),
+    index('transaction_edits_user_idx')
+      .on(table.userId)
+      .where(sql`${table.userId} is not null`),
     check('transaction_edits_field', sql`${table.field} in ('category_id', 'notes', 'is_excluded')`),
   ]
 ).enableRLS()
@@ -542,9 +603,230 @@ export const goals = pgTable(
   },
   table => [
     index('goals_household_idx').on(table.householdId),
+    index('goals_linked_account_idx')
+      .on(table.linkedAccountId)
+      .where(sql`${table.linkedAccountId} is not null`),
     check('goals_name_length', sql`char_length(${table.name}) between 1 and 80`),
     check('goals_target_cents', sql`${table.targetCents} between 1 and ${sql.raw(String(MAX_PLANNED_CENTS))}`),
     check('goals_notes_length', sql`char_length(${table.notes}) <= 500`),
+  ]
+).enableRLS()
+
+// ---------------------------------------------------------------------------------------------
+// Net worth. Signs follow BALANCE_SIGN in @ghar/core/finances: a snapshot stores what a balance adds
+// to net worth, negative for money owed, so nothing that reads one looks at an account's type.
+
+/**
+ * Something the household owns or owes that no bank connection covers: the house, a car, a 401k at
+ * an institution nobody linked. Its value is a history in manual_values, never overwritten.
+ */
+export const manualAccounts = pgTable(
+  'manual_accounts',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    kind: text().$type<ManualAccountKind>().notNull(),
+    /** Follows from the kind. Stored so a reader can split owned from owed without the sign table. */
+    isLiability: boolean().notNull(),
+    notes: text(),
+    /** Months after the newest value that the digest asks for a new one. Null for never. */
+    reminderCadenceMonths: smallint(),
+    /** Left out of today's net worth and the reminders. Its history stays. */
+    archivedAt: timestamptz(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('manual_accounts_household_name_idx').on(table.householdId, sql`lower(${table.name})`, table.id),
+    check('manual_accounts_kind', inList(table.kind, MANUAL_ACCOUNT_KINDS)),
+    check(
+      'manual_accounts_is_liability',
+      sql`${table.isLiability} = (${inList(table.kind, MANUAL_ACCOUNT_KINDS.filter(isLiabilityKind))})`
+    ),
+    check('manual_accounts_name_length', sql`char_length(${table.name}) between 1 and ${sql.raw(String(MANUAL_ACCOUNT_NAME_MAX_LENGTH))}`),
+    check('manual_accounts_notes_length', sql`char_length(${table.notes}) <= ${sql.raw(String(MANUAL_NOTES_MAX_LENGTH))}`),
+    check(
+      'manual_accounts_reminder_cadence',
+      sql`${table.reminderCadenceMonths} between 1 and ${sql.raw(String(MAX_REMINDER_CADENCE_MONTHS))}`
+    ),
+  ]
+).enableRLS()
+
+/**
+ * One value of a manual account as of a date. Updating an estimate adds a row; the newest on or before
+ * a day is that day's value. Never negative: for a loan it is what's still owed.
+ */
+export const manualValues = pgTable(
+  'manual_values',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    manualAccountId: uuid()
+      .notNull()
+      .references(() => manualAccounts.id, { onDelete: 'cascade' }),
+    asOf: date({ mode: 'string' }).notNull(),
+    valueCents: cents().notNull(),
+    source: text().$type<ManualValueSource>().notNull().default('manual'),
+    notes: text(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    // Two values on one day: the one entered later wins.
+    index('manual_values_account_as_of_idx').on(table.manualAccountId, table.asOf.desc(), table.createdAt.desc(), table.id.desc()),
+    check('manual_values_value', sql`${table.valueCents} between 0 and ${sql.raw(String(MAX_MANUAL_VALUE_CENTS))}`),
+    check('manual_values_source', inList(table.source, MANUAL_VALUE_SOURCES)),
+    check('manual_values_notes_length', sql`char_length(${table.notes}) <= ${sql.raw(String(MANUAL_NOTES_MAX_LENGTH))}`),
+  ]
+).enableRLS()
+
+/**
+ * One account's reading for a day, connected or manual, written by the daily snapshot job. A balance
+ * that couldn't be refreshed is carried forward with `isStale`, never left out and never written as
+ * zero. Running the job again the same day updates the row.
+ */
+export const accountSnapshots = pgTable(
+  'account_snapshots',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    /** Set for a connected account, with source 'plaid'. */
+    accountId: uuid().references(() => accounts.id, { onDelete: 'cascade' }),
+    /** Set for a manual account, with source 'manual'. */
+    manualAccountId: uuid().references(() => manualAccounts.id, { onDelete: 'cascade' }),
+    asOf: date({ mode: 'string' }).notNull(),
+    /** Signed: positive for what's owned, negative for what's owed. */
+    balanceCents: cents().notNull(),
+    isStale: boolean().notNull().default(false),
+    source: text().$type<'plaid' | 'manual'>().notNull(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('account_snapshots_account_as_of_unique').on(table.accountId, table.asOf),
+    unique('account_snapshots_manual_account_as_of_unique').on(table.manualAccountId, table.asOf),
+    index('account_snapshots_household_as_of_idx').on(table.householdId, table.asOf),
+    check('account_snapshots_one_account', sql`num_nonnulls(${table.accountId}, ${table.manualAccountId}) = 1`),
+    check(
+      'account_snapshots_source',
+      sql`(${table.source} = 'plaid' and ${table.accountId} is not null) or (${table.source} = 'manual' and ${table.manualAccountId} is not null)`
+    ),
+  ]
+).enableRLS()
+
+/**
+ * A household's net worth for a day. `automatic` rows roll up that day's account_snapshots; `manual`
+ * rows are history typed in from old records, dated before tracking began, with no accounts behind them.
+ */
+export const networthSnapshots = pgTable(
+  'networth_snapshots',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    asOf: date({ mode: 'string' }).notNull(),
+    assetsCents: cents().notNull(),
+    /** Signed, zero or below. */
+    liabilitiesCents: cents().notNull(),
+    netCents: cents().notNull(),
+    accountCount: integer().notNull(),
+    /** Accounts carried forward on this day, so the chart can say the number is partly old. */
+    staleAccountCount: integer().notNull(),
+    source: text().$type<NetWorthSnapshotSource>().notNull().default('automatic'),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('networth_snapshots_household_as_of_unique').on(table.householdId, table.asOf),
+    check('networth_snapshots_source', inList(table.source, NETWORTH_SNAPSHOT_SOURCES)),
+    check(
+      'networth_snapshots_totals',
+      sql`${table.assetsCents} >= 0 and ${table.liabilitiesCents} <= 0 and ${table.netCents} = ${table.assetsCents} + ${table.liabilitiesCents}`
+    ),
+    check(
+      'networth_snapshots_counts',
+      sql`${table.staleAccountCount} between 0 and ${table.accountCount}
+        and (${table.source} = 'automatic' or (${table.accountCount} = 0 and ${table.staleAccountCount} = 0))`
+    ),
+  ]
+).enableRLS()
+
+/**
+ * An investment account's positions from /investments/holdings/get, for composition only. The
+ * account's balance is its value in net worth; these are never summed into it.
+ */
+export const holdings = pgTable(
+  'holdings',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    accountId: uuid()
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    plaidSecurityId: text().notNull(),
+    ticker: text(),
+    name: text(),
+    /** Plaid's security type: equity, etf, mutual fund, fixed income, cash, cryptocurrency, derivative, other. */
+    securityType: text(),
+    /** Shares or units. Not money, so not cents. */
+    quantity: numeric({ mode: 'number' }).notNull(),
+    /** What was paid for the whole position, when the institution reports it. */
+    costBasisCents: cents(),
+    valueCents: cents().notNull(),
+    /** When the institution last priced it. */
+    asOf: date({ mode: 'string' }).notNull(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('holdings_account_security_unique').on(table.accountId, table.plaidSecurityId),
+    index('holdings_household_idx').on(table.householdId),
+  ]
+).enableRLS()
+
+/**
+ * The detail /liabilities/get adds to a credit card, student loan or mortgage. The balance still comes
+ * from the account; this is the APR, the payment and when it's due.
+ */
+export const liabilityDetails = pgTable(
+  'liability_details',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    accountId: uuid()
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    kind: text().$type<LiabilityKind>().notNull(),
+    /** A card's purchase APR, or a loan's interest rate. A rate, not money. */
+    aprPercent: numeric({ mode: 'number' }),
+    minimumPaymentCents: cents(),
+    nextPaymentDueOn: date({ mode: 'string' }),
+    lastPaymentCents: cents(),
+    lastPaymentOn: date({ mode: 'string' }),
+    originationDate: date({ mode: 'string' }),
+    originalPrincipalCents: cents(),
+    isOverdue: boolean().notNull().default(false),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('liability_details_account_unique').on(table.accountId),
+    index('liability_details_household_due_idx').on(table.householdId, table.nextPaymentDueOn),
+    check('liability_details_kind', inList(table.kind, LIABILITY_KINDS)),
+    check('liability_details_apr', sql`${table.aprPercent} between 0 and 100`),
+    check(
+      'liability_details_amounts',
+      sql`${table.minimumPaymentCents} >= 0 and ${table.lastPaymentCents} >= 0 and ${table.originalPrincipalCents} >= 0`
+    ),
   ]
 ).enableRLS()
 
@@ -600,8 +882,13 @@ export const bookings = pgTable(
     updatedAt: timestamptz().notNull().defaultNow(),
   },
   table => [
-    index('bookings_household_idx').on(table.householdId),
     index('bookings_household_trip_idx').on(table.householdId, table.tripId),
+    index('bookings_trip_idx')
+      .on(table.tripId)
+      .where(sql`${table.tripId} is not null`),
+    index('bookings_created_by_idx')
+      .on(table.createdBy)
+      .where(sql`${table.createdBy} is not null`),
     // The daily price watch.
     index('bookings_watched_idx')
       .on(table.householdId)
@@ -680,6 +967,8 @@ export const trips = pgTable(
   },
   table => [
     index('trips_household_starts_idx').on(table.householdId, table.startsOn),
+    // Past trips: ends before today.
+    index('trips_household_ends_idx').on(table.householdId, table.endsOn),
     // Either both dates or neither, and never backwards.
     check(
       'trips_dates_valid',
@@ -734,6 +1023,9 @@ export const itinerarySlots = pgTable(
   },
   table => [
     index('itinerary_slots_trip_day_idx').on(table.tripId, table.day, table.band, table.sortOrder),
+    index('itinerary_slots_chosen_option_idx')
+      .on(table.chosenOptionId)
+      .where(sql`${table.chosenOptionId} is not null`),
     check('itinerary_slots_label_length', sql`char_length(${table.label}) between 1 and 200`),
     // Decided and booked are exactly the states that have a choice. Deleting a chosen option
     // therefore fails here unless the slot was reopened first.
@@ -788,6 +1080,9 @@ export const itineraryOptions = pgTable(
   },
   table => [
     index('itinerary_options_slot_idx').on(table.slotId, table.sortOrder),
+    index('itinerary_options_created_by_idx')
+      .on(table.createdByUserId)
+      .where(sql`${table.createdByUserId} is not null`),
     // A booking is on one trip's timeline once. Every null is distinct, so other options are unaffected.
     uniqueIndex('itinerary_options_booking_idx').on(table.bookingId),
     check(
@@ -856,7 +1151,12 @@ export const tripIdeas = pgTable(
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
-  table => [index('trip_ideas_household_idx').on(table.householdId, table.createdAt)]
+  table => [
+    index('trip_ideas_household_idx').on(table.householdId, table.createdAt),
+    index('trip_ideas_created_by_idx')
+      .on(table.createdByUserId)
+      .where(sql`${table.createdByUserId} is not null`),
+  ]
 ).enableRLS()
 
 /** One shared list per trip. An unassigned item is the household's to pick up. */
@@ -876,7 +1176,12 @@ export const packingItems = pgTable(
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
-  table => [index('packing_items_trip_idx').on(table.tripId, table.sortOrder)]
+  table => [
+    index('packing_items_trip_idx').on(table.tripId, table.sortOrder),
+    index('packing_items_assigned_user_idx')
+      .on(table.assignedUserId)
+      .where(sql`${table.assignedUserId} is not null`),
+  ]
 ).enableRLS()
 
 /** A reusable list: "Beach week", "Carry-on only". Owned by the household, not a trip. */
@@ -998,7 +1303,7 @@ export const calendarLinks = pgTable(
   },
   table => [
     unique('calendar_links_user_calendar_unique').on(table.userId, table.provider, table.calendarId),
-    index('calendar_links_household_idx').on(table.householdId),
+    index('calendar_links_membership_idx').on(table.householdId, table.userId),
     foreignKey({
       name: 'calendar_links_membership_fk',
       columns: [table.householdId, table.userId],
@@ -1049,6 +1354,14 @@ export const events = pgTable(
   },
   table => [
     index('events_household_starts_idx').on(table.householdId, table.startsAt),
+    // The window read: one-off events still running at its start.
+    index('events_household_ends_idx').on(table.householdId, table.endsAt),
+    index('events_calendar_link_idx')
+      .on(table.calendarLinkId)
+      .where(sql`${table.calendarLinkId} is not null`),
+    index('events_created_by_idx')
+      .on(table.createdBy)
+      .where(sql`${table.createdBy} is not null`),
     // Repeating events are read by where they start alone; their end says nothing about later occurrences.
     index('events_household_recurring_idx')
       .on(table.householdId)
@@ -1122,7 +1435,10 @@ export const contacts = pgTable(
     url: text(),
     notes: text(),
     /** Normalized by normalizeContactTags: lower case, no repeats. */
-    tags: text().array().notNull().default(sql`'{}'::text[]`),
+    tags: text()
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
@@ -1224,6 +1540,9 @@ export const documents = pgTable(
     index('documents_asset_idx')
       .on(table.assetId)
       .where(sql`${table.assetId} is not null`),
+    index('documents_uploaded_by_idx')
+      .on(table.uploadedBy)
+      .where(sql`${table.uploadedBy} is not null`),
     check('documents_title_length', sql`char_length(${table.title}) between 1 and ${sql.raw(String(DOCUMENT_TITLE_MAX_LENGTH))}`),
     check(
       'documents_text_lengths',
@@ -1274,6 +1593,9 @@ export const maintenance = pgTable(
     index('maintenance_vendor_idx')
       .on(table.vendorContactId)
       .where(sql`${table.vendorContactId} is not null`),
+    index('maintenance_assigned_user_idx')
+      .on(table.assignedUserId)
+      .where(sql`${table.assignedUserId} is not null`),
     check('maintenance_title_length', sql`char_length(${table.title}) between 1 and ${sql.raw(String(MAINTENANCE_TITLE_MAX_LENGTH))}`),
     check('maintenance_instructions_length', sql`char_length(${table.instructions}) <= ${sql.raw(String(HOME_NOTES_MAX_LENGTH))}`),
     check('maintenance_cadence_months', sql`${table.cadenceMonths} between 1 and ${sql.raw(String(MAX_CADENCE_MONTHS))}`),
@@ -1296,17 +1618,25 @@ export const maintenanceLog = pgTable(
     /** The receipt or invoice. */
     documentId: uuid().references(() => documents.id, { onDelete: 'set null' }),
     createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
   },
   table => [
     index('maintenance_log_task_completed_idx').on(table.maintenanceId, table.completedOn.desc()),
+    index('maintenance_log_completed_by_idx')
+      .on(table.completedBy)
+      .where(sql`${table.completedBy} is not null`),
+    index('maintenance_log_document_idx')
+      .on(table.documentId)
+      .where(sql`${table.documentId} is not null`),
     check('maintenance_log_cost', sql`${table.costCents} between 0 and ${sql.raw(String(MAX_MAINTENANCE_COST_CENTS))}`),
     check('maintenance_log_notes_length', sql`char_length(${table.notes}) <= ${sql.raw(String(HOME_NOTES_MAX_LENGTH))}`),
   ]
 ).enableRLS()
 
 /**
- * A bill that comes around on a schedule. Whether it's paid is never stored: the matcher in
- * @ghar/core/bills pairs due dates with transactions each time it's read.
+ * A bill that comes around on a schedule. Whether it's paid is worked out when it's read: the
+ * matcher in @ghar/core/bills pairs due dates with transactions, and with the due dates someone
+ * marked paid by hand in bill_payments.
  *
  * `dueMonth` anchors quarterly and annual bills (see BillSchedule). Monthly bills have none.
  */
@@ -1336,7 +1666,13 @@ export const bills = pgTable(
     updatedAt: timestamptz().notNull().defaultNow(),
   },
   table => [
-    index('bills_household_idx').on(table.householdId),
+    index('bills_household_name_idx').on(table.householdId, sql`lower(${table.name})`, table.id),
+    index('bills_account_idx')
+      .on(table.accountId)
+      .where(sql`${table.accountId} is not null`),
+    index('bills_category_idx')
+      .on(table.categoryId)
+      .where(sql`${table.categoryId} is not null`),
     check('bills_name_length', sql`char_length(${table.name}) between 1 and ${sql.raw(String(BILL_NAME_MAX_LENGTH))}`),
     check('bills_payee_length', sql`char_length(${table.payee}) between 1 and ${sql.raw(String(BILL_PAYEE_MAX_LENGTH))}`),
     check(
@@ -1377,6 +1713,7 @@ export const expiryReminders = pgTable(
     sentAt: timestamptz().notNull().defaultNow(),
   },
   table => [
+    index('expiry_reminders_household_idx').on(table.householdId),
     uniqueIndex('expiry_reminders_document_unique')
       .on(table.documentId, table.thresholdDays, table.expiresOn)
       .where(sql`${table.documentId} is not null`),
@@ -1385,5 +1722,363 @@ export const expiryReminders = pgTable(
       .where(sql`${table.assetId} is not null`),
     check('expiry_reminders_one_subject', sql`num_nonnulls(${table.documentId}, ${table.assetId}) = 1`),
     check('expiry_reminders_threshold', sql`${table.thresholdDays} in (${sql.raw(EXPIRY_REMINDER_DAYS.join(', '))})`),
+  ]
+).enableRLS()
+
+/**
+ * A due date someone marked paid by hand, for a bill paid in a way no transaction shows: from an
+ * account nobody linked, or from the digest's one-tap link. The matcher counts that due date paid.
+ */
+export const billPayments = pgTable(
+  'bill_payments',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    billId: uuid()
+      .notNull()
+      .references(() => bills.id, { onDelete: 'cascade' }),
+    dueOn: date({ mode: 'string' }).notNull(),
+    paidOn: date({ mode: 'string' }).notNull(),
+    markedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('bill_payments_bill_due_unique').on(table.billId, table.dueOn),
+    index('bill_payments_household_bill_due_idx').on(table.householdId, table.billId, table.dueOn),
+    index('bill_payments_marked_by_idx')
+      .on(table.markedBy)
+      .where(sql`${table.markedBy} is not null`),
+  ]
+).enableRLS()
+
+/**
+ * One person's linked Gmail, read-only, searched daily for booking confirmations. OAuth is per
+ * person, and the link belongs to the membership, so a member who leaves takes it with them.
+ *
+ * No RLS policy, so API roles cannot read it at all. It holds the refresh token.
+ */
+export const mailLinks = pgTable(
+  'mail_links',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    userId: uuid()
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    /** The Google account it signed in as, shown so a person knows which inbox is linked. */
+    accountEmail: text().notNull(),
+    /** AES-256-GCM ciphertext from apps/web/lib/crypto.ts. Never select into a response. */
+    refreshTokenEncrypted: text().notNull(),
+    /** `needs_reconnect` after Google refuses the refresh token. Checks stop until then. */
+    status: mailLinkStatus().notNull().default('active'),
+    /** Why the last check failed, in our words. Never a vendor's response, never anything from a message. */
+    lastError: text(),
+    /** When the last complete check began. The next one searches from a little before it. */
+    lastCheckedAt: timestamptz(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('mail_links_user_unique').on(table.userId),
+    index('mail_links_membership_idx').on(table.householdId, table.userId),
+    foreignKey({
+      name: 'mail_links_membership_fk',
+      columns: [table.householdId, table.userId],
+      foreignColumns: [householdMembers.householdId, householdMembers.userId],
+    }).onDelete('cascade'),
+    check('mail_links_last_error_length', sql`char_length(${table.lastError}) <= 500`),
+  ]
+).enableRLS()
+
+/**
+ * Every message a check listed and what became of it, so no message is read or sent to the model
+ * twice. Keyed by the person and Gmail's message id, not the link, so linking the same inbox again
+ * doesn't read it all over. Only the id is kept: nothing from the message itself.
+ *
+ * No RLS policy: only the mail check reads it.
+ */
+export const mailMessages = pgTable(
+  'mail_messages',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    userId: uuid()
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    /** Gmail's id for the message. */
+    messageId: text().notNull(),
+    outcome: mailMessageOutcome().notNull(),
+    /** How many checks have read it. A `failed` message is read again until MAIL_MAX_ATTEMPTS. */
+    attempts: smallint().notNull().default(1),
+    processedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('mail_messages_user_message_unique').on(table.userId, table.messageId),
+    index('mail_messages_membership_idx').on(table.householdId, table.userId),
+    foreignKey({
+      name: 'mail_messages_membership_fk',
+      columns: [table.householdId, table.userId],
+      foreignColumns: [householdMembers.householdId, householdMembers.userId],
+    }).onDelete('cascade'),
+    check('mail_messages_attempts', sql`${table.attempts} >= 1`),
+  ]
+).enableRLS()
+
+/**
+ * A booking the model read from a confirmation email, waiting for its person to confirm or correct
+ * it. Nothing here is trusted: `rawExtract` is the model's answer, as checked against
+ * bookingExtractSchema, and a booking exists only once someone saves the draft. The message's body
+ * is never stored.
+ *
+ * Its person reads their own drafts: they came from their inbox.
+ */
+export const bookingDrafts = pgTable(
+  'booking_drafts',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    /** Whose inbox it came from. */
+    userId: uuid()
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    /** Gmail's id. The booking saved from it keeps it as `source_message_id`. */
+    messageId: text().notNull(),
+    receivedAt: timestamptz().notNull(),
+    senderDomain: text().notNull(),
+    /** Cut to MAIL_SUBJECT_MAX_LENGTH, so a person can find the email. */
+    subject: text().notNull(),
+    rawExtract: jsonb().$type<Record<string, unknown>>().notNull(),
+    status: bookingDraftStatus().notNull().default('pending'),
+    /** The booking saved from it. */
+    bookingId: uuid().references(() => bookings.id, { onDelete: 'set null' }),
+    reviewedAt: timestamptz(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('booking_drafts_user_message_unique').on(table.userId, table.messageId),
+    index('booking_drafts_membership_idx').on(table.householdId, table.userId),
+    index('booking_drafts_booking_idx')
+      .on(table.bookingId)
+      .where(sql`${table.bookingId} is not null`),
+    index('booking_drafts_pending_idx')
+      .on(table.householdId, table.userId, table.receivedAt)
+      .where(sql`${table.status} = 'pending'`),
+    foreignKey({
+      name: 'booking_drafts_membership_fk',
+      columns: [table.householdId, table.userId],
+      foreignColumns: [householdMembers.householdId, householdMembers.userId],
+    }).onDelete('cascade'),
+    check(
+      'booking_drafts_text_lengths',
+      sql`char_length(${table.subject}) <= ${sql.raw(String(MAIL_SUBJECT_MAX_LENGTH))}
+        and char_length(${table.senderDomain}) <= 253`
+    ),
+    check('booking_drafts_reviewed', sql`(${table.status} = 'pending') = (${table.reviewedAt} is null)`),
+    check('booking_drafts_confirmed_booking', sql`${table.status} = 'confirmed' or ${table.bookingId} is null`),
+  ]
+).enableRLS()
+
+/**
+ * How a person wants the daily digest: at all, which sections, and at what hour in the household's
+ * zone. No row means DEFAULT_DIGEST_PREFERENCES. A section their role can't see is never sent,
+ * whatever is stored here (see digestSectionsFor).
+ */
+export const digestPreferences = pgTable(
+  'digest_preferences',
+  {
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    userId: uuid()
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    enabled: boolean().notNull().default(true),
+    /** Values from DIGEST_SECTIONS. */
+    sections: text().array().$type<DigestSection[]>().notNull(),
+    /** 0 to 23. */
+    sendHour: smallint().notNull(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    primaryKey({ name: 'digest_preferences_pk', columns: [table.householdId, table.userId] }),
+    index('digest_preferences_user_idx').on(table.userId),
+    foreignKey({
+      name: 'digest_preferences_membership_fk',
+      columns: [table.householdId, table.userId],
+      foreignColumns: [householdMembers.householdId, householdMembers.userId],
+    }).onDelete('cascade'),
+    check(
+      'digest_preferences_sections',
+      sql`${table.sections} <@ array[${sql.raw(DIGEST_SECTIONS.map(section => `'${section}'`).join(', '))}]::text[]`
+    ),
+    check('digest_preferences_send_hour', sql`${table.sendHour} between 0 and 23`),
+  ]
+).enableRLS()
+
+/**
+ * A digest that went out: one a person, a day, in the household's zone. Claimed before sending, so
+ * hourly runs and retries can't send the same day's digest twice.
+ *
+ * No RLS policy: only the digest job reads it.
+ */
+export const digestSends = pgTable(
+  'digest_sends',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    userId: uuid()
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    /** The household's day the digest is for. */
+    digestOn: date({ mode: 'string' }).notNull(),
+    sentAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('digest_sends_user_day_unique').on(table.householdId, table.userId, table.digestOn),
+    index('digest_sends_user_idx').on(table.userId),
+    foreignKey({
+      name: 'digest_sends_membership_fk',
+      columns: [table.householdId, table.userId],
+      foreignColumns: [householdMembers.householdId, householdMembers.userId],
+    }).onDelete('cascade'),
+  ]
+).enableRLS()
+
+/**
+ * A one-tap link from an email: one action, on one thing, for the person it was sent to, used at most
+ * once before it expires. The link carries this row's id and an HMAC over what it may do
+ * (apps/web/lib/one-tap.ts); the row is what makes it single-use. Using it acts as that person with
+ * the role they hold then, so a link sent before they lost access does nothing. Leaving the household
+ * deletes their links.
+ *
+ * No RLS policy: only the server reads it.
+ */
+export const actionTokens = pgTable(
+  'action_tokens',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    userId: uuid()
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    action: oneTapAction().notNull(),
+    /** The transaction or bill. Not a foreign key: once it's deleted, the link finds nothing. */
+    entityId: uuid().notNull(),
+    /** For `mark_bill_paid`: the due date it marks paid. */
+    dueOn: date({ mode: 'string' }),
+    expiresAt: timestamptz().notNull(),
+    usedAt: timestamptz(),
+    createdAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('action_tokens_membership_idx').on(table.householdId, table.userId),
+    index('action_tokens_user_idx').on(table.userId),
+    index('action_tokens_expires_idx').on(table.expiresAt),
+    foreignKey({
+      name: 'action_tokens_membership_fk',
+      columns: [table.householdId, table.userId],
+      foreignColumns: [householdMembers.householdId, householdMembers.userId],
+    }).onDelete('cascade'),
+    check('action_tokens_expiry', sql`${table.expiresAt} > ${table.createdAt}`),
+    check('action_tokens_due_on', sql`(${table.action} = 'mark_bill_paid') = (${table.dueOn} is not null)`),
+  ]
+).enableRLS()
+
+/**
+ * A row deleted from a table `GET /api/v1/sync` sends, so a phone holding it knows to drop it. Written
+ * only by the delete triggers in migration 0008, never by app code. A row deleted because its household
+ * or its trip went is not recorded: the client removes children along with their parent.
+ *
+ * Nothing prunes these yet; see docs/architecture.md.
+ *
+ * No RLS policy: only the sync endpoint reads it.
+ */
+export const syncTombstones = pgTable(
+  'sync_tombstones',
+  {
+    id: bigint({ mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    /**
+     * For something only one person sees (a booking draft, digest preferences): whose it was. Not a
+     * foreign key, so a person being deleted can still leave rows.
+     */
+    userId: uuid(),
+    entity: text().$type<SyncEntity>().notNull(),
+    /** The deleted row's id. For a member or digest preferences, the person's user id. */
+    entityId: uuid().notNull(),
+    deletedAt: timestamptz()
+      .notNull()
+      .default(sql`clock_timestamp()`),
+  },
+  table => [
+    index('sync_tombstones_household_deleted_idx').on(table.householdId, table.deletedAt, table.id),
+    check('sync_tombstones_entity', inList(table.entity, SYNC_ENTITIES)),
+  ]
+).enableRLS()
+
+/**
+ * An access and refresh token pair for an API client that can't hold a session cookie (the phone app).
+ * Only SHA-256 hashes are stored; the tokens themselves are shown once, when issued. Refreshing rotates
+ * the pair: the old row gets `rotatedAt`, and presenting its refresh token again revokes every row in
+ * the family, since it means a token was copied. Signing out revokes the family too.
+ *
+ * `householdId` is the household the pair acts in, checked against current membership on every request.
+ * Leaving the household deletes the pairs scoped to it.
+ *
+ * No RLS policy: it holds token hashes, and only the server reads it.
+ */
+export const apiTokens = pgTable(
+  'api_tokens',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** Every pair descended from one sign-in by refreshing. */
+    familyId: uuid().notNull(),
+    userId: uuid()
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    /** Null until the person has a household: onboarding runs on a token too. */
+    householdId: uuid().references(() => households.id, { onDelete: 'cascade' }),
+    accessTokenHash: text().notNull(),
+    refreshTokenHash: text().notNull(),
+    accessExpiresAt: timestamptz().notNull(),
+    refreshExpiresAt: timestamptz().notNull(),
+    rotatedAt: timestamptz(),
+    revokedAt: timestamptz(),
+    lastUsedAt: timestamptz(),
+    createdAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('api_tokens_access_token_hash_unique').on(table.accessTokenHash),
+    unique('api_tokens_refresh_token_hash_unique').on(table.refreshTokenHash),
+    index('api_tokens_family_idx').on(table.familyId),
+    index('api_tokens_user_idx').on(table.userId),
+    index('api_tokens_membership_idx')
+      .on(table.householdId, table.userId)
+      .where(sql`${table.householdId} is not null`),
+    foreignKey({
+      name: 'api_tokens_membership_fk',
+      columns: [table.householdId, table.userId],
+      foreignColumns: [householdMembers.householdId, householdMembers.userId],
+    }).onDelete('cascade'),
+    check(
+      'api_tokens_expiry',
+      sql`${table.accessExpiresAt} > ${table.createdAt} and ${table.refreshExpiresAt} >= ${table.accessExpiresAt}`
+    ),
   ]
 ).enableRLS()

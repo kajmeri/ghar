@@ -1,9 +1,10 @@
 import { requirePermission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
 import type { TripStatus } from '@ghar/core/trips'
-import { and, count, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
+import { and, count, eq, getTableColumns, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { bookings, itinerarySlots, packingItems, tripMembers, trips } from '../schema'
 import { recordAudit } from './audit'
+import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { requireHouseholdMembers, requireTrip, type TripRow } from './scope'
 import type { Db, RequestContext } from './types'
 
@@ -34,16 +35,40 @@ export async function listTrips(
   { phase = 'all', status, today }: ListTripsOptions
 ): Promise<TripWithCounts[]> {
   requirePermission(ctx, 'travel.view')
-  const phaseFilter =
-    phase === 'past' ? lt(trips.endsOn, today) : phase === 'upcoming' ? or(isNull(trips.endsOn), gte(trips.endsOn, today)) : undefined
-
   const rows = await db
     .select()
     .from(trips)
-    .where(and(eq(trips.householdId, ctx.householdId), phaseFilter, status ? eq(trips.status, status) : undefined))
+    .where(tripFilter(ctx, { phase, status, today }))
     .orderBy(sql`${trips.startsOn} asc nulls last`, trips.name)
 
   return withCounts(db, rows)
+}
+
+function tripFilter(ctx: RequestContext, { phase = 'all', status, today }: ListTripsOptions) {
+  const phaseFilter =
+    phase === 'past' ? lt(trips.endsOn, today) : phase === 'upcoming' ? or(isNull(trips.endsOn), gte(trips.endsOn, today)) : undefined
+  return and(eq(trips.householdId, ctx.householdId), phaseFilter, status ? eq(trips.status, status) : undefined)
+}
+
+const tripOrder: Keyset = {
+  keys: [
+    { expr: trips.startsOn, kind: 'date', nullable: true },
+    { expr: trips.name, kind: 'text' },
+  ],
+  id: trips.id,
+}
+
+/** One page of listTrips, in the same order with the id breaking ties. `phase` defaults to all here too. */
+export async function listTripsPage(ctx: RequestContext, db: Db, options: ListTripsOptions, page: PageRequest): Promise<Page<TripWithCounts>> {
+  requirePermission(ctx, 'travel.view')
+  const fetched = await db
+    .select({ ...getTableColumns(trips), pageKeys: pageKeys(tripOrder) })
+    .from(trips)
+    .where(and(tripFilter(ctx, options), keysetAfter(tripOrder, page.after)))
+    .orderBy(...keysetOrder(tripOrder))
+    .limit(page.limit + 1)
+  const { rows, ...position } = toPage(fetched, page.limit)
+  return { ...position, rows: await withCounts(db, rows) }
 }
 
 export async function getTripWithCounts(ctx: RequestContext, db: Db, tripId: string): Promise<TripWithCounts> {

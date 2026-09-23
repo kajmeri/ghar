@@ -42,7 +42,7 @@ import {
   priceConfidenceSchema,
   ratePlanSchema,
 } from '../src/v1/travel'
-import { createTransaction } from '../src/v1/travel-hub'
+import { createTransaction } from '../src/v1/finances'
 import { createTripBodySchema, linkBookingToTrip, updateTripBodySchema } from '../src/v1/trips'
 
 const UUID = '2a3fbc0e-1c2d-4f5a-8b6c-7d8e9f0a1b2c'
@@ -209,8 +209,7 @@ describe('createSlotBodySchema', () => {
 
   it('refuses a slot that ends before it starts', () => {
     expect(
-      createSlotBodySchema.safeParse({ ...base, band: 'evening', startsAt: '2026-03-03T18:00:00Z', endsAt: '2026-03-03T09:00:00Z' })
-        .success
+      createSlotBodySchema.safeParse({ ...base, band: 'evening', startsAt: '2026-03-03T18:00:00Z', endsAt: '2026-03-03T09:00:00Z' }).success
     ).toBe(false)
   })
 

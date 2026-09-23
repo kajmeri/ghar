@@ -10,20 +10,19 @@ import { CONNECT_HREF, CONNECT_MESSAGES, isConnectStatus } from '@/lib/calendar/
 import * as calendar from '@/lib/calendar/service'
 import { EmptyState } from '../_components/ui/empty-state'
 import { CalendarIllustration } from '../_components/ui/illustrations'
+import { Notice } from '../_components/ui/notice'
 import { PageHeader } from '../_components/ui/page-header'
 import { Agenda } from './_components/agenda'
 import { LinkedCalendars } from './_components/linked-calendars'
 import { MonthGrid } from './_components/month-grid'
 import { MonthNav } from './_components/month-nav'
 import { MonthStrip } from './_components/month-strip'
-import { Notice } from './_components/notice'
 import { SourceFilter } from './_components/source-filter'
 
 export const metadata: Metadata = { title: 'Calendar' }
 
 export default async function CalendarPage({ searchParams }: PageProps<'/calendar'>) {
-  const params = await searchParams
-  const { ctx } = await getPageContext()
+  const [params, { ctx }] = await Promise.all([searchParams, getPageContext()])
   const canManage = can(ctx.role, 'calendar.manage')
 
   const [{ timezone }, links] = await Promise.all([calendar.getCalendarSettings(ctx), calendar.listCalendarLinks(ctx)])

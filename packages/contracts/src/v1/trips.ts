@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { householdRoleSchema } from '../context'
 import { defineEndpoint } from '../endpoint'
-import { itinerarySlotSchema, itineraryViewSchema } from './itinerary'
+import { deadlineStateSchema, itineraryResponseSchema, itinerarySlotSchema, itineraryViewSchema } from './itinerary'
 import { packingItemSchema } from './packing'
 import {
   calendarDateSchema,
@@ -9,6 +9,8 @@ import {
   httpUrlSchema,
   instantSchema,
   longTextSchema,
+  pageQuerySchema,
+  pageSchema,
   shortTextSchema,
   tripParamsSchema,
   tripStatusSchema,
@@ -117,18 +119,40 @@ export const tripDetailSchema = z.object({
 })
 export type TripDetail = z.infer<typeof tripDetailSchema>
 
+/** Soonest start first, then by name; trips with no dates yet last. */
 export const listTrips = defineEndpoint({
   method: 'GET',
   path: '/api/v1/trips',
-  query: z.object({
+  query: pageQuerySchema.extend({
     status: tripStatusSchema.optional(),
     /** "upcoming" is everything not finished, which is what the hub shows. */
     phase: z.enum(['upcoming', 'past', 'all']).default('upcoming'),
   }),
-  response: z.object({
+  response: pageSchema(tripSummarySchema).extend({
     today: calendarDateSchema,
     timeZone: z.string(),
-    trips: z.array(tripSummarySchema),
+  }),
+})
+
+/**
+ * Every open slot, most urgent first: anything with a reservation or decide-by deadline, soonest
+ * first, then whatever happens soonest. The trip, the household's members and the whole itinerary
+ * come too, so a decision can be made in place with what is around it in view.
+ */
+export const getDecisions = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/trips/:tripId/decisions',
+  params: tripParamsSchema,
+  response: itineraryResponseSchema.extend({
+    trip: tripSchema,
+    /** Everyone in the household, so a vote or an assignment can be shown as a name. */
+    members: z.array(householdMemberSchema),
+    decisions: z.array(
+      z.object({
+        slotId: z.uuid(),
+        deadline: z.object({ date: calendarDateSchema, state: deadlineStateSchema }).nullable(),
+      })
+    ),
   }),
 })
 

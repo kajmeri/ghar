@@ -3,6 +3,4 @@ import { route } from '@/lib/api/handler'
 import { getRequestContext } from '@/lib/auth/context'
 import * as calendar from '@/lib/calendar/service'
 
-export const GET = route(listCalendarLinks, async () => ({
-  links: await calendar.listCalendarLinks(await getRequestContext()),
-}))
+export const GET = route(listCalendarLinks, async ({ query }) => calendar.listCalendarLinksPage(await getRequestContext(), query))

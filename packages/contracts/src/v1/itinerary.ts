@@ -268,24 +268,7 @@ export const getItinerary = defineEndpoint({
   response: itineraryResponseSchema,
 })
 
-/**
- * Every open slot, most urgent first: anything with a reservation or decide-by deadline, soonest
- * first, then whatever happens soonest. The whole itinerary comes too, so a decision can be made
- * in place with what is around it in view.
- */
-export const getDecisions = defineEndpoint({
-  method: 'GET',
-  path: '/api/v1/trips/:tripId/decisions',
-  params: tripParamsSchema,
-  response: itineraryResponseSchema.extend({
-    decisions: z.array(
-      z.object({
-        slotId: z.uuid(),
-        deadline: z.object({ date: calendarDateSchema, state: deadlineStateSchema }).nullable(),
-      })
-    ),
-  }),
-})
+// getDecisions lives in trips.ts: its response carries the trip, and trips.ts already imports this file.
 
 // Slots
 

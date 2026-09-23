@@ -1,5 +1,5 @@
 import 'server-only'
-import type { Bill, BillBody, BillOccurrence } from '@ghar/contracts'
+import type { Bill, BillBody, BillOccurrence, MarkBillPaidBody, PageQuery } from '@ghar/contracts'
 import {
   billDueDates,
   billNeedsAttention,
@@ -12,14 +12,17 @@ import {
 } from '@ghar/core/bills'
 import type { BillDue } from '@ghar/core/calendar'
 import { addCalendarDays, addCalendarMonths, toCalendarDate, todayInTimeZone, type CalendarDate, type TimeZone } from '@ghar/core/dates'
+import { ValidationError } from '@ghar/core/errors'
 import * as queries from '@ghar/db/queries'
-import type { BillWithAccountRow, Db, RequestContext } from '@ghar/db/queries'
+import type { BillPaymentMark, BillWithAccountRow, Db, RequestContext } from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
+import { nextCursor, pageRequest, type PageResult } from '@/lib/api/cursor'
 import { getDb } from '@/lib/db'
+import { accountLabel } from '@/lib/finances/service'
 
-// Bills and whether they're paid. Payment is never stored: every read lines the bill's due dates up
-// against the household's transactions (@ghar/core/bills), so the sync that brings in a payment is
-// what marks the bill paid.
+// Bills and whether they're paid. Every read lines the bill's due dates up against the household's
+// transactions (@ghar/core/bills), so the sync that brings in a payment is what marks the bill paid.
+// The only payment stored is a due date someone marked paid by hand.
 
 /** How far back due dates are matched: a year of history, and anything still unpaid. */
 const HISTORY_MONTHS = 12
@@ -40,6 +43,7 @@ function occurrencesIn(
   bill: BillWithAccountRow,
   range: DateRange,
   candidates: readonly PaymentCandidate[],
+  marks: readonly BillPaymentMark[],
   today: CalendarDate,
   timeZone: TimeZone
 ): BillOccurrence[] {
@@ -50,6 +54,7 @@ function occurrencesIn(
     today,
     // Due dates from before anyone entered the bill aren't reported late.
     trackedFrom: toCalendarDate(bill.createdAt, timeZone),
+    manualPayments: marks.filter(mark => mark.billId === bill.id),
   })
 }
 
@@ -92,10 +97,13 @@ async function withOccurrences(
   const today = todayInTimeZone(timeZone)
   if (rows.length === 0) return { today, bills: [] }
   const widest = { from: addCalendarMonths(today, -HISTORY_MONTHS), to: addCalendarMonths(today, Math.max(...Object.values(AHEAD_MONTHS))) }
-  const candidates = await queries.listBillPaymentCandidates(ctx, db, candidateRange(widest))
+  const [candidates, marks] = await Promise.all([
+    queries.listBillPaymentCandidates(ctx, db, candidateRange(widest)),
+    queries.listBillPayments(ctx, db),
+  ])
   return {
     today,
-    bills: rows.map(row => ({ row, occurrences: occurrencesIn(row, historyRange(row, today), candidates, today, timeZone) })),
+    bills: rows.map(row => ({ row, occurrences: occurrencesIn(row, historyRange(row, today), candidates, marks, today, timeZone) })),
   }
 }
 
@@ -114,12 +122,25 @@ export async function listBillsWithStatus(ctx: RequestContext, db: Db, timeZone:
 }
 
 export async function listBills(session: Session): Promise<{ currency: string; bills: Bill[] }> {
+  const bills = await listBillsWithStatus(session.context, getDb(), session.household.timeZone)
+  return { currency: session.household.currency, bills }
+}
+
+/**
+ * A page of bills for the API, by name, each with its current due date and status. The bills page
+ * puts late bills first, but that order shifts as payments arrive and would move bills between pages.
+ */
+export async function listBillsPage(session: Session, query: PageQuery): Promise<PageResult<Bill> & { currency: string }> {
+  const { context } = session
   const db = getDb()
-  const [household, bills] = await Promise.all([
-    queries.getHousehold(session.context, db),
-    listBillsWithStatus(session.context, db, session.household.timeZone),
-  ])
-  return { currency: household.currency, bills }
+  const scope = { sort: 'bills:name' }
+  const page = await queries.listBillsPage(context, db, pageRequest(query, scope))
+  const { today, bills } = await withOccurrences(context, db, page.rows, session.household.timeZone)
+  return {
+    currency: session.household.currency,
+    items: bills.map(({ row, occurrences }) => toBill(row, occurrences, today)),
+    nextCursor: nextCursor(page, scope),
+  }
 }
 
 export async function getBillDetail(
@@ -128,11 +149,11 @@ export async function getBillDetail(
 ): Promise<{ currency: string; bill: Bill; occurrences: BillOccurrence[] }> {
   const { context } = session
   const db = getDb()
-  const [household, row] = await Promise.all([queries.getHousehold(context, db), queries.getBill(context, db, billId)])
+  const row = await queries.getBill(context, db, billId)
   const { today, bills } = await withOccurrences(context, db, [row], session.household.timeZone)
   const occurrences = bills[0]?.occurrences ?? []
   return {
-    currency: household.currency,
+    currency: session.household.currency,
     bill: toBill(row, occurrences, today),
     occurrences: occurrences.toSorted((a, b) => b.dueOn.localeCompare(a.dueOn)),
   }
@@ -156,6 +177,25 @@ export async function deleteBill(session: Session, billId: string): Promise<{ bi
   return { billId }
 }
 
+type BillDetail = Awaited<ReturnType<typeof getBillDetail>>
+
+/** For a payment no transaction shows. Answers with the bill as it stands after the mark. */
+export async function markBillPaid(session: Session, billId: string, body: MarkBillPaidBody): Promise<BillDetail> {
+  const today = todayInTimeZone(session.household.timeZone)
+  const paidOn = body.paidOn ?? today
+  if (paidOn > today) {
+    const message = 'Pick a day that isn’t in the future.'
+    throw new ValidationError(message, { details: { fieldErrors: { paidOn: [message] } } })
+  }
+  await queries.markBillPaid(session.context, getDb(), { billId, dueOn: body.dueOn, paidOn })
+  return getBillDetail(session, billId)
+}
+
+export async function unmarkBillPaid(session: Session, billId: string, dueOn: CalendarDate): Promise<BillDetail> {
+  await queries.unmarkBillPaid(session.context, getDb(), { billId, dueOn })
+  return getBillDetail(session, billId)
+}
+
 export interface BillFormOptions {
   /** Visible accounts. A bill already on a hidden one keeps it. */
   accounts: { id: string; label: string }[]
@@ -173,7 +213,7 @@ export async function listBillFormOptions(session: Session): Promise<BillFormOpt
   return {
     accounts: accounts
       .filter(account => !account.isHidden)
-      .map(account => ({ id: account.id, label: account.mask ? `${account.name} ••${account.mask}` : account.name })),
+      .map(account => ({ id: account.id, label: accountLabel(account) })),
     categories: categories.map(category => ({ id: category.id, name: category.name, isArchived: category.isArchived })),
   }
 }
@@ -191,9 +231,12 @@ export async function listBillDues(
   const rows = await queries.listBills(ctx, db)
   if (rows.length === 0) return []
   const today = todayInTimeZone(input.timeZone)
-  const candidates = await queries.listBillPaymentCandidates(ctx, db, candidateRange(input))
+  const [candidates, marks] = await Promise.all([
+    queries.listBillPaymentCandidates(ctx, db, candidateRange(input)),
+    queries.listBillPayments(ctx, db),
+  ])
   return rows.flatMap(row =>
-    occurrencesIn(row, input, candidates, today, input.timeZone).map(occurrence => ({
+    occurrencesIn(row, input, candidates, marks, today, input.timeZone).map(occurrence => ({
       id: row.id,
       name: row.name,
       dueOn: occurrence.dueOn,

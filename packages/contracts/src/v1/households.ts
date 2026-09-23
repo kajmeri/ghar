@@ -44,6 +44,23 @@ export const createHouseholdBodySchema = z.object({
 })
 export type CreateHouseholdBody = z.infer<typeof createHouseholdBodySchema>
 
+export const householdOptionsSchema = z.object({
+  /** Every IANA zone the server knows, UTC included. */
+  timeZones: z.array(z.string()),
+  currencies: z.array(z.object({ code: z.string().length(3), label: z.string() })),
+})
+export type HouseholdOptions = z.infer<typeof householdOptionsSchema>
+
+/**
+ * What onboarding offers for a household's time zone and currency. Needs a signed-in person but
+ * not a household, since it's asked for before there is one.
+ */
+export const getHouseholdOptions = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/households/options',
+  response: householdOptionsSchema,
+})
+
 /** Onboarding. Creates a household and makes the caller its owner. 409 if they already have one. */
 export const createHousehold = defineEndpoint({
   method: 'POST',

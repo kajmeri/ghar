@@ -82,7 +82,7 @@ export function TravelModeView({ initial }: { initial: TravelMode }) {
   return (
     <div className='flex flex-col gap-6 text-lg'>
       <header className='flex flex-col gap-3'>
-        <Link href={`/travel/${mode.trip.id}`} className='text-base text-ink-muted underline underline-offset-4'>
+        <Link href={`/travel/${mode.trip.id}`} className='inline-flex min-h-tap items-center self-start text-base text-ink-muted underline underline-offset-4'>
           {mode.trip.name}
         </Link>
 
@@ -117,14 +117,14 @@ export function TravelModeView({ initial }: { initial: TravelMode }) {
         </div>
 
         {staleSince ? (
-          <p role='status' className='rounded-control border border-caution/40 px-3 py-2 text-base text-caution'>
+          <p role='status' className='rounded-control border border-caution/40 px-3 py-2 text-base text-caution-ink'>
             Showing a saved copy from{' '}
             {formatInstant(new Date(staleSince), mode.timeZone, {
               dateStyle: 'medium',
               timeStyle: 'short',
             })}
             .{' '}
-            <button type='button' className='underline underline-offset-4' onClick={refresh}>
+            <button type='button' className='inline-flex min-h-tap items-center underline underline-offset-4' onClick={refresh}>
               Try again
             </button>
           </p>
@@ -208,12 +208,12 @@ function DayCard({
 
       <div className='mt-3 flex flex-wrap gap-4 text-base'>
         {map ? (
-          <a href={map} target='_blank' rel='noreferrer noopener' className='underline underline-offset-4'>
+          <a href={map} target='_blank' rel='noreferrer noopener' className='inline-flex min-h-tap items-center underline underline-offset-4'>
             Open in maps
           </a>
         ) : null}
         {link ? (
-          <a href={link} target='_blank' rel='noreferrer noopener' className='underline underline-offset-4'>
+          <a href={link} target='_blank' rel='noreferrer noopener' className='inline-flex min-h-tap items-center underline underline-offset-4'>
             {option.bookingUrl ? 'Open the booking' : 'Open the link'}
           </a>
         ) : null}

@@ -59,13 +59,6 @@ export async function itineraryResponse(session: Session, tripId: string, itiner
   }
 }
 
-/** Every open slot, most urgent first, with the deadline that put it there. */
-export async function loadDecisions(session: Session, tripId: string) {
-  const itinerary = await listItinerary(session.context, getDb(), tripId)
-  const response = await itineraryResponse(session, tripId, itinerary)
-  return { ...response, decisions: decisionsFor(itinerary.slots, session.household.timeZone) }
-}
-
 /** The open slots in the order to settle them, each with the deadline that put it there. */
 export function decisionsFor(slots: Itinerary['slots'], timeZone: string, now = new Date()) {
   return decisionQueue(slots).map(slot => {

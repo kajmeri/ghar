@@ -35,7 +35,7 @@ export function WatchToggle({
         aria-checked={on}
         disabled={pending}
         className={cn(
-          'inline-flex min-h-tap min-w-tap items-center gap-3 rounded-control text-left text-base outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+          'inline-flex min-h-tap min-w-tap items-center gap-3 rounded-control text-left text-base outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
           compact ? 'justify-end' : 'self-start pr-2'
         )}
       >
@@ -43,7 +43,7 @@ export function WatchToggle({
           aria-hidden
           className={cn(
             'flex h-6 w-10 shrink-0 items-center rounded-pill p-0.5 transition-colors motion-reduce:transition-none',
-            on ? 'bg-ink' : 'bg-line'
+            on ? 'bg-ink' : 'bg-line-strong'
           )}
         >
           <span

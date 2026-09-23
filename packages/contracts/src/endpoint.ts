@@ -14,6 +14,13 @@ export interface EndpointDefinition {
   query?: z.ZodType
   body?: z.ZodType
   response: z.ZodType
+  /**
+   * Who may call this endpoint. Without it, every endpoint requires a session: the web
+   * app's session cookie or a bearer access token. `'public'` means no session is needed
+   * (a health check, signing in, or a request authorized by something in the request
+   * itself, such as a signed one-tap token).
+   */
+  access?: 'public'
 }
 
 export function defineEndpoint<const T extends EndpointDefinition>(endpoint: T): T {
@@ -27,15 +34,18 @@ type AllOptional<X> = [X] extends [object] ? (Partial<X> extends X ? true : fals
 
 /**
  * A client may leave out a part whose schema accepts an empty object (a query of optional
- * filters, say). The handler always receives the parsed part.
+ * filters, say) or no value at all (a body with `.prefault({})`, which the server reads from an
+ * empty request). The handler always receives the parsed part.
  */
 type Part<T, K extends InputKey, Side extends 'input' | 'output'> =
   T extends Record<K, infer Schema extends z.ZodType>
     ? Side extends 'output'
       ? { [P in K]: z.output<Schema> }
-      : AllOptional<z.input<Schema>> extends true
+      : undefined extends z.input<Schema>
         ? { [P in K]?: z.input<Schema> }
-        : { [P in K]: z.input<Schema> }
+        : AllOptional<z.input<Schema>> extends true
+          ? { [P in K]?: z.input<Schema> }
+          : { [P in K]: z.input<Schema> }
     : { [P in K]?: undefined }
 
 /** What a client sends. */

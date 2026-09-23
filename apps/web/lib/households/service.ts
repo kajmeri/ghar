@@ -7,16 +7,19 @@ import type {
   InvitationPreview,
   Member,
   MyHouseholdResponse,
+  PageQuery,
   RequestContext,
 } from '@ghar/contracts'
 import type { HouseholdRole } from '@ghar/core/auth'
 import { invitationExpiresAt, invitationStatus } from '@ghar/core/invitations'
 import * as queries from '@ghar/db/queries'
 import type { SessionContext } from '@ghar/db/queries'
+import { pageRequest, pageResponse, type PageResult } from '@/lib/api/cursor'
 import { getDb } from '@/lib/db'
 import { invitationEmail } from '@/lib/email/invitation'
 import { env } from '@/lib/env'
 import { getEmailProvider } from '@/lib/providers/email'
+import { currentHousehold } from './current'
 import { createInvitationToken, hashInvitationToken } from './tokens'
 
 // Household management, shared by app/api/v1 and the web's server actions so both run the same
@@ -24,8 +27,7 @@ import { createInvitationToken, hashInvitationToken } from './tokens'
 // into contract shapes.
 
 export async function getMyHousehold(ctx: RequestContext, session: SessionContext): Promise<MyHouseholdResponse> {
-  const household = await queries.getHousehold(ctx, getDb())
-  return toMyHousehold(household, session, ctx.role)
+  return toMyHousehold(await currentHousehold(ctx), session, ctx.role)
 }
 
 export async function createHousehold(session: SessionContext, body: CreateHouseholdBody): Promise<MyHouseholdResponse> {
@@ -36,6 +38,13 @@ export async function createHousehold(session: SessionContext, body: CreateHouse
 export async function listMembers(ctx: RequestContext): Promise<Member[]> {
   const rows = await queries.listMembers(ctx, getDb())
   return rows.map(toMember)
+}
+
+/** A page of members for the API, in the order they joined. */
+export async function listMembersPage(ctx: RequestContext, query: PageQuery): Promise<PageResult<Member>> {
+  const scope = { sort: 'members:joined' }
+  const page = await queries.listMembersPage(ctx, getDb(), pageRequest(query, scope))
+  return pageResponse(page, scope, toMember)
 }
 
 export async function changeMemberRole(ctx: RequestContext, input: { userId: string; role: HouseholdRole }): Promise<Member> {
@@ -49,6 +58,13 @@ export async function removeMember(ctx: RequestContext, input: { userId: string 
 export async function listInvitations(ctx: RequestContext): Promise<Invitation[]> {
   const rows = await queries.listPendingInvitations(ctx, getDb())
   return rows.map(toInvitation)
+}
+
+/** A page of invitations still waiting for an answer, newest first. */
+export async function listInvitationsPage(ctx: RequestContext, query: PageQuery): Promise<PageResult<Invitation>> {
+  const scope = { sort: 'invitations:created-desc' }
+  const page = await queries.listPendingInvitationsPage(ctx, getDb(), pageRequest(query, scope))
+  return pageResponse(page, scope, toInvitation)
 }
 
 /** Creates or replaces the invitation, then emails the link. Only the token's hash is stored. */

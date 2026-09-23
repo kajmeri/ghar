@@ -1,4 +1,5 @@
 import { assertCalendarDate, type CalendarDate, formatCalendarDate } from '@ghar/core/dates'
+import { netWorthChart, type NetWorthRange } from '@ghar/core/finances'
 import { formatCents } from '@ghar/core/money'
 import { Briefcase, Fuel, type LucideIcon, Plus, ShoppingCart, Utensils, Zap } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -29,7 +30,9 @@ import {
   StatGroupSkeleton,
 } from '@/app/(app)/_components/ui/skeletons'
 import { StatCard, StatGroup } from '@/app/(app)/_components/ui/stat-card'
+import { NetWorthChart } from '@/app/(app)/finances/net-worth/_components/net-worth-chart'
 import { Button } from '@/components/ui/button'
+import { demoNetWorthSnapshots } from '@/lib/networth/demo-history'
 import { cn } from '@/lib/utils'
 import { Amounts } from './_components/amounts'
 import { ColorSwatches } from './_components/color-swatches'
@@ -47,6 +50,7 @@ const SECTIONS = [
   { id: 'stats', title: 'Stat cards' },
   { id: 'progress', title: 'Progress' },
   { id: 'data-list', title: 'Data list' },
+  { id: 'net-worth-chart', title: 'Net worth chart' },
   { id: 'empty-states', title: 'Empty states' },
   { id: 'fields', title: 'Fields' },
   { id: 'overlays', title: 'Overlays' },
@@ -160,7 +164,7 @@ export default function StyleguidePage() {
             <li key={section.id}>
               <a
                 href={`#${section.id}`}
-                className='inline-flex min-h-tap items-center rounded-pill border border-line bg-surface px-4 text-sm transition-colors hover:bg-paper focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none'
+                className='inline-flex min-h-tap items-center rounded-pill border border-line bg-surface px-4 text-sm transition-colors hover:bg-paper focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden'
               >
                 {section.title}
               </a>
@@ -286,6 +290,13 @@ export default function StyleguidePage() {
               }
             />
           </Group>
+        </Section>
+
+        <Section
+          id='net-worth-chart'
+          description='The seed’s eighteen made-up months, shaped by the same core code as the page. A carried-forward balance is shaded and dashed.'
+        >
+          <NetWorthCharts />
         </Section>
 
         <Section id='empty-states' description='An illustration, one sentence saying what to do next, and at most one action.'>
@@ -445,6 +456,27 @@ function Pair({ title, side = false, children }: { title: string; side?: boolean
 /** A plain outline around an example that normally sits straight on the page. */
 function Frame({ className, children }: { className?: string; children: ReactNode }) {
   return <div className={cn('rounded-card border border-line p-4 md:p-6', className)}>{children}</div>
+}
+
+/** A fixed day, like the other samples, so the lapsed login and the paid-off loan sit in the same place every time. */
+function NetWorthCharts() {
+  const today = assertCalendarDate('2026-09-14')
+  const snapshots = demoNetWorthSnapshots(today)
+  const chart = (range: NetWorthRange) => netWorthChart(snapshots, { range, today })
+  return (
+    <>
+      <Group title='All time' description='One reading a week at this length. The shaded stretch is a bank login that lapsed for five weeks.'>
+        <Frame className='bg-surface'>
+          <NetWorthChart chart={chart('ALL')} view='net' currency='USD' />
+        </Frame>
+      </Group>
+      <Group title='One year, own vs owe' description='The car loan is paid off in May. It still counts every day at zero rather than dropping out, though beside the mortgage it barely moves the owed line.'>
+        <Frame className='bg-surface'>
+          <NetWorthChart chart={chart('1Y')} view='split' currency='USD' />
+        </Frame>
+      </Group>
+    </>
+  )
 }
 
 function SpendingStats() {

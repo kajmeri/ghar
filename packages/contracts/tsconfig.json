@@ -1,3 +1,6 @@
 {
-  "extends": "@ghar/config/tsconfig/isomorphic.json"
+  "extends": "@ghar/config/tsconfig/isomorphic.json",
+  // The OpenAPI generator and its test run in Node. tsconfig.scripts.json checks them with Node's
+  // types, so nothing here can reach for a Node API by accident.
+  "exclude": ["node_modules", "scripts", "test/openapi.test.ts"]
 }

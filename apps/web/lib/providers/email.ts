@@ -21,10 +21,15 @@ export class EmailDeliveryError extends Error {
   override readonly name = 'EmailDeliveryError'
 }
 
+// Resend's shared test sender needs no verified domain, but delivers only to the address that owns
+// the Resend account. Replies go to that same inbox.
+export const EMAIL_FROM = 'Ghar <onboarding@resend.dev>'
+export const EMAIL_REPLY_TO = 'krishnapajmeri@gmail.com'
+
 const resendSuccessSchema = z.object({ id: z.string() })
 const resendErrorSchema = z.object({ message: z.string() })
 
-export function createResendProvider(options: { apiKey: string; from: string; fetch?: typeof globalThis.fetch }): EmailProvider {
+export function createResendProvider(options: { apiKey: string; from: string; replyTo?: string; fetch?: typeof globalThis.fetch }): EmailProvider {
   const fetchImpl = options.fetch ?? globalThis.fetch
   return {
     async send(message) {
@@ -36,6 +41,7 @@ export function createResendProvider(options: { apiKey: string; from: string; fe
         },
         body: JSON.stringify({
           from: options.from,
+          reply_to: options.replyTo,
           to: [message.to],
           subject: message.subject,
           text: message.text,
@@ -82,9 +88,9 @@ let provider: EmailProvider | undefined
 
 export function getEmailProvider(): EmailProvider {
   if (provider) return provider
-  const { RESEND_API_KEY, EMAIL_FROM } = env()
+  const { RESEND_API_KEY } = env()
   if (RESEND_API_KEY) {
-    provider = createResendProvider({ apiKey: RESEND_API_KEY, from: EMAIL_FROM })
+    provider = createResendProvider({ apiKey: RESEND_API_KEY, from: EMAIL_FROM, replyTo: EMAIL_REPLY_TO })
   } else if (process.env.NODE_ENV === 'production') {
     // The console fallback would write invitation links into production logs.
     throw new Error('RESEND_API_KEY is not set, and production cannot print emails instead.')

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
+import { pageQuerySchema, pageSchema } from './shared'
 
 // These lists mirror @ghar/core/calendar. A test keeps them equal.
 export const eventCategorySchema = z.enum(['household', 'school', 'travel', 'bill', 'maintenance', 'personal'])
@@ -21,6 +22,7 @@ export const calendarItemRefSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('event'), eventId: z.uuid(), occurrenceStart: instantSchema }),
   z.object({ kind: z.literal('booking'), bookingId: z.uuid() }),
   z.object({ kind: z.literal('bill'), billId: z.uuid() }),
+  z.object({ kind: z.literal('debt'), accountId: z.uuid() }),
   z.object({ kind: z.literal('maintenance'), taskId: z.uuid(), assetId: z.uuid().nullable() }),
   z.object({ kind: z.literal('document'), documentId: z.uuid() }),
   z.object({ kind: z.literal('asset'), assetId: z.uuid() }),
@@ -78,6 +80,11 @@ export const calendarFeedSchema = z.object({
   from: calendarDateSchema,
   to: calendarDateSchema,
   sources: z.array(feedSourceSchema),
+  /**
+   * The sources this caller could turn on: Google only once a calendar is linked, bills only for
+   * those who can see them. A source filter offers these.
+   */
+  availableSources: z.array(feedSourceSchema),
   /** Soonest first; all-day items lead their day. */
   items: z.array(calendarItemSchema),
 })
@@ -238,7 +245,8 @@ export const respondToEvent = defineEndpoint({
 export const listCalendarLinks = defineEndpoint({
   method: 'GET',
   path: '/api/v1/calendar/links',
-  response: z.object({ links: z.array(calendarLinkSchema) }),
+  query: pageQuerySchema,
+  response: pageSchema(calendarLinkSchema),
 })
 
 /** Unlinks a calendar and removes what it synced. Your own, or anyone's if you're an owner. */
@@ -254,4 +262,60 @@ export const syncCalendars = defineEndpoint({
   method: 'POST',
   path: '/api/v1/calendar/sync',
   response: z.object({ results: z.array(calendarSyncResultSchema) }),
+})
+
+/** Where the browser goes once Google is done linking: back into the phone app, or the web app's page. */
+export const linkReturnToSchema = z.enum(['web', 'app'])
+
+/** Shared by the Google Calendar and Gmail authorize endpoints. */
+export const linkAuthorizationBodySchema = z
+  .object({
+    /**
+     * `app` ends on `ghar://settings/linked?provider=<calendar|mail>&handoff=<handoff>`. Nothing is
+     * linked yet: post the handoff to the matching complete endpoint, signed in as the same person,
+     * within five minutes. When linking stops before that, it ends on `...&status=<status>` instead,
+     * with `cancelled`, `expired`, `unavailable` or `failed`. `web`, the default, ends where the web
+     * app's Connect button does, and links only if the same person is signed in in that browser.
+     */
+    returnTo: linkReturnToSchema.default('web'),
+  })
+  .prefault({})
+
+export const linkAuthorizationSchema = z.object({
+  /** Google's consent screen. Open it in a browser within ten minutes. */
+  authorizationUrl: z.string(),
+})
+
+/**
+ * Starts linking the signed-in person's Google Calendar from the phone, where the browser shares no
+ * cookies with the app. The URL's state is signed and names who asked, and only that person can
+ * finish. Owners, adults and members.
+ */
+export const authorizeCalendarLink = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/calendar/links/authorize',
+  body: linkAuthorizationBodySchema,
+  response: linkAuthorizationSchema,
+})
+
+/** Shared by the Google Calendar and Gmail complete endpoints. */
+export const linkCompletionBodySchema = z.object({
+  /** From `ghar://settings/linked?...&handoff=`, as it arrived. Good for five minutes. */
+  handoff: z.string().min(1).max(4096),
+})
+
+/**
+ * Finishes linking a Google Calendar with the handoff the app received. Only the person who started,
+ * in the same household, can use it: anyone else gets 403. An expired, changed or already used
+ * handoff gets 400; start linking again. Owners, adults and members.
+ */
+export const completeCalendarLink = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/calendar/links/complete',
+  body: linkCompletionBodySchema,
+  response: z.object({
+    /** `connected_sync_failed`: linked, but the first sync didn't finish. It retries on the next sync. */
+    status: z.enum(['connected', 'connected_sync_failed']),
+    link: calendarLinkSchema,
+  }),
 })

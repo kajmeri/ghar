@@ -114,6 +114,18 @@ export function LockIllustration() {
   )
 }
 
+/** A line that starts at one dot and has only its dashed future: a chart that begins today. */
+export function ChartIllustration() {
+  return (
+    <Illustration>
+      <rect x='20' y='14' width='80' height='68' rx='8' className='fill-surface' />
+      <path d='M32 70h56' className={DETAIL} />
+      <path d='M40 58l14-8 14 5 18-21' strokeDasharray='3 5' className={DETAIL} />
+      <circle cx='40' cy='58' r='4' className={DOT} />
+    </Illustration>
+  )
+}
+
 export function ChecklistIllustration() {
   const rows = [
     { y: 36, done: true },

@@ -1,18 +1,16 @@
-'use client'
+import { Ellipsis } from 'lucide-react'
+import { MoreSheet, MoreSheetLink } from './more-sheet'
+import { MORE_ITEMS, TAB_ITEMS } from './nav'
+import { NavLink } from './nav-link'
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { cn } from '@/lib/utils'
-import { MoreSheet } from './more-sheet'
-import { isActive, MORE_ITEMS, TAB_ITEMS } from './nav'
-
+// Rendered on the server; NavLink and MoreSheet are the only parts that run in the browser.
 const TAB_CLASS =
-  'flex min-h-14 w-full flex-col items-center justify-center gap-1 text-xs focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset'
+  'flex min-h-14 w-full flex-col items-center justify-center gap-1 text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset'
+// The icons render with the idle stroke; the current tab thickens it from CSS.
+const TAB_ACTIVE = 'font-medium text-ink [&_svg]:[stroke-width:2.25]'
+const TAB_IDLE = 'text-ink-muted'
 
 export function TabBar() {
-  const pathname = usePathname()
-  const moreActive = MORE_ITEMS.some(item => isActive(pathname, item.href))
-
   return (
     <nav
       aria-label='Primary'
@@ -20,27 +18,36 @@ export function TabBar() {
     >
       <ul className='grid grid-cols-5'>
         {TAB_ITEMS.map(item => {
-          const active = isActive(pathname, item.href)
           const Icon = item.icon
           return (
             <li key={item.href}>
-              <Link
-                href={item.href}
-                aria-current={active ? 'page' : undefined}
-                className={cn(TAB_CLASS, active ? 'font-medium text-ink' : 'text-ink-muted')}
-              >
-                <Icon aria-hidden className='size-6' strokeWidth={active ? 2.25 : 1.75} />
+              <NavLink href={item.href} className={TAB_CLASS} activeClassName={TAB_ACTIVE} inactiveClassName={TAB_IDLE}>
+                <Icon aria-hidden className='size-6' strokeWidth={1.75} />
                 {item.label}
-              </Link>
+              </NavLink>
             </li>
           )
         })}
         <li>
           <MoreSheet
-            pathname={pathname}
-            triggerClassName={cn(TAB_CLASS, moreActive ? 'font-medium text-ink' : 'text-ink-muted')}
-            triggerStrokeWidth={moreActive ? 2.25 : 1.75}
-          />
+            hrefs={MORE_ITEMS.map(item => item.href)}
+            triggerClassName={TAB_CLASS}
+            activeClassName={TAB_ACTIVE}
+            inactiveClassName={TAB_IDLE}
+            triggerIcon={<Ellipsis aria-hidden className='size-6' strokeWidth={1.75} />}
+          >
+            {MORE_ITEMS.map(item => {
+              const Icon = item.icon
+              return (
+                <li key={item.href}>
+                  <MoreSheetLink href={item.href}>
+                    <Icon aria-hidden className='size-5 text-ink-muted' />
+                    {item.label}
+                  </MoreSheetLink>
+                </li>
+              )
+            })}
+          </MoreSheet>
         </li>
       </ul>
     </nav>

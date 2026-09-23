@@ -2,7 +2,7 @@
 
 import type { ItinerarySlot } from '@ghar/contracts'
 import { formatCalendarDate } from '@ghar/core/dates'
-import { SLOT_BANDS, SLOT_BAND_LABELS, chosenOptionOf, partitionOptions, slotShape, type SlotBand } from '@ghar/core/itinerary'
+import { SLOT_BANDS, SLOT_BAND_LABELS, chosenOptionOf, partitionOptions, slotShape, slotsInCell, type SlotBand } from '@ghar/core/itinerary'
 import { Plus } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ConfirmDialog } from '@/app/(app)/_components/ui/confirm-dialog'
@@ -18,6 +18,7 @@ import {
   durationCell,
   hoursCell,
   mapLink,
+  positioned,
   slotWhenLabel,
   travelCell,
   type Cell,
@@ -221,13 +222,22 @@ function SlotDetailSheet({ slot }: { slot: ItinerarySlot }) {
   )
 }
 
-/** The phone's way to rearrange, where dragging across a week is not on offer. */
+/**
+ * The phone's and the keyboard's way to rearrange, where dragging across a week is not on offer:
+ * a day, a part of the day, and a place among what is already there.
+ */
 function MoveSlot({ slot }: { slot: ItinerarySlot }) {
-  const { days } = useItinerary()
+  const { days, slots } = useItinerary()
   const action = useSlotAction()
   const [day, setDay] = useState(slot.day)
   const [band, setBand] = useState<SlotBand>(slot.band)
-  const unchanged = day === slot.day && band === slot.band
+  const positions = slots.map(positioned)
+  const currentIndex = slotsInCell(positions, slot.day, slot.band).findIndex(entry => entry.id === slot.id)
+  const others = slotsInCell(positions, day, band).filter(entry => entry.id !== slot.id)
+  // Null means last, which is where a slot moved to another part of the day lands.
+  const [chosenIndex, setChosenIndex] = useState<number | null>(currentIndex < 0 ? null : currentIndex)
+  const toIndex = Math.min(chosenIndex ?? others.length, others.length)
+  const unchanged = day === slot.day && band === slot.band && toIndex === currentIndex
 
   return (
     <section className='flex flex-col gap-3 border-t border-line pt-4'>
@@ -238,6 +248,7 @@ function MoveSlot({ slot }: { slot: ItinerarySlot }) {
             value={day}
             onChange={event => {
               setDay(event.target.value)
+              setChosenIndex(null)
             }}
           >
             {days.map(each => (
@@ -251,7 +262,9 @@ function MoveSlot({ slot }: { slot: ItinerarySlot }) {
           <Select
             value={band}
             onChange={event => {
-              if (isBand(event.target.value)) setBand(event.target.value)
+              if (!isBand(event.target.value)) return
+              setBand(event.target.value)
+              setChosenIndex(null)
             }}
           >
             {SLOT_BANDS.map(each => (
@@ -261,13 +274,29 @@ function MoveSlot({ slot }: { slot: ItinerarySlot }) {
             ))}
           </Select>
         </Field>
+        {others.length > 0 ? (
+          <Field label='Place' className='col-span-2'>
+            <Select
+              value={String(toIndex)}
+              onChange={event => {
+                setChosenIndex(Number(event.target.value))
+              }}
+            >
+              {[null, ...others].map((before, index) => (
+                <option key={before?.id ?? 'first'} value={index}>
+                  {before ? `After ${before.slot.label}` : 'First'}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : null}
       </div>
       <FormError>{action.error}</FormError>
       <Button
         variant='outline'
         disabled={unchanged || action.pending}
         onClick={() => {
-          action.mutate({ type: 'move', slotId: slot.id, day, band })
+          action.mutate({ type: 'move', slotId: slot.id, day, band, toIndex })
         }}
       >
         {action.pending ? 'Moving…' : 'Move'}

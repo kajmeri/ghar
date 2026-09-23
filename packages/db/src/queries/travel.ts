@@ -14,6 +14,7 @@ import { authUsers } from 'drizzle-orm/supabase'
 import { bookings, householdMembers, households, priceAlerts, priceChecks } from '../schema'
 import { recordAudit } from './audit'
 import { authorize } from './authorize'
+import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import type { Actor, Db, RequestContext } from './types'
 
 // Bookings, the price checks the daily watch records against them, and the alerts it sends.
@@ -76,6 +77,27 @@ export async function listBookings(ctx: RequestContext, db: Db): Promise<Booking
     .from(bookings)
     .where(eq(bookings.householdId, ctx.householdId))
     .orderBy(asc(tripStart), asc(bookings.createdAt), asc(bookings.id))
+}
+
+const bookingOrder: Keyset = {
+  keys: [
+    // Ascending already puts undated bookings last; the keyset says so explicitly.
+    { expr: tripStart, kind: 'date', nullable: true },
+    { expr: bookings.createdAt, kind: 'timestamp' },
+  ],
+  id: bookings.id,
+}
+
+/** One page of listBookings, in the same order. */
+export async function listBookingsPage(ctx: RequestContext, db: Db, page: PageRequest): Promise<Page<BookingRow>> {
+  requirePermission(ctx, 'travel.view')
+  const rows = await db
+    .select({ ...bookingColumns, pageKeys: pageKeys(bookingOrder) })
+    .from(bookings)
+    .where(and(eq(bookings.householdId, ctx.householdId), keysetAfter(bookingOrder, page.after)))
+    .orderBy(...keysetOrder(bookingOrder))
+    .limit(page.limit + 1)
+  return toPage(rows, page.limit)
 }
 
 export async function getBooking(ctx: RequestContext, db: Db, input: { bookingId: string }): Promise<BookingRow> {

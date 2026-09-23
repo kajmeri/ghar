@@ -111,7 +111,7 @@ export default async function HouseholdSettingsPage() {
                           {isExpired(invitation.expiresAt) ? (
                             // Caution is too light for text, so the words stay ink and the icon carries it.
                             <span className='inline-flex items-center gap-1 text-ink'>
-                              <TriangleAlert aria-hidden className='size-4 shrink-0 text-caution' />
+                              <TriangleAlert aria-hidden className='size-4 shrink-0 text-caution-ink' />
                               Expired. Resend to get a new link.
                             </span>
                           ) : (

@@ -1,6 +1,15 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
-import { calendarDateSchema, httpUrlSchema, instantSchema, longTextSchema, shortTextSchema, voteSchema } from './shared'
+import {
+  calendarDateSchema,
+  httpUrlSchema,
+  instantSchema,
+  longTextSchema,
+  pageQuerySchema,
+  pageSchema,
+  shortTextSchema,
+  voteSchema,
+} from './shared'
 
 /** One vote per member, keyed by user id, so a second vote replaces the first. */
 export const votesSchema = z.record(z.uuid(), voteSchema)
@@ -42,10 +51,12 @@ export const previewLink = defineEndpoint({
   response: z.object({ preview: linkPreviewSchema }),
 })
 
+/** Oldest first. */
 export const listTripIdeas = defineEndpoint({
   method: 'GET',
   path: '/api/v1/trip-ideas',
-  response: z.object({ ideas: z.array(tripIdeaSchema) }),
+  query: pageQuerySchema,
+  response: pageSchema(tripIdeaSchema),
 })
 
 export const createTripIdea = defineEndpoint({

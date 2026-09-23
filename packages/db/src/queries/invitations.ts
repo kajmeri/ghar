@@ -5,6 +5,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { authUsers } from 'drizzle-orm/supabase'
 import { householdMembers, invitations, profiles } from '../schema'
 import { recordAudit } from './audit'
+import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import type { Db, RequestContext } from './types'
 
 export interface InvitationRow {
@@ -16,18 +17,17 @@ export interface InvitationRow {
   createdAt: Date
 }
 
+const invitationColumns = {
+  id: invitations.id,
+  email: invitations.email,
+  role: invitations.role,
+  invitedByName: profiles.fullName,
+  expiresAt: invitations.expiresAt,
+  createdAt: invitations.createdAt,
+}
+
 function selectInvitations(db: Db) {
-  return db
-    .select({
-      id: invitations.id,
-      email: invitations.email,
-      role: invitations.role,
-      invitedByName: profiles.fullName,
-      expiresAt: invitations.expiresAt,
-      createdAt: invitations.createdAt,
-    })
-    .from(invitations)
-    .leftJoin(profiles, eq(profiles.id, invitations.invitedBy))
+  return db.select(invitationColumns).from(invitations).leftJoin(profiles, eq(profiles.id, invitations.invitedBy))
 }
 
 /** Invitations not yet accepted, expired ones included so they can be sent again. */
@@ -36,6 +36,21 @@ export async function listPendingInvitations(ctx: RequestContext, db: Db): Promi
   return selectInvitations(db)
     .where(and(eq(invitations.householdId, ctx.householdId), isNull(invitations.acceptedAt)))
     .orderBy(desc(invitations.createdAt))
+}
+
+const invitationOrder: Keyset = { keys: [{ expr: invitations.createdAt, kind: 'timestamp', desc: true }], id: invitations.id, idDesc: true }
+
+/** One page of listPendingInvitations: newest first, as there, with the id breaking ties. */
+export async function listPendingInvitationsPage(ctx: RequestContext, db: Db, page: PageRequest): Promise<Page<InvitationRow>> {
+  requirePermission(ctx, 'members.invite')
+  const rows = await db
+    .select({ ...invitationColumns, pageKeys: pageKeys(invitationOrder) })
+    .from(invitations)
+    .leftJoin(profiles, eq(profiles.id, invitations.invitedBy))
+    .where(and(eq(invitations.householdId, ctx.householdId), isNull(invitations.acceptedAt), keysetAfter(invitationOrder, page.after)))
+    .orderBy(...keysetOrder(invitationOrder))
+    .limit(page.limit + 1)
+  return toPage(rows, page.limit)
 }
 
 export interface NewInvitation {

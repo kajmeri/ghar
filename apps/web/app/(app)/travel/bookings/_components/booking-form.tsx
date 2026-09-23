@@ -1,6 +1,6 @@
 'use client'
 
-import type { Booking } from '@ghar/contracts'
+import type { Booking, DraftBooking } from '@ghar/contracts'
 import type { WallClock } from '@ghar/core/dates'
 import {
   BOOKING_KINDS,
@@ -15,19 +15,28 @@ import {
   RATE_PLANS,
 } from '@ghar/core/travel'
 import Link from 'next/link'
-import { useActionState, useState, type ComponentProps, type ReactNode } from 'react'
+import { useActionState, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { DateField } from '@/app/(app)/_components/ui/date-field'
 import { MoneyInput } from '@/app/(app)/_components/ui/money-input'
 import { Button } from '@/components/ui/button'
 import { describedBy, Field, FormMessage } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
+import { useFocusFirstInvalid } from '@/hooks/use-focus-first-invalid'
 import { fieldError, IDLE, submittedValue } from '@/lib/actions/state'
+import { REVIEW_PATH } from '@/lib/mail/display'
 import { CABIN_LABELS, KIND_LABELS, ratePlanLabel, STATUS_LABELS } from '@/lib/travel/display'
 import { createBookingAction, updateBookingAction } from '../actions'
+import { confirmDraftAction } from '../review/actions'
 
 /** A booking as the form edits it: departure times as wall-clock values in the household's zone. */
 export type BookingFormDefaults = Omit<Booking, 'departAt' | 'returnAt'> & {
+  departAt: WallClock | null
+  returnAt: WallClock | null
+}
+
+/** A booking read from an email, the same way. What was paid may be missing. */
+export type DraftFormDefaults = Omit<DraftBooking, 'departAt' | 'returnAt'> & {
   departAt: WallClock | null
   returnAt: WallClock | null
 }
@@ -37,29 +46,50 @@ type Kind = Booking['kind']
 const DATETIME_CLASS =
   'block appearance-none [&::-webkit-calendar-picker-indicator]:opacity-60 [&::-webkit-date-and-time-value]:min-h-6 [&::-webkit-date-and-time-value]:text-left'
 
-/** Adds a booking, or edits one when `booking` is given. Only the fields for its kind show. */
-export function BookingForm({ booking, currency, timeZone }: { booking?: BookingFormDefaults; currency: string; timeZone: string }) {
-  const [state, formAction, pending] = useActionState(booking ? updateBookingAction : createBookingAction, IDLE)
-  const [kind, setKind] = useState<Kind>(booking?.kind ?? 'flight')
-  const error = (field: string) => fieldError(state, field)
+/**
+ * Adds a booking, edits one when `booking` is given, or saves one read from an email when `draft`
+ * is given, with what couldn't be read marked before anything is submitted. Only the fields for
+ * its kind show.
+ */
+export function BookingForm({
+  booking,
+  draft,
+  currency,
+  timeZone,
+}: {
+  booking?: BookingFormDefaults
+  draft?: { id: string; booking: DraftFormDefaults; problems: Partial<Record<string, string[]>> }
+  currency: string
+  timeZone: string
+}) {
+  const [state, formAction, pending] = useActionState(
+    draft ? confirmDraftAction : booking ? updateBookingAction : createBookingAction,
+    IDLE
+  )
+  const formRef = useRef<HTMLFormElement>(null)
+  useFocusFirstInvalid(formRef, state)
+  const initial = draft?.booking ?? booking
+  const [kind, setKind] = useState<Kind>(initial?.kind ?? 'flight')
+  const error = (field: string) => (state.status === 'idle' && draft ? draftProblem(draft, field) : fieldError(state, field))
 
   /** What a field starts with: what was just submitted if it needs fixing, else the booking's. */
-  function value(field: keyof BookingFormDefaults): string | undefined {
+  function value(field: keyof DraftFormDefaults): string | undefined {
     if (state.status === 'error') return submittedValue(state, field) ?? ''
-    const initial = booking?.[field]
-    return initial === null || initial === undefined ? undefined : String(initial)
+    const start = initial?.[field]
+    return start === null || start === undefined ? undefined : String(start)
   }
   function checked(field: 'refundable' | 'watchEnabled', fallback: boolean): boolean {
     if (state.status === 'error') return submittedValue(state, field) === 'on'
-    return booking?.[field] ?? fallback
+    return initial?.[field] ?? fallback
   }
 
   const paid = value('paidCents')
-  const bookingCurrency = booking?.currency ?? currency
+  const bookingCurrency = initial?.currency ?? currency
 
   return (
-    <form action={formAction} noValidate className='flex flex-col gap-6 rounded-card border border-line bg-surface p-4 md:p-6'>
-      {booking ? <input type='hidden' name='bookingId' value={booking.id} /> : null}
+    <form ref={formRef} action={formAction} noValidate className='flex flex-col gap-6 rounded-card border border-line bg-surface p-4 md:p-6'>
+      {draft ? <input type='hidden' name='draftId' value={draft.id} /> : null}
+      {booking && !draft ? <input type='hidden' name='bookingId' value={booking.id} /> : null}
       <input type='hidden' name='currency' value={bookingCurrency} />
 
       <fieldset className='flex flex-col gap-1.5'>
@@ -68,7 +98,7 @@ export function BookingForm({ booking, currency, timeZone }: { booking?: Booking
           {BOOKING_KINDS.map(option => (
             <label
               key={option}
-              className='flex min-h-tap cursor-pointer items-center justify-center rounded-control border border-line bg-surface px-2 text-center text-base has-checked:border-ink has-checked:bg-ink has-checked:text-paper has-focus-visible:ring-[3px] has-focus-visible:ring-ring/50'
+              className='flex min-h-tap cursor-pointer items-center justify-center rounded-control border border-line bg-surface px-2 text-center text-base has-checked:border-ink has-checked:bg-ink has-checked:text-paper has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-surface'
             >
               <input
                 type='radio'
@@ -278,7 +308,7 @@ export function BookingForm({ booking, currency, timeZone }: { booking?: Booking
             defaultValue={value('providerName')}
           />
         )}
-        {booking ? (
+        {booking || draft ? (
           <SelectField id='booking-status' name='status' label='Status' error={error('status')} defaultValue={value('status') ?? 'booked'}>
             {BOOKING_STATUSES.map(status => (
               <option key={status} value={status}>
@@ -299,15 +329,21 @@ export function BookingForm({ booking, currency, timeZone }: { booking?: Booking
 
       <div className='flex flex-col gap-3 md:flex-row md:items-center'>
         <Button type='submit' disabled={pending}>
-          {pending ? 'Saving…' : booking ? 'Save changes' : 'Add booking'}
+          {pending ? 'Saving…' : draft ? 'Save booking' : booking ? 'Save changes' : 'Add booking'}
         </Button>
         <Button asChild variant='outline'>
-          <Link href={booking ? `/travel/bookings/${booking.id}` : '/travel/bookings'}>Cancel</Link>
+          <Link href={draft ? REVIEW_PATH : booking ? `/travel/bookings/${booking.id}` : '/travel/bookings'}>Cancel</Link>
         </Button>
         <FormMessage state={state} />
       </div>
     </form>
   )
+}
+
+/** What the model couldn't read, shown on the field before the person saves. */
+function draftProblem(draft: { booking: DraftFormDefaults; problems: Partial<Record<string, string[]>> }, field: string) {
+  if (field === 'paidCents' && draft.booking.paidCents === null) return 'The email didn’t say. Enter what you paid.'
+  return draft.problems[field]?.[0]
 }
 
 function RatePlanField({ kind, error, defaultValue }: { kind: Kind; error?: string; defaultValue?: string }) {

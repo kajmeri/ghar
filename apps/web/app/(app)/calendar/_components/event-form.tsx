@@ -11,12 +11,13 @@ import {
   type Weekday,
 } from '@ghar/core/calendar'
 import Link from 'next/link'
-import { useActionState, useState, type ComponentProps, type ReactNode } from 'react'
+import { useActionState, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { DateField } from '@/app/(app)/_components/ui/date-field'
 import { Button } from '@/components/ui/button'
 import { describedBy, Field, FormMessage } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
+import { useFocusFirstInvalid } from '@/hooks/use-focus-first-invalid'
 import { fieldError, IDLE, submittedValue } from '@/lib/actions/state'
 import {
   CATEGORY_LABELS,
@@ -40,7 +41,7 @@ const DATETIME_CLASS =
   'block appearance-none [&::-webkit-calendar-picker-indicator]:opacity-60 [&::-webkit-date-and-time-value]:min-h-6 [&::-webkit-date-and-time-value]:text-left'
 
 const PILL =
-  'flex min-h-tap cursor-pointer items-center justify-center gap-2 rounded-control border border-line bg-surface px-2 text-center text-base has-checked:border-ink has-checked:bg-ink has-checked:text-paper has-focus-visible:ring-[3px] has-focus-visible:ring-ring/50'
+  'flex min-h-tap cursor-pointer items-center justify-center gap-2 rounded-control border border-line bg-surface px-2 text-center text-base has-checked:border-ink has-checked:bg-ink has-checked:text-paper has-focus-visible:ring-2 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-surface'
 
 const LEGEND = 'mb-1.5 text-sm font-medium text-ink'
 
@@ -88,6 +89,8 @@ export function EventForm({
 }) {
   const editing = event.id !== null
   const [state, formAction, pending] = useActionState(editing ? updateEventAction : createEventAction, IDLE)
+  const formRef = useRef<HTMLFormElement>(null)
+  useFocusFirstInvalid(formRef, state)
   // Controlled so they survive the form reset after a submit that needs fixing.
   const [allDay, setAllDay] = useState(event.allDay)
   const [repeat, setRepeat] = useState<RepeatChoice>(event.repeat)
@@ -108,7 +111,7 @@ export function EventForm({
   const categories = PICKABLE_CATEGORIES.includes(event.category) ? PICKABLE_CATEGORIES : [...PICKABLE_CATEGORIES, event.category]
 
   return (
-    <form action={formAction} noValidate className='flex flex-col gap-6 rounded-card border border-line bg-surface p-4 md:p-6'>
+    <form ref={formRef} action={formAction} noValidate className='flex flex-col gap-6 rounded-card border border-line bg-surface p-4 md:p-6'>
       {event.id !== null ? <input type='hidden' name='eventId' value={event.id} /> : null}
 
       <TextField
@@ -217,7 +220,7 @@ export function EventForm({
               className='md:max-w-40'
             />
             {repeat === 'weekly' ? (
-              <fieldset>
+              <fieldset aria-describedby={['event-weekdays-hint', error('rrule') ? 'event-rrule-error' : null].filter(Boolean).join(' ')}>
                 <legend className={LEGEND}>On</legend>
                 <div className='grid grid-cols-4 gap-2 sm:grid-cols-7'>
                   {WEEKDAY_OPTIONS.map(day => (
@@ -237,10 +240,12 @@ export function EventForm({
                     </label>
                   ))}
                 </div>
-                <p className='mt-1.5 text-sm text-ink-muted'>Leave them all off to repeat on the day it starts.</p>
+                <p id='event-weekdays-hint' className='mt-1.5 text-sm text-ink-muted'>
+                  Leave them all off to repeat on the day it starts.
+                </p>
               </fieldset>
             ) : null}
-            <fieldset>
+            <fieldset aria-describedby={error('rrule') ? 'event-rrule-error' : undefined}>
               <legend className={LEGEND}>Stops</legend>
               <div className='grid grid-cols-3 gap-2'>
                 {ENDS_CHOICES.map(choice => (
@@ -285,7 +290,11 @@ export function EventForm({
             ) : null}
           </>
         )}
-        {error('rrule') ? <p className='text-sm text-negative'>{error('rrule')}</p> : null}
+        {error('rrule') ? (
+          <p id='event-rrule-error' role='alert' className='text-sm text-negative'>
+            {error('rrule')}
+          </p>
+        ) : null}
       </div>
 
       <div className='flex flex-col gap-6 border-t border-line pt-6'>
@@ -341,14 +350,14 @@ export function EventForm({
               defaultValue={value('description')}
               aria-invalid={Boolean(error('description'))}
               aria-describedby={describedBy('event-description', error('description'))}
-              className='block w-full min-w-0 rounded-control border border-input bg-surface px-3 py-2.5 text-base text-ink placeholder:text-ink-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none aria-invalid:border-negative'
+              className='block w-full min-w-0 rounded-control border border-input bg-surface px-3 py-2.5 text-base text-ink placeholder:text-ink-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden aria-invalid:border-negative'
             />
           </Field>
         </div>
       </div>
 
       {members.length > 0 ? (
-        <fieldset className='border-t border-line pt-6'>
+        <fieldset className='border-t border-line pt-6' aria-describedby={error('attendeeIds') ? 'event-attendees-error' : undefined}>
           <legend className='sr-only'>Who’s going</legend>
           <p aria-hidden className={LEGEND}>
             Who’s going
@@ -370,7 +379,11 @@ export function EventForm({
               </label>
             ))}
           </div>
-          {error('attendeeIds') ? <p className='mt-1.5 text-sm text-negative'>{error('attendeeIds')}</p> : null}
+          {error('attendeeIds') ? (
+            <p id='event-attendees-error' role='alert' className='mt-1.5 text-sm text-negative'>
+              {error('attendeeIds')}
+            </p>
+          ) : null}
         </fieldset>
       ) : null}
 

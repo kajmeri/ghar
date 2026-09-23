@@ -6,9 +6,10 @@ import type {
   CalendarLink,
   CalendarSyncResult,
   EventBody,
+  PageQuery,
   RequestContext,
 } from '@ghar/contracts'
-import { can } from '@ghar/core/auth'
+import { can, type HouseholdRole } from '@ghar/core/auth'
 import {
   allDayDate,
   allDayLastDate,
@@ -25,9 +26,12 @@ import {
 import { todayInTimeZone, type CalendarDate, type TimeZone } from '@ghar/core/dates'
 import * as queries from '@ghar/db/queries'
 import type { CalendarLinkRow, EventDetail, EventInput } from '@ghar/db/queries'
+import { cache } from 'react'
 import { listBillDues } from '@/lib/bills/service'
 import { openSecret, sealSecret } from '@/lib/crypto'
+import { pageRequest, pageResponse, type PageResult } from '@/lib/api/cursor'
 import { getDb } from '@/lib/db'
+import { currentHousehold } from '@/lib/households/current'
 import { getGoogleCalendarClient } from '@/lib/providers/google-calendar'
 import { googleRedirectUri } from './oauth'
 import { syncCalendarLink, syncCalendarLinks, type CalendarSyncDeps } from './sync'
@@ -36,15 +40,25 @@ import { syncCalendarLink, syncCalendarLinks, type CalendarSyncDeps } from './sy
 // queries; this file joins sources, maps rows to contracts, and runs syncs.
 
 export async function getCalendarSettings(ctx: RequestContext): Promise<{ timezone: TimeZone }> {
-  const { timezone } = await queries.getHousehold(ctx, getDb())
+  const { timezone } = await currentHousehold(ctx)
   return { timezone }
+}
+
+// The calendar page lists the links and then asks for the feed, which needs them too. Keyed on the
+// context's parts so both share one read per request; outside a render it reads every time.
+const loadCalendarLinkRows = cache((userId: string, householdId: string, role: HouseholdRole) =>
+  queries.listCalendarLinks({ userId, householdId, role }, getDb())
+)
+
+function calendarLinkRows(ctx: RequestContext): Promise<CalendarLinkRow[]> {
+  return loadCalendarLinkRows(ctx.userId, ctx.householdId, ctx.role)
 }
 
 /**
  * The sources worth offering as filters: Google once anyone has linked a calendar, then trips,
  * bills, maintenance and expiries for the people who can see each.
  */
-export function availableFeedSources(ctx: RequestContext, links: readonly CalendarLink[]): FeedSource[] {
+export function availableFeedSources(ctx: RequestContext, links: readonly Pick<CalendarLink, 'id'>[]): FeedSource[] {
   const sources: FeedSource[] = ['native']
   if (links.length > 0) sources.push('google')
   if (can(ctx.role, 'travel.view')) sources.push('trips')
@@ -56,7 +70,8 @@ export function availableFeedSources(ctx: RequestContext, links: readonly Calend
 
 /**
  * Everything on the calendar for a range of days in the household's zone: events, trips, each
- * bill's due dates marked paid or not, maintenance at its next due date, and documents and
+ * bill's due dates marked paid or not, connected cards' and loans' next payments, maintenance at
+ * its next due date, and documents and
  * warranties on the day they run out. Sensitive documents stay off for people who can't see them.
  */
 export async function getCalendarFeed(
@@ -64,18 +79,23 @@ export async function getCalendarFeed(
   input: { from: CalendarDate; to: CalendarDate; sources: FeedSource[] }
 ): Promise<CalendarFeed> {
   const db = getDb()
-  const { timezone, currency } = await queries.getHousehold(ctx, db)
+  const { timezone, currency } = await currentHousehold(ctx)
   const window = windowForDates(input.from, input.to, timezone)
   const wants = (source: FeedSource) => input.sources.includes(source)
   const range = { from: input.from, to: input.to }
 
-  const [events, bookings, bills, tasks, documents, warranties] = await Promise.all([
+  const [events, bookings, bills, liabilityDues, tasks, documents, warranties, links] = await Promise.all([
     wants('native') || wants('google') ? queries.listEventsInWindow(ctx, db, window) : [],
     wants('trips') && can(ctx.role, 'travel.view') ? queries.listTripBookingsInRange(ctx, db, input) : [],
     wants('bills') && can(ctx.role, 'finances.view') ? listBillDues(ctx, db, { ...range, timeZone: timezone, currency }) : [],
-    wants('maintenance') && can(ctx.role, 'home.view') ? queries.listMaintenanceTasks(ctx, db) : [],
+    wants('bills') && can(ctx.role, 'finances.view') ? queries.listLiabilityDues(ctx, db, range) : [],
+    wants('maintenance') && can(ctx.role, 'home.view')
+      ? queries.listMaintenanceTasks(ctx, db, { dueFrom: input.from, dueTo: input.to })
+      : [],
     wants('expiries') && can(ctx.role, 'documents.view') ? queries.listDocumentExpiries(ctx, db, range) : [],
     wants('expiries') && can(ctx.role, 'home.view') ? queries.listWarrantyExpiries(ctx, db, range) : [],
+    // Only whether any calendar is linked, for availableSources.
+    can(ctx.role, 'calendar.view') ? calendarLinkRows(ctx) : [],
   ])
 
   const maintenance: MaintenanceDue[] = tasks.flatMap(task =>
@@ -100,6 +120,7 @@ export async function getCalendarFeed(
     events,
     bookings,
     bills,
+    debts: liabilityDues.map(due => ({ accountId: due.accountId, name: due.name, dueOn: due.nextPaymentDueOn, overdue: due.isOverdue })),
     maintenance,
     expiries,
     sources: input.sources,
@@ -109,6 +130,7 @@ export async function getCalendarFeed(
     from: input.from,
     to: input.to,
     sources: input.sources,
+    availableSources: availableFeedSources(ctx, links),
     items: items.map(toCalendarItem),
   }
 }
@@ -213,8 +235,15 @@ function toCalendarLink(ctx: RequestContext, row: CalendarLinkRow): CalendarLink
 }
 
 export async function listCalendarLinks(ctx: RequestContext): Promise<CalendarLink[]> {
-  const rows = await queries.listCalendarLinks(ctx, getDb())
+  const rows = await calendarLinkRows(ctx)
   return rows.map(row => toCalendarLink(ctx, row))
+}
+
+/** A page of linked calendars for the API, oldest link first as on the calendar page. */
+export async function listCalendarLinksPage(ctx: RequestContext, query: PageQuery): Promise<PageResult<CalendarLink>> {
+  const scope = { sort: 'calendar-links:created' }
+  const page = await queries.listCalendarLinksPage(ctx, getDb(), pageRequest(query, scope))
+  return pageResponse(page, scope, row => toCalendarLink(ctx, row))
 }
 
 function syncDeps(): CalendarSyncDeps {

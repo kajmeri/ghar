@@ -43,7 +43,7 @@ export function Sheet({
           // Radix warns without a description unless it is told there isn't one.
           {...(description ? {} : { 'aria-describedby': undefined })}
           className={cn(
-            'fixed inset-x-0 bottom-0 z-50 flex flex-col border-line bg-surface pb-[env(safe-area-inset-bottom)] shadow-overlay focus:outline-none motion-safe:data-[state=closed]:animate-sink-out motion-safe:data-[state=open]:animate-rise-in md:top-0 md:left-auto md:max-h-none md:rounded-l-card md:rounded-tr-none md:border-t-0 md:border-l md:pb-0 motion-safe:md:data-[state=closed]:animate-slide-out-right motion-safe:md:data-[state=open]:animate-slide-in-right',
+            'fixed inset-x-0 bottom-0 z-50 flex flex-col border-line bg-surface pb-[env(safe-area-inset-bottom)] shadow-overlay focus:outline-hidden motion-safe:data-[state=closed]:animate-sink-out motion-safe:data-[state=open]:animate-rise-in md:top-0 md:left-auto md:max-h-none md:rounded-l-card md:rounded-tr-none md:border-t-0 md:border-l md:pb-0 motion-safe:md:data-[state=closed]:animate-slide-out-right motion-safe:md:data-[state=open]:animate-slide-in-right',
             size === 'full'
               ? 'top-0 pt-[env(safe-area-inset-top)] md:w-[min(56rem,calc(100vw-4rem))] md:pt-0'
               : 'max-h-[90dvh] rounded-t-card border-t md:w-112'

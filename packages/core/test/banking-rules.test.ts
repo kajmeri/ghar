@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   accountGroup,
   assertCanCreateBankItem,
+  assertCanDisconnectBankItem,
   bankItemAttention,
   bankItemStateForWebhook,
   bankItemStatusForError,
   canReconnectBankItem,
   centsFromPlaidAmount,
-  decodeTransactionCursor,
-  encodeTransactionCursor,
+  centsFromPlaidBalance,
   isTransferTransaction,
   PLAID_PRODUCTION_ITEM_LIMIT,
   shouldSyncBankItem,
@@ -77,14 +77,14 @@ describe('bank item status', () => {
     ).toEqual(new Date(now.getTime() + 7 * DAY))
   })
 
-  it('marks a revoked item as disconnected for good', () => {
+  it('marks a revoked item as gone for good', () => {
     const revoked = bankItemStateForWebhook({ kind: 'permission_revoked', plaidItemId: 'item' }, good, now)
     expect(revoked).toEqual({
       status: 'error',
       errorCode: 'USER_PERMISSION_REVOKED',
       consentExpiresAt: null,
     })
-    expect(revoked && bankItemAttention(revoked, now)).toBe('disconnected')
+    expect(revoked && bankItemAttention(revoked, now)).toBe('revoked')
     expect(revoked && canReconnectBankItem(revoked, now)).toBe(false)
     expect(revoked && shouldSyncBankItem(revoked)).toBe(false)
   })
@@ -150,6 +150,53 @@ describe('isTransferTransaction', () => {
   })
 })
 
+describe('turning a connection off', () => {
+  const off: BankItemState = { status: 'disconnected', errorCode: null, consentExpiresAt: null }
+
+  it('refuses to turn off a connection that is already off', () => {
+    expect(() => {
+      assertCanDisconnectBankItem(good)
+    }).not.toThrow()
+    expect(() => {
+      assertCanDisconnectBankItem(off)
+    }).toThrow(ConflictError)
+  })
+
+  it('is a resting state, not a problem: nothing to do, nothing to repair, nothing to sync', () => {
+    expect(bankItemAttention(off, now)).toBeNull()
+    expect(canReconnectBankItem(off, now)).toBe(false)
+    expect(shouldSyncBankItem(off)).toBe(false)
+  })
+
+  it('ignores whatever Plaid says about it afterwards', () => {
+    for (const event of [
+      { kind: 'item_error', plaidItemId: 'item', errorCode: 'ITEM_LOGIN_REQUIRED' },
+      { kind: 'login_repaired', plaidItemId: 'item' },
+      { kind: 'consent_expiring', plaidItemId: 'item', expiresAt: new Date(now.getTime() + DAY) },
+      { kind: 'permission_revoked', plaidItemId: 'item' },
+    ] as const) {
+      expect(bankItemStateForWebhook(event, off, now)).toBeNull()
+    }
+  })
+})
+
+describe('centsFromPlaidBalance', () => {
+  it('keeps the sign Plaid reports, so an amount owed stays positive', () => {
+    expect(centsFromPlaidBalance(1234.56)).toBe(123456)
+    expect(centsFromPlaidBalance(184.23)).toBe(18423)
+    expect(centsFromPlaidBalance(-12.5)).toBe(-1250)
+  })
+
+  it('rounds binary noise and never returns negative zero', () => {
+    expect(centsFromPlaidBalance(0.29)).toBe(29)
+    expect(Object.is(centsFromPlaidBalance(-0.001), 0)).toBe(true)
+  })
+
+  it('refuses balances that are not numbers', () => {
+    expect(() => centsFromPlaidBalance(Number.POSITIVE_INFINITY)).toThrow(ValidationError)
+  })
+})
+
 describe('centsFromPlaidAmount', () => {
   it('flips the sign so money out is negative', () => {
     expect(centsFromPlaidAmount(12.34)).toBe(-1234)
@@ -179,17 +226,5 @@ describe('accountGroup', () => {
     expect(accountGroup('brokerage')).toBe('investments')
     expect(accountGroup('other')).toBe('other')
     expect(accountGroup('something new')).toBe('other')
-  })
-})
-
-describe('transaction list cursor', () => {
-  const cursor = { date: '2026-09-01', id: '7d3f1a2b-4c5d-4e6f-8a9b-0c1d2e3f4a5b' }
-
-  it('round-trips', () => {
-    expect(decodeTransactionCursor(encodeTransactionCursor(cursor))).toEqual(cursor)
-  })
-
-  it.each(['', 'nope', '2026-09-01', '2026-13-01_7d3f1a2b-4c5d-4e6f-8a9b-0c1d2e3f4a5b', '2026-09-01_x', 'a_b_c'])('refuses %j', value => {
-    expect(() => decodeTransactionCursor(value)).toThrow(ValidationError)
   })
 })

@@ -2,9 +2,10 @@ import { requirePermission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
 import { NotFoundError } from '@ghar/core/errors'
 import { applyVote, type Vote } from '@ghar/core/ideas'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, getTableColumns, sql } from 'drizzle-orm'
 import { tripIdeas } from '../schema'
 import { recordAudit } from './audit'
+import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { createTrip, type TripWithCounts } from './trips'
 import type { Db, RequestContext } from './types'
 
@@ -21,6 +22,20 @@ function ideaKey(ctx: RequestContext, ideaId: string) {
 export async function listTripIdeas(ctx: RequestContext, db: Db): Promise<TripIdeaRow[]> {
   requirePermission(ctx, 'travel.view')
   return db.select().from(tripIdeas).where(eq(tripIdeas.householdId, ctx.householdId)).orderBy(tripIdeas.createdAt)
+}
+
+const ideaOrder: Keyset = { keys: [{ expr: tripIdeas.createdAt, kind: 'timestamp' }], id: tripIdeas.id }
+
+/** One page of listTripIdeas: oldest first, as there, with the id breaking ties. */
+export async function listTripIdeasPage(ctx: RequestContext, db: Db, page: PageRequest): Promise<Page<TripIdeaRow>> {
+  requirePermission(ctx, 'travel.view')
+  const rows = await db
+    .select({ ...getTableColumns(tripIdeas), pageKeys: pageKeys(ideaOrder) })
+    .from(tripIdeas)
+    .where(and(eq(tripIdeas.householdId, ctx.householdId), keysetAfter(ideaOrder, page.after)))
+    .orderBy(...keysetOrder(ideaOrder))
+    .limit(page.limit + 1)
+  return toPage(rows, page.limit)
 }
 
 export async function requireTripIdea(ctx: RequestContext, db: Db, ideaId: string): Promise<TripIdeaRow> {

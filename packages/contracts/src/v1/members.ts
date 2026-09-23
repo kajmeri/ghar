@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { householdRoleSchema } from '../context'
 import { defineEndpoint } from '../endpoint'
+import { pageQuerySchema, pageSchema } from './shared'
 
 export const memberSchema = z.object({
   userId: z.uuid(),
@@ -13,10 +14,12 @@ export type Member = z.infer<typeof memberSchema>
 
 export const memberParamsSchema = z.object({ userId: z.uuid() })
 
+/** Everyone in the household, in the order they joined. */
 export const listMembers = defineEndpoint({
   method: 'GET',
   path: '/api/v1/households/me/members',
-  response: z.object({ members: z.array(memberSchema) }),
+  query: pageQuerySchema,
+  response: pageSchema(memberSchema),
 })
 
 /** Owners only. Nobody changes their own role, and a household keeps at least one owner. */

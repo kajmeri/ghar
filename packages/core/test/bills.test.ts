@@ -173,6 +173,46 @@ describe('matchBillPayments', () => {
     const [occurrence] = matchBillPayments({ bill: internet, dueDates: ['2026-09-15'], transactions: [cash], today: '2026-09-30' })
     expect(occurrence?.payment).toEqual({ transactionId: cash.id, paidOn: '2026-09-12', amountCents: 8_999 })
   })
+
+  it('counts a due date marked paid by hand, with no transaction or amount', () => {
+    const result = matchBillPayments({
+      bill: internet,
+      dueDates: ['2026-08-15', '2026-09-15'],
+      transactions: [],
+      today: '2026-09-30',
+      manualPayments: [{ dueOn: '2026-09-15', paidOn: '2026-09-10' }],
+    })
+    expect(result).toEqual([
+      { dueOn: '2026-08-15', status: 'overdue', payment: null },
+      { dueOn: '2026-09-15', status: 'paid', payment: { transactionId: null, paidOn: '2026-09-10', amountCents: null } },
+    ])
+  })
+
+  it('leaves a payment near a due date marked by hand for the next one', () => {
+    const payment = tx('2026-08-14', -8_999)
+    const result = matchBillPayments({
+      bill: { ...internet, cadence: 'quarterly', dueMonth: 2 },
+      dueDates: ['2026-08-15', '2026-08-20'],
+      transactions: [payment],
+      today: '2026-09-14',
+      manualPayments: [{ dueOn: '2026-08-15', paidOn: '2026-08-12' }],
+    })
+    expect(result.map(occurrence => [occurrence.status, occurrence.payment?.transactionId ?? null])).toEqual([
+      ['paid', null],
+      ['paid', payment.id],
+    ])
+  })
+
+  it('ignores a mark for a date the bill is not due', () => {
+    const result = matchBillPayments({
+      bill: internet,
+      dueDates: ['2026-09-15'],
+      transactions: [],
+      today: '2026-09-30',
+      manualPayments: [{ dueOn: '2026-09-14', paidOn: '2026-09-14' }],
+    })
+    expect(result[0]?.status).toBe('overdue')
+  })
 })
 
 describe('summarizeBill', () => {

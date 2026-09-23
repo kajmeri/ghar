@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { Pill } from '@/components/ui/pill'
 import { getPageSession } from '@/lib/api/authed'
 import { getAttention } from '@/lib/attention/service'
-import { getPageContext } from '@/lib/auth/context'
 import { billAmountText, billTone, occurrenceText } from '@/lib/bills/display'
 import { EXPIRY_TONES } from '@/lib/documents/display'
 import * as households from '@/lib/households/service'
@@ -24,17 +23,15 @@ const LIST = 'divide-y divide-line overflow-hidden rounded-card border border-li
 const ROW = 'relative flex items-start justify-between gap-4 px-4 py-3 transition-colors hover:bg-paper'
 
 export default async function HomePage() {
-  const { ctx, session: sessionContext } = await getPageContext()
   const session = await getPageSession()
-  const [{ household }, members, attention] = await Promise.all([
-    households.getMyHousehold(ctx, sessionContext),
-    households.listMembers(ctx),
-    getAttention(session),
-  ])
-  const inviteFirst = can(ctx.role, 'members.invite') && members.length < 2
+  const { context: ctx, household } = session
+  const canInvite = can(ctx.role, 'members.invite')
+  // The member count only matters to someone who can invite.
+  const [members, attention] = await Promise.all([canInvite ? households.listMembers(ctx) : [], getAttention(session)])
+  const inviteFirst = canInvite && members.length < 2
   const { today, currency, maintenance, expiries } = attention
   const bills = attention.bills ?? []
-  const header = <PageHeader title={household.name} description={formatInstant(new Date(), household.timezone, { dateStyle: 'full' })} />
+  const header = <PageHeader title={household.name} description={formatInstant(new Date(), household.timeZone, { dateStyle: 'full' })} />
 
   if (maintenance.length === 0 && bills.length === 0 && expiries.length === 0) {
     return (

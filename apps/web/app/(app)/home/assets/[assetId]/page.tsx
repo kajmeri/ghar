@@ -11,7 +11,6 @@ import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { Pill } from '@/components/ui/pill'
 import { getPageSession } from '@/lib/api/authed'
-import { getPageContext } from '@/lib/auth/context'
 import * as contacts from '@/lib/contacts/service'
 import { DOCUMENT_KIND_LABELS, EXPIRY_TONES } from '@/lib/documents/display'
 import { ASSET_KIND_LABELS, makeAndModel } from '@/lib/home/display'
@@ -37,23 +36,21 @@ const EMPTY_CARD = 'rounded-card border border-line bg-surface p-4 text-ink-mute
 export default async function AssetPage({ params }: PageProps<'/home/assets/[assetId]'>) {
   const { assetId } = await params
   if (!assetParamsSchema.safeParse({ assetId }).success) notFound()
-  const { ctx, session: sessionContext } = await getPageContext()
   const session = await getPageSession()
+  const { context: ctx, household } = session
   const canManage = can(ctx.role, 'home.manage')
   const canAddDocuments = can(ctx.role, 'documents.manage')
 
-  const [{ asset, tasks, documents, history }, { household }, assets, members, contactList] = await Promise.all([
+  const [{ asset, tasks, documents, history }, assetOptions, members, contactList] = await Promise.all([
     home.getAssetDetail(session, assetId).catch((error: unknown) => {
       if (error instanceof NotFoundError) notFound()
       throw error
     }),
-    households.getMyHousehold(ctx, sessionContext),
-    canManage || canAddDocuments ? home.listAssets(session) : [],
+    canManage || canAddDocuments ? home.listAssetOptions(session) : [],
     households.listMembers(ctx),
     canManage ? contacts.listContacts(session) : [],
   ])
-  const today = todayInTimeZone(household.timezone)
-  const assetOptions = assets.map(item => ({ id: item.id, name: item.name }))
+  const today = todayInTimeZone(household.timeZone)
   const muted = (text: string) => <span className='text-ink-muted'>{text}</span>
 
   const rows: { label: string; value: ReactNode }[] = [

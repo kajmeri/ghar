@@ -32,10 +32,5 @@ export const SIDEBAR_GROUPS: NavGroup[] = [
   { label: 'Records', items: [HOUSE, DOCUMENTS, CONTACTS, BILLS] },
 ]
 
-/** Remembers whether the desktop sidebar is collapsed, so the server renders it that way. */
-export const SIDEBAR_COOKIE = 'ghar_sidebar'
-
-export function isActive(pathname: string, href: string): boolean {
-  if (href === '/') return pathname === '/'
-  return pathname === href || pathname.startsWith(`${href}/`)
-}
+export { SIDEBAR_COOKIE } from './nav-cookie'
+export { isActive } from './nav-match'

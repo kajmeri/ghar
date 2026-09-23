@@ -8,17 +8,21 @@ import {
   budgetPace,
   budgetStatus,
   closeBudget,
+  compareSpend,
   copyBudgetLines,
   daysInPeriod,
   elapsedShare,
   formatPeriod,
   monthStart,
+  monthToDateWindows,
   notableChanges,
   periodEnd,
   recentMonths,
   rolloverOutCents,
   spendByTopLevelCategory,
   summarizeBudget,
+  summarizeSpend,
+  topCategorySpend,
   type BudgetCategory,
   type BudgetLineInput,
 } from '../src/finances'
@@ -370,5 +374,87 @@ describe('insights', () => {
       changeShare: null,
     })
     expect(notableChanges(series, months, { monthIndex: 0 })).toEqual([])
+  })
+})
+
+describe('the month so far', () => {
+  const categories = [
+    { id: 'food', parentId: null, kind: 'expense' as const },
+    { id: 'groceries', parentId: 'food', kind: 'expense' as const },
+    { id: 'travel', parentId: null, kind: 'expense' as const },
+    { id: 'paychecks', parentId: null, kind: 'income' as const },
+    { id: 'moving-money', parentId: null, kind: 'transfer' as const },
+  ]
+
+  it('compares this month so far with the same days of the month before', () => {
+    expect(monthToDateWindows('2026-09-13')).toEqual({
+      current: { from: '2026-09-01', to: '2026-09-14' },
+      previous: { from: '2026-08-01', to: '2026-08-14' },
+    })
+  })
+
+  it('stops the earlier window at the end of a shorter month', () => {
+    expect(monthToDateWindows('2026-03-31').previous).toEqual({ from: '2026-02-01', to: '2026-03-01' })
+    expect(monthToDateWindows('2026-09-01')).toEqual({
+      current: { from: '2026-09-01', to: '2026-09-02' },
+      previous: { from: '2026-08-01', to: '2026-08-02' },
+    })
+  })
+
+  it('adds money out and money in separately, and leaves transfers out of both', () => {
+    expect(
+      summarizeSpend(
+        [
+          { categoryId: 'groceries', spentCents: 40_000 },
+          { categoryId: null, spentCents: 1_500 },
+          { categoryId: 'paychecks', spentCents: -800_000 },
+          { categoryId: 'moving-money', spentCents: 50_000 },
+        ],
+        categories
+      )
+    ).toEqual({ spentCents: 41_500, incomeCents: 800_000 })
+  })
+
+  it('treats a category it has never heard of as spending', () => {
+    expect(summarizeSpend([{ categoryId: 'deleted-since', spentCents: 2_000 }], categories)).toEqual({
+      spentCents: 2_000,
+      incomeCents: 0,
+    })
+  })
+
+  it('names where the money went, biggest first, a child counted towards its parent', () => {
+    expect(
+      topCategorySpend(
+        [
+          { categoryId: 'groceries', spentCents: 40_000 },
+          { categoryId: 'food', spentCents: 10_000 },
+          { categoryId: 'travel', spentCents: 90_000 },
+          { categoryId: null, spentCents: 10_000 },
+          { categoryId: 'paychecks', spentCents: -800_000 },
+        ],
+        categories,
+        { limit: 5 }
+      )
+    ).toEqual([
+      { categoryId: 'travel', spentCents: 90_000, share: 0.6 },
+      { categoryId: 'food', spentCents: 50_000, share: 50 / 150 },
+      { categoryId: null, spentCents: 10_000, share: 10 / 150 },
+    ])
+  })
+
+  it('stops at the limit, and leaves out a category that came out ahead', () => {
+    const rows = [
+      { categoryId: 'travel', spentCents: 90_000 },
+      { categoryId: 'food', spentCents: 50_000 },
+      { categoryId: 'groceries', spentCents: -60_000 },
+    ]
+    expect(topCategorySpend(rows, categories, { limit: 1 })).toEqual([{ categoryId: 'travel', spentCents: 90_000, share: 1 }])
+    expect(topCategorySpend(rows, categories, { limit: 5 }).map(row => row.categoryId)).toEqual(['travel'])
+  })
+
+  it('has nothing to compare with when the month before spent nothing', () => {
+    expect(compareSpend(120_000, 100_000)).toEqual({ changeCents: 20_000, changeShare: 0.2 })
+    expect(compareSpend(80_000, 100_000)).toEqual({ changeCents: -20_000, changeShare: -0.2 })
+    expect(compareSpend(50_000, 0)).toEqual({ changeCents: 50_000, changeShare: null })
   })
 })

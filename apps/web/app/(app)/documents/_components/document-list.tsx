@@ -1,24 +1,21 @@
-'use client'
-
 import type { HouseholdDocument } from '@ghar/contracts'
 import { formatCalendarDate, type CalendarDate } from '@ghar/core/dates'
 import { expiryPhrase, searchDocuments } from '@ghar/core/documents'
 import { FileText, Lock } from 'lucide-react'
-import { useState } from 'react'
 import { IconAvatar } from '@/app/(app)/_components/ui/avatar'
 import { DataList } from '@/app/(app)/_components/ui/data-list'
 import { SearchField } from '@/app/(app)/_components/ui/search-field'
 import { Pill } from '@/components/ui/pill'
 import { DOCUMENT_KIND_LABELS, EXPIRY_TONES } from '@/lib/documents/display'
 
-/** Every document, filtered as someone types. The whole list is already here, so there's no round trip. */
-export function DocumentList({ documents, today }: { documents: HouseholdDocument[]; today: CalendarDate }) {
-  const [query, setQuery] = useState('')
-  const shown = query.trim() === '' ? documents : searchDocuments(documents, query)
+/** Every document, searchable. The search lives in the URL (?q=) and the matching happens on the server. */
+export function DocumentList({ documents, query, today }: { documents: HouseholdDocument[]; query: string; today: CalendarDate }) {
+  const trimmed = query.trim()
+  const shown = trimmed === '' ? documents : searchDocuments(documents, trimmed)
 
   return (
     <div className='flex flex-col gap-3'>
-      <SearchField label='Search documents' value={query} onChange={setQuery} placeholder='Title, policy number or issuer' />
+      <SearchField label='Search documents' defaultValue={query} placeholder='Title, policy number or issuer' />
       <DataList
         label='Documents'
         rows={shown}
@@ -50,7 +47,7 @@ export function DocumentList({ documents, today }: { documents: HouseholdDocumen
         }}
         empty={
           <p className='rounded-card border border-line bg-surface px-4 py-6 text-center text-ink-muted'>
-            Nothing matches “{query.trim()}”. Try a word from the title, the issuer or a reference number.
+            Nothing matches “{trimmed}”. Try a word from the title, the issuer or a reference number.
           </p>
         }
       />

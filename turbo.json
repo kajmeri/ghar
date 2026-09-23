@@ -25,6 +25,11 @@
     "test": {
       "dependsOn": ["^build"]
     },
+    "openapi": {
+      "dependsOn": [],
+      "inputs": ["src/**", "scripts/**", "package.json", "$TURBO_ROOT$/apps/web/app/api/v1/**/route.ts"],
+      "outputs": ["openapi.json"]
+    },
     "db:generate": {
       "cache": false
     },

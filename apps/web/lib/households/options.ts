@@ -1,4 +1,5 @@
 import 'server-only'
+import type { HouseholdOptions } from '@ghar/contracts'
 
 export interface CurrencyOption {
   code: string
@@ -17,4 +18,9 @@ export function currencyOptions(locale = 'en-US'): CurrencyOption[] {
     code,
     label: `${code} · ${names.of(code) ?? code}`,
   }))
+}
+
+/** What a new household can pick from, for the onboarding form and GET /api/v1/households/options. */
+export function householdOptions(locale = 'en-US'): HouseholdOptions {
+  return { timeZones: timeZoneOptions(), currencies: currencyOptions(locale) }
 }

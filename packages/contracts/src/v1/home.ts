@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
 import { documentSchema, expiryStateSchema } from './documents'
-import { calendarDateSchema, centsSchema, instantSchema, longTextSchema } from './shared'
+import { calendarDateSchema, centsSchema, instantSchema, longTextSchema, pageQuerySchema, pageSchema } from './shared'
 
 // These lists mirror @ghar/core/home. A test keeps them equal.
 export const assetKindSchema = z.enum(['vehicle', 'appliance', 'system', 'electronics', 'property', 'other'])
@@ -133,14 +133,15 @@ export const completeMaintenanceBodySchema = z.object({
 })
 export type CompleteMaintenanceBody = z.output<typeof completeMaintenanceBodySchema>
 
+/** By name, ignoring case. With `q`, only assets matching every word. */
 export const listAssets = defineEndpoint({
   method: 'GET',
   path: '/api/v1/assets',
-  query: z.object({
+  query: pageQuerySchema.extend({
     /** Words to find in the name, make, model, serial number or location. */
     q: z.string().max(200).optional(),
   }),
-  response: z.object({ assets: z.array(assetListItemSchema) }),
+  response: pageSchema(assetListItemSchema),
 })
 
 /** The asset with its jobs (soonest due first), its documents and every time a job was done. */
@@ -179,11 +180,12 @@ export const deleteAsset = defineEndpoint({
   response: z.object({ assetId: z.uuid() }),
 })
 
-/** Every job, soonest due first; jobs with no due date last. */
+/** Every job, soonest due first, then by title; jobs with no due date last. */
 export const listMaintenance = defineEndpoint({
   method: 'GET',
   path: '/api/v1/maintenance',
-  response: z.object({ tasks: z.array(maintenanceTaskSchema) }),
+  query: pageQuerySchema,
+  response: pageSchema(maintenanceTaskSchema),
 })
 
 export const getMaintenanceTask = defineEndpoint({

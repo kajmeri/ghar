@@ -15,7 +15,7 @@ export function SourceFilter({ month, sources, available }: { month: MonthKey | 
           const on = sources.includes(source)
           const next = on ? sources.filter(entry => entry !== source) : [...sources, source]
           const className = cn(
-            'inline-flex min-h-tap items-center gap-1.5 rounded-pill border px-4 text-base outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+            'inline-flex min-h-tap items-center gap-1.5 rounded-pill border px-4 text-base outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
             on ? 'border-ink bg-ink text-paper' : 'border-line bg-surface text-ink hover:border-ink-muted'
           )
           const body = (
@@ -28,9 +28,11 @@ export function SourceFilter({ month, sources, available }: { month: MonthKey | 
           return (
             <li key={source}>
               {next.length === 0 ? (
-                // The last source shown stays on: an empty calendar isn't a view anyone wants.
-                <span aria-disabled='true' className={className}>
+                // The last source shown stays on: an empty calendar isn't a view anyone wants. Not a
+                // link, so it says why rather than being a control that does nothing.
+                <span className={className}>
                   {body}
+                  <span className='sr-only'>. The last calendar shown can’t be hidden.</span>
                 </span>
               ) : (
                 <Link href={calendarHref({ month, sources: next, available })} scroll={false} className={className}>

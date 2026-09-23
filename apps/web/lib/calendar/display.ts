@@ -10,6 +10,7 @@ import {
   type MonthKey,
 } from '@ghar/core/calendar'
 import { addCalendarDays, formatCalendarDate, formatInstant, toCalendarDate, type CalendarDate, type TimeZone } from '@ghar/core/dates'
+import { NET_WORTH_PATH } from '@/lib/networth/display'
 
 // Words, links and times for the calendar pages and the event form. Safe for client components:
 // nothing here touches the server.
@@ -52,14 +53,14 @@ export const RESPONSE_LABELS: Record<AttendeeResponse, string> = {
 export const TONE_DOT: Record<CalendarTone, string> = {
   default: 'bg-ink-muted',
   positive: 'bg-positive',
-  caution: 'bg-caution',
+  caution: 'bg-caution-ink',
   negative: 'bg-negative',
 }
 
 export const TONE_BAR: Record<CalendarTone, string> = {
   default: 'border-l-ink-muted',
   positive: 'border-l-positive',
-  caution: 'border-l-caution',
+  caution: 'border-l-caution-ink',
   negative: 'border-l-negative',
 }
 
@@ -216,6 +217,8 @@ export function itemHref(item: CalendarItem): string {
       return `/travel/bookings/${item.ref.bookingId}`
     case 'bill':
       return `/bills/${item.ref.billId}`
+    case 'debt':
+      return `${NET_WORTH_PATH}#debts-heading`
     case 'maintenance':
       return item.ref.assetId === null ? `/home/maintenance/${item.ref.taskId}` : `/home/assets/${item.ref.assetId}`
     case 'document':

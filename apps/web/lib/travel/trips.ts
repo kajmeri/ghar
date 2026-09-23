@@ -1,5 +1,5 @@
 import 'server-only'
-import type { TravelHub, TravelMode, TripDetail } from '@ghar/contracts'
+import type { PageQuery, TravelHub, TravelMode, TripDetail } from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
 import { todayInTimeZone } from '@ghar/core/dates'
 import { plannedCents } from '@ghar/core/itinerary'
@@ -9,13 +9,19 @@ import {
   listItinerary,
   listMembers,
   listPackingItems,
+  listPackingItemsPage,
+  listPackingTemplatesPage,
   listTripBookings,
   listTripIdeas,
+  listTripIdeasPage,
   listTripTransactions,
   listTrips,
+  listTripsPage,
   sumTripActualCents,
+  type ListTripsOptions,
 } from '@ghar/db/queries'
 import type { Session } from '../api/authed'
+import { pageRequest, pageResponse } from '../api/cursor'
 import { getDb } from '../db'
 import { decisionsFor, itineraryView, travelersOn } from './itinerary'
 import {
@@ -23,6 +29,7 @@ import {
   toHouseholdMember,
   toItinerarySlot,
   toPackingItem,
+  toPackingTemplate,
   toTrip,
   toTripIdea,
   toTripSummary,
@@ -114,6 +121,38 @@ export async function loadTripDecisions(session: Session, tripId: string) {
     itinerary: await itineraryView(itinerary, travelersOn(trip), household.timeZone),
     decisions: decisionsFor(itinerary.slots, household.timeZone),
   }
+}
+
+// The travel lists for the API, a page at a time, each in the same order as its page.
+
+export async function loadTripsPage(session: Session, query: PageQuery & Pick<ListTripsOptions, 'phase' | 'status'>) {
+  const { context, household } = session
+  const today = todayInTimeZone(household.timeZone)
+  // Today decides which trips are upcoming and which are past, so a cursor from yesterday starts over.
+  const scope = {
+    sort: 'trips:starts-on',
+    filters: { phase: query.phase, status: query.status, today: query.phase === 'all' ? undefined : today },
+  }
+  const page = await listTripsPage(context, getDb(), { phase: query.phase, status: query.status, today }, pageRequest(query, scope))
+  return { ...pageResponse(page, scope, toTripSummary), today, timeZone: household.timeZone }
+}
+
+export async function loadTripIdeasPage(session: Session, query: PageQuery) {
+  const scope = { sort: 'trip-ideas:created' }
+  const page = await listTripIdeasPage(session.context, getDb(), pageRequest(query, scope))
+  return pageResponse(page, scope, toTripIdea)
+}
+
+export async function loadPackingPage(session: Session, tripId: string, query: PageQuery) {
+  const scope = { sort: 'packing:sort-order', filters: { tripId } }
+  const page = await listPackingItemsPage(session.context, getDb(), tripId, pageRequest(query, scope))
+  return pageResponse(page, scope, toPackingItem)
+}
+
+export async function loadPackingTemplatesPage(session: Session, query: PageQuery) {
+  const scope = { sort: 'packing-templates:name' }
+  const page = await listPackingTemplatesPage(session.context, getDb(), pageRequest(query, scope))
+  return pageResponse(page, scope, toPackingTemplate)
 }
 
 /**

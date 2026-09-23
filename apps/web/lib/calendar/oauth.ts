@@ -1,13 +1,17 @@
 import 'server-only'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { RequestContext } from '@ghar/contracts'
+import { requirePermission } from '@ghar/core/auth'
 import { z } from 'zod'
 import { openSecret, sealSecret } from '@/lib/crypto'
 import { env } from '@/lib/env'
+import { getOAuthStateKey, signOAuthState, type OAuthReturnTo } from '@/lib/oauth-state'
+import { getGoogleCalendarClient } from '@/lib/providers/google-calendar'
 
 // The OAuth `state` round trip for linking a Google Calendar. The connect route stores a random
 // state, with who asked, in a sealed cookie scoped to /api/calendar/google; the callback accepts
-// Google's answer only for that same person and household, within ten minutes.
+// Google's answer only for that same person and household, within ten minutes. The phone can't use
+// the cookie, so its state is signed instead (lib/oauth-state.ts) and ends at the same callback.
 
 export const OAUTH_COOKIE = 'ghar_calendar_oauth'
 export const OAUTH_COOKIE_PATH = '/api/calendar/google'
@@ -65,4 +69,18 @@ export function verifyOAuthState(input: { cookie: string | undefined; state: str
   const expected = createHash('sha256').update(payload.state).digest()
   const given = createHash('sha256').update(input.state).digest()
   return timingSafeEqual(expected, given)
+}
+
+/**
+ * For the phone: Google's consent URL, with a signed state instead of a cookie, since the browser the
+ * app opens shares no cookies with it. Throws ForbiddenError for a role that can't link a calendar.
+ */
+export function createCalendarAuthorizationUrl(ctx: RequestContext, input: { returnTo: OAuthReturnTo }, now: Date = new Date()): string {
+  requirePermission(ctx, 'calendar.manage')
+  const state = signOAuthState(
+    getOAuthStateKey(),
+    { purpose: 'calendar', userId: ctx.userId, householdId: ctx.householdId, returnTo: input.returnTo },
+    now
+  )
+  return getGoogleCalendarClient().authorizationUrl({ state, redirectUri: googleRedirectUri() })
 }

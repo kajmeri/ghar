@@ -64,7 +64,7 @@ export function Timeline({ className }: { className?: string }) {
                 </span>
               </h2>
               <p className='flex shrink-0 items-center gap-3 text-sm tabular-nums'>
-                {open > 0 ? <span className='text-caution'>{open} open</span> : null}
+                {open > 0 ? <span className='text-caution-ink'>{open} open</span> : null}
                 {planned > 0 ? <span className='text-ink-muted'>{formatCents(planned)}</span> : null}
               </p>
             </header>

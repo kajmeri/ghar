@@ -41,9 +41,10 @@ import {
   type MonthlyCategorySpend,
 } from '@ghar/core/finances'
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, max, or, sql } from 'drizzle-orm'
-import { accounts, budgetLines, budgets, categories, categoryRules, goals, transactions } from '../schema'
+import { accounts, budgetLines, budgets, categories, categoryRules, goals, households, transactions } from '../schema'
 import { recordAudit } from './audit'
 import { authorize } from './authorize'
+import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { isUniqueViolation } from './pg-errors'
 import type { Actor, Db, RequestContext } from './types'
 
@@ -96,6 +97,26 @@ export async function listCategories(ctx: RequestContext, db: Db): Promise<Categ
     .from(categories)
     .where(eq(categories.householdId, ctx.householdId))
     .orderBy(asc(categories.sortOrder), asc(categories.name), asc(categories.id))
+}
+
+const categoryOrder: Keyset = {
+  keys: [
+    { expr: categories.sortOrder, kind: 'integer' },
+    { expr: categories.name, kind: 'text' },
+  ],
+  id: categories.id,
+}
+
+/** One page of listCategories, archived ones included, in the same order. */
+export async function listCategoriesPage(ctx: RequestContext, db: Db, page: PageRequest): Promise<Page<CategoryRow>> {
+  requirePermission(ctx, 'finances.view')
+  const rows = await db
+    .select({ ...categoryColumns, pageKeys: pageKeys(categoryOrder) })
+    .from(categories)
+    .where(and(eq(categories.householdId, ctx.householdId), keysetAfter(categoryOrder, page.after)))
+    .orderBy(...keysetOrder(categoryOrder))
+    .limit(page.limit + 1)
+  return toPage(rows, page.limit)
 }
 
 /**
@@ -541,7 +562,22 @@ export interface CategorizationCandidate extends CategorizableTransaction, Categ
 /** How many candidates one run loads. The rest wait for the next sync or the nightly cron. */
 export const CATEGORIZATION_RUN_LIMIT = 2_000
 
-/** Everything a categorization run needs for one household, newest transactions first. */
+/** The households with something left to categorize, so the nightly run skips the rest. */
+export async function listHouseholdsToCategorize(db: Db): Promise<{ id: string }[]> {
+  return db
+    .select({ id: households.id })
+    .from(households)
+    .where(
+      sql`exists (select 1 from ${transactions} where ${transactions.householdId} = ${households.id}
+        and ${transactions.categoryId} is null and ${transactions.categorySource} is null and ${transactions.needsReview} = false)`
+    )
+}
+
+/**
+ * Everything a categorization run needs for one household, newest transactions first. Charges
+ * typed in by hand are candidates too: they reach the review queue, so they get the same chance
+ * of being filed before anyone is asked.
+ */
 export async function loadCategorizationInput(
   actor: Actor,
   db: Db,
@@ -559,10 +595,11 @@ export async function loadCategorizationInput(
       categorySource: transactions.categorySource,
       needsReview: transactions.needsReview,
       isExcluded: transactions.isExcluded,
-      accountHidden: accounts.isHidden,
+      // A charge typed in by hand is on no account, and is never out of sight.
+      accountHidden: sql<boolean>`coalesce(${accounts.isHidden}, false)`,
     })
     .from(transactions)
-    .innerJoin(accounts, eq(accounts.id, transactions.accountId))
+    .leftJoin(accounts, eq(accounts.id, transactions.accountId))
     .where(and(openTransactions(actor.householdId), eq(transactions.needsReview, false)))
     .orderBy(desc(transactions.date), desc(transactions.id))
     .limit(options.limit ?? CATEGORIZATION_RUN_LIMIT)
@@ -719,8 +756,9 @@ export async function applyModelOutcomes(
 
 /**
  * Money that counts as spending between two dates: not excluded, not a transfer, not on a hidden
- * account. Uncategorized money coming in isn't spending, so only money out counts there.
- * Categorized refunds count against their category.
+ * account. A charge typed in by hand belongs to no account and is always the household's own, so
+ * the cash dinner counts towards a budget like everything else. Uncategorized money coming in
+ * isn't spending, so only money out counts there. Categorized refunds count against their category.
  */
 function spendingConditions(householdId: string, from: CalendarDate, to: CalendarDate) {
   return and(
@@ -729,7 +767,7 @@ function spendingConditions(householdId: string, from: CalendarDate, to: Calenda
     lt(transactions.date, to),
     eq(transactions.isExcluded, false),
     eq(transactions.isTransfer, false),
-    eq(accounts.isHidden, false),
+    or(isNull(transactions.accountId), eq(accounts.isHidden, false)),
     or(isNotNull(transactions.categoryId), lt(transactions.amountCents, 0))
   )
 }
@@ -746,7 +784,7 @@ export async function listCategorySpend(
   return db
     .select({ categoryId: transactions.categoryId, spentCents })
     .from(transactions)
-    .innerJoin(accounts, eq(accounts.id, transactions.accountId))
+    .leftJoin(accounts, eq(accounts.id, transactions.accountId))
     .where(spendingConditions(ctx.householdId, input.from, input.to))
     .groupBy(transactions.categoryId)
 }
@@ -762,7 +800,7 @@ export async function listMonthlyCategorySpend(
   return db
     .select({ month, categoryId: transactions.categoryId, spentCents })
     .from(transactions)
-    .innerJoin(accounts, eq(accounts.id, transactions.accountId))
+    .leftJoin(accounts, eq(accounts.id, transactions.accountId))
     .where(spendingConditions(ctx.householdId, input.from, input.to))
     .groupBy(month, transactions.categoryId)
 }
@@ -789,7 +827,7 @@ export async function listTopMerchants(
       transactionCount: count(),
     })
     .from(transactions)
-    .innerJoin(accounts, eq(accounts.id, transactions.accountId))
+    .leftJoin(accounts, eq(accounts.id, transactions.accountId))
     .leftJoin(categories, eq(categories.id, transactions.categoryId))
     .where(
       and(

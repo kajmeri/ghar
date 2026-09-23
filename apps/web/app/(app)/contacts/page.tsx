@@ -10,8 +10,8 @@ import { ContactSheet } from './_components/contact-sheet'
 
 export const metadata: Metadata = { title: 'Contacts' }
 
-export default async function ContactsPage() {
-  const session = await getPageSession()
+export default async function ContactsPage({ searchParams }: PageProps<'/contacts'>) {
+  const [session, { q }] = await Promise.all([getPageSession(), searchParams])
   const canManage = can(session.context.role, 'contacts.manage')
   const list = await contacts.listContacts(session)
 
@@ -48,7 +48,7 @@ export default async function ContactsPage() {
   return (
     <>
       {header}
-      <ContactList contacts={list} />
+      <ContactList contacts={list} query={typeof q === 'string' ? q : ''} />
     </>
   )
 }

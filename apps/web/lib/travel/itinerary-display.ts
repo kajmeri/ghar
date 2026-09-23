@@ -206,7 +206,7 @@ export function warningTone(kind: ItineraryWarningValue['kind']): Exclude<Tone, 
 
 export const TONE_TEXT: Record<Tone, string> = {
   neutral: 'text-ink',
-  caution: 'text-caution',
+  caution: 'text-caution-ink',
   negative: 'text-negative',
 }
 

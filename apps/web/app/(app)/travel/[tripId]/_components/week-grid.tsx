@@ -136,6 +136,7 @@ export function WeekGrid({ className }: { className?: string }) {
                     <SlotChip
                       key={slot.id}
                       slot={slot}
+                      where={`${formatCalendarDate(day, 'EEE, MMM d')}, ${SLOT_BAND_LABELS[band].toLowerCase()}`}
                       draggable={canEdit && !action.pending}
                       lifted={dragging === slot.id}
                       onOpen={() => {
@@ -166,7 +167,8 @@ export function WeekGrid({ className }: { className?: string }) {
                       onClick={() => {
                         openSheet({ kind: 'add-slot', day, band })
                       }}
-                      className='flex h-7 items-center justify-center rounded-control text-ink-muted opacity-0 group-hover:opacity-100 hover:bg-paper focus-visible:opacity-100'
+                      // Hover reveals it for a mouse; a touch screen has no hover, so there it always shows at full tap size.
+                      className='flex h-7 items-center justify-center rounded-control text-ink-muted opacity-0 group-hover:opacity-100 hover:bg-paper focus-visible:opacity-100 pointer-coarse:h-tap pointer-coarse:opacity-100'
                     >
                       <Plus aria-hidden className='size-4' />
                       <span className='sr-only'>
@@ -186,6 +188,7 @@ export function WeekGrid({ className }: { className?: string }) {
 
 function SlotChip({
   slot,
+  where,
   draggable,
   lifted,
   onOpen,
@@ -195,6 +198,8 @@ function SlotChip({
   onDrop,
 }: {
   slot: ItinerarySlot
+  /** The day and part of the day, which the grid shows by position and a screen reader can't see. */
+  where: string
   draggable: boolean
   lifted: boolean
   onOpen: () => void
@@ -220,7 +225,7 @@ function SlotChip({
       onDragOver={onDragOver}
       onDrop={onDrop}
       className={cn(
-        'flex min-h-8 w-full items-center gap-1.5 rounded-control border px-2 text-left text-xs',
+        'flex min-h-8 w-full items-center gap-1.5 rounded-control border px-2 text-left text-xs pointer-coarse:min-h-tap',
         shape === 'decided' && 'border-line bg-surface text-ink',
         shape === 'debating' && 'border-ink/30 bg-paper text-ink',
         (shape === 'empty' || shape === 'skipped') && 'border-dashed border-line text-ink-muted',
@@ -230,7 +235,10 @@ function SlotChip({
       )}
     >
       <SlotKindIcon kind={slot.kind} className='size-3.5' />
-      <span className='min-w-0 flex-1 truncate'>{text}</span>
+      <span className='min-w-0 flex-1 truncate'>
+        {text}
+        <span className='sr-only'>, {where}</span>
+      </span>
     </button>
   )
 }

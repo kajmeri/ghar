@@ -18,5 +18,8 @@ overrides:
 
 # Dependency install scripts run only when listed as true here.
 allowBuilds:
+  # Its install script downloads the Sentry CLI binary, which only uploads source maps. Nothing
+  # here uploads them, so it stays off.
+  '@sentry/cli': false
   # Verifies the platform binary that drizzle-kit and vite use.
   esbuild: true

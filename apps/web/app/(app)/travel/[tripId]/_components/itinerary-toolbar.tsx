@@ -39,7 +39,7 @@ export function ItineraryToolbar({ layout, unlistedBookingCount }: { layout: Iti
           <Link href={`/travel/${tripId}/decisions`}>
             <ListChecks aria-hidden className='size-4' />
             Decisions
-            {openCount > 0 ? <span className='text-caution tabular-nums'>{openCount}</span> : null}
+            {openCount > 0 ? <span className='text-caution-ink tabular-nums'>{openCount}</span> : null}
           </Link>
         </Button>
         <Button asChild variant='ghost'>

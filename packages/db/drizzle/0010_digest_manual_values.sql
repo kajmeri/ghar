@@ -1,0 +1,4 @@
+ALTER TABLE "digest_preferences" DROP CONSTRAINT "digest_preferences_sections";--> statement-breakpoint
+-- Everyone gets every section they can see until they change it. Preferences saved before this one existed get it too.
+UPDATE "digest_preferences" SET "sections" = array_append("sections", 'manual_values') WHERE NOT ('manual_values' = ANY("sections"));--> statement-breakpoint
+ALTER TABLE "digest_preferences" ADD CONSTRAINT "digest_preferences_sections" CHECK ("digest_preferences"."sections" <@ array['auto_categorized', 'needs_review', 'budget', 'bills', 'manual_values', 'upkeep', 'price_drops', 'calendar']::text[]);

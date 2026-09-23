@@ -13,13 +13,19 @@
     "lint": "oxlint && ghar-no-hex",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "db:seed": "tsx --conditions=react-server scripts/seed.ts"
+    "db:seed": "tsx --conditions=react-server scripts/seed.ts",
+    "secrets:reseal": "tsx --conditions=react-server scripts/reseal-secrets.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
     "@ghar/contracts": "workspace:*",
     "@ghar/core": "workspace:*",
     "@ghar/db": "workspace:*",
     "@ghar/tokens": "workspace:*",
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.1.0",
+    "@sentry/browser": "^10.74.0",
+    "@sentry/nextjs": "^10.74.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
     "class-variance-authority": "^0.7.1",

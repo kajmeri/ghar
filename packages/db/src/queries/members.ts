@@ -4,6 +4,7 @@ import { and, asc, eq } from 'drizzle-orm'
 import { authUsers } from 'drizzle-orm/supabase'
 import { householdMembers, profiles } from '../schema'
 import { recordAudit } from './audit'
+import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import type { Db, RequestContext } from './types'
 
 export interface MemberRow {
@@ -14,15 +15,17 @@ export interface MemberRow {
   joinedAt: Date
 }
 
+const memberColumns = {
+  userId: householdMembers.userId,
+  email: authUsers.email,
+  fullName: profiles.fullName,
+  role: householdMembers.role,
+  joinedAt: householdMembers.joinedAt,
+}
+
 function selectMembers(db: Db) {
   return db
-    .select({
-      userId: householdMembers.userId,
-      email: authUsers.email,
-      fullName: profiles.fullName,
-      role: householdMembers.role,
-      joinedAt: householdMembers.joinedAt,
-    })
+    .select(memberColumns)
     .from(householdMembers)
     .innerJoin(profiles, eq(profiles.id, householdMembers.userId))
     .leftJoin(authUsers, eq(authUsers.id, householdMembers.userId))
@@ -33,6 +36,22 @@ export async function listMembers(ctx: RequestContext, db: Db): Promise<MemberRo
   return selectMembers(db)
     .where(eq(householdMembers.householdId, ctx.householdId))
     .orderBy(asc(householdMembers.joinedAt), asc(householdMembers.userId))
+}
+
+const memberOrder: Keyset = { keys: [{ expr: householdMembers.joinedAt, kind: 'timestamp' }], id: householdMembers.userId }
+
+/** One page of listMembers, in the same order. A member's position is keyed by their user id. */
+export async function listMembersPage(ctx: RequestContext, db: Db, page: PageRequest): Promise<Page<MemberRow>> {
+  requirePermission(ctx, 'members.view')
+  const rows = await db
+    .select({ ...memberColumns, pageKeys: pageKeys(memberOrder) })
+    .from(householdMembers)
+    .innerJoin(profiles, eq(profiles.id, householdMembers.userId))
+    .leftJoin(authUsers, eq(authUsers.id, householdMembers.userId))
+    .where(and(eq(householdMembers.householdId, ctx.householdId), keysetAfter(memberOrder, page.after)))
+    .orderBy(...keysetOrder(memberOrder))
+    .limit(page.limit + 1)
+  return toPage(rows, page.limit)
 }
 
 export async function changeMemberRole(ctx: RequestContext, db: Db, input: { userId: string; role: HouseholdRole }): Promise<MemberRow> {

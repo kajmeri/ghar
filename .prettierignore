@@ -1,6 +1,7 @@
 pnpm-lock.yaml
 packages/tokens/generated/
 packages/db/drizzle/
+packages/contracts/openapi.json
 .next/
 .expo/
 dist/

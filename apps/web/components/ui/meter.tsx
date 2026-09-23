@@ -4,7 +4,7 @@ import type { PillTone } from './pill'
 const FILLS = {
   neutral: 'bg-ink',
   positive: 'bg-positive',
-  caution: 'bg-caution',
+  caution: 'bg-caution-ink',
   negative: 'bg-negative',
 } as const
 
@@ -26,7 +26,7 @@ export function Meter({
   const percent = Math.round(Math.min(Math.max(ratio, 0), 1) * 100)
   return (
     <div
-      className={cn('h-1.5 w-full overflow-hidden rounded-pill bg-line', className)}
+      className={cn('h-1.5 w-full overflow-hidden rounded-pill bg-line inset-ring inset-ring-line-strong', className)}
       role='progressbar'
       aria-label={label}
       aria-valuenow={percent}

@@ -15,4 +15,5 @@ export const getHealth = defineEndpoint({
   method: 'GET',
   path: '/api/v1/health',
   response: healthResponseSchema,
+  access: 'public',
 })

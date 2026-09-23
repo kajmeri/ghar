@@ -183,7 +183,14 @@ export function DocumentSheet({
             {picked ? (
               <div className='flex items-center gap-3 rounded-card border border-line p-3'>
                 {picked.previewUrl ? (
-                  <img src={picked.previewUrl} alt='' className='size-16 shrink-0 rounded-control object-cover' />
+                  <img
+                    src={picked.previewUrl}
+                    alt=''
+                    width={64}
+                    height={64}
+                    decoding='async'
+                    className='size-16 shrink-0 rounded-control object-cover'
+                  />
                 ) : (
                   <span className='flex size-16 shrink-0 items-center justify-center rounded-control bg-paper'>
                     <FileText aria-hidden className='size-6 text-ink-muted' />
@@ -309,7 +316,7 @@ function FilePicker({
     <label
       className={cn(
         buttonVariants({ variant: 'outline' }),
-        'cursor-pointer px-3 focus-within:ring-[3px] focus-within:ring-ring/50',
+        'cursor-pointer px-3 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
         disabled && 'pointer-events-none opacity-40'
       )}
     >

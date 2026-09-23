@@ -4,11 +4,11 @@ import { cn } from '@/lib/utils'
 
 const FILL: Record<ProgressStatus, string> = {
   under: 'bg-positive',
-  approaching: 'bg-caution',
+  approaching: 'bg-caution-ink',
   over: 'bg-negative',
 }
 
-// Caution is too light to read as text, so approaching keeps ink text and puts the color in the icon.
+// Caution never colors words: approaching keeps ink text and puts caution-ink in the icon.
 const DETAIL: Record<ProgressStatus, string> = {
   under: 'text-ink-muted',
   approaching: 'text-ink',
@@ -62,13 +62,13 @@ export function ProgressBar({
         aria-valuemax={max}
         aria-valuenow={Math.min(Math.max(value, 0), max)}
         aria-valuetext={[valueText, STATUS_LABEL[status]].filter(Boolean).join(', ')}
-        className='h-2 overflow-hidden rounded-pill bg-line'
+        className='h-2 overflow-hidden rounded-pill bg-line inset-ring inset-ring-line-strong'
       >
         <div className={cn('h-full rounded-pill', FILL[status])} style={{ width: `${percent}%` }} />
       </div>
       {detail ? (
         <p className={cn('flex items-center gap-1.5 text-sm', DETAIL[status])}>
-          {status === 'approaching' ? <TriangleAlert aria-hidden className='size-4 shrink-0 text-caution' /> : null}
+          {status === 'approaching' ? <TriangleAlert aria-hidden className='size-4 shrink-0 text-caution-ink' /> : null}
           {status === 'over' ? <CircleAlert aria-hidden className='size-4 shrink-0' /> : null}
           {detail}
         </p>

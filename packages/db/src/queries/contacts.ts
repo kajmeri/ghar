@@ -1,9 +1,10 @@
 import { requirePermission } from '@ghar/core/auth'
 import { normalizeContactTags } from '@ghar/core/contacts'
 import { NotFoundError } from '@ghar/core/errors'
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, getTableColumns, sql } from 'drizzle-orm'
 import { contacts } from '../schema'
 import { recordAudit } from './audit'
+import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import type { Db, RequestContext } from './types'
 
 // The people the household calls: the plumber, the pediatrician, the insurance agent.
@@ -34,6 +35,20 @@ export async function listContacts(ctx: RequestContext, db: Db): Promise<Contact
     .from(contacts)
     .where(eq(contacts.householdId, ctx.householdId))
     .orderBy(sql`lower(${contacts.name})`, asc(contacts.id))
+}
+
+const contactOrder: Keyset = { keys: [{ expr: sql`lower(${contacts.name})`, kind: 'text' }], id: contacts.id }
+
+/** One page of listContacts, in the same order. */
+export async function listContactsPage(ctx: RequestContext, db: Db, page: PageRequest): Promise<Page<ContactRow>> {
+  requirePermission(ctx, 'contacts.view')
+  const rows = await db
+    .select({ ...getTableColumns(contacts), pageKeys: pageKeys(contactOrder) })
+    .from(contacts)
+    .where(and(eq(contacts.householdId, ctx.householdId), keysetAfter(contactOrder, page.after)))
+    .orderBy(...keysetOrder(contactOrder))
+    .limit(page.limit + 1)
+  return toPage(rows, page.limit)
 }
 
 export async function getContact(ctx: RequestContext, db: Db, contactId: string): Promise<ContactRow> {

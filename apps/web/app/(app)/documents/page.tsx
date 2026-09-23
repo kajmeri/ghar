@@ -12,18 +12,13 @@ import { DocumentSheet } from './_components/document-sheet'
 
 export const metadata: Metadata = { title: 'Documents' }
 
-export default async function DocumentsPage() {
-  const session = await getPageSession()
+export default async function DocumentsPage({ searchParams }: PageProps<'/documents'>) {
+  const [session, { q }] = await Promise.all([getPageSession(), searchParams])
   const { role } = session.context
   const canManage = can(role, 'documents.manage')
-  const [list, assets] = await Promise.all([documents.listDocuments(session), canManage ? home.listAssets(session) : []])
+  const [list, assetOptions] = await Promise.all([documents.listDocuments(session), canManage ? home.listAssetOptions(session) : []])
 
-  const addButton = canManage ? (
-    <DocumentSheet
-      assets={assets.map(asset => ({ id: asset.id, name: asset.name }))}
-      canMarkSensitive={can(role, 'documents.viewSensitive')}
-    />
-  ) : undefined
+  const addButton = canManage ? <DocumentSheet assets={assetOptions} canMarkSensitive={can(role, 'documents.viewSensitive')} /> : undefined
 
   return (
     <>
@@ -33,7 +28,7 @@ export default async function DocumentsPage() {
         action={list.length > 0 ? addButton : undefined}
       />
       {list.length > 0 ? (
-        <DocumentList documents={list} today={todayInTimeZone(session.household.timeZone)} />
+        <DocumentList documents={list} query={typeof q === 'string' ? q : ''} today={todayInTimeZone(session.household.timeZone)} />
       ) : addButton ? (
         <EmptyState
           illustration={<DocumentIllustration />}

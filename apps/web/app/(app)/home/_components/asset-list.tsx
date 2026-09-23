@@ -1,9 +1,6 @@
-'use client'
-
 import type { AssetListItem } from '@ghar/contracts'
 import type { CalendarDate } from '@ghar/core/dates'
 import { searchAssets } from '@ghar/core/home'
-import { useState } from 'react'
 import { IconAvatar } from '@/app/(app)/_components/ui/avatar'
 import { DataList } from '@/app/(app)/_components/ui/data-list'
 import { SearchField } from '@/app/(app)/_components/ui/search-field'
@@ -11,14 +8,17 @@ import { Pill } from '@/components/ui/pill'
 import { dueText, makeAndModel, MAINTENANCE_TONES } from '@/lib/home/display'
 import { ASSET_ICONS } from './asset-icon'
 
-/** The things in the house, searchable by name, model, serial number or where it is. */
-export function AssetList({ assets, today }: { assets: AssetListItem[]; today: CalendarDate }) {
-  const [query, setQuery] = useState('')
-  const shown = query.trim() === '' ? assets : searchAssets(assets, query)
+/**
+ * The things in the house, searchable by name, model, serial number or where it is. The search
+ * lives in the URL (?q=) and the matching happens on the server, so no list ships to the browser.
+ */
+export function AssetList({ assets, query, today }: { assets: AssetListItem[]; query: string; today: CalendarDate }) {
+  const trimmed = query.trim()
+  const shown = trimmed === '' ? assets : searchAssets(assets, trimmed)
 
   return (
     <div className='flex flex-col gap-3'>
-      <SearchField label='Search things' value={query} onChange={setQuery} placeholder='Name, model or serial number' />
+      <SearchField label='Search things' defaultValue={query} placeholder='Name, model or serial number' />
       <DataList
         label='Things'
         rows={shown}
@@ -61,7 +61,7 @@ export function AssetList({ assets, today }: { assets: AssetListItem[]; today: C
         }}
         empty={
           <p className='rounded-card border border-line bg-surface p-4 text-ink-muted'>
-            Nothing matches “{query.trim()}”. Try the name, the model or a serial number.
+            Nothing matches “{trimmed}”. Try the name, the model or a serial number.
           </p>
         }
       />

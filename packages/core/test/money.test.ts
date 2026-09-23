@@ -38,6 +38,16 @@ describe('formatCents', () => {
   ])('formats %d %s without the symbol', (cents, currency, expected) => {
     expect(formatCents(cents, { currency, symbol: false })).toBe(expected)
   })
+
+  it.each([
+    [0, '$0'],
+    [50_000, '$500'],
+    [125_000_000, '$1.3M'],
+    [-150_000_000, '-$1.5M'],
+    [48_000_000, '$480K'],
+  ])('formats %d compactly as %s, for an axis', (cents, expected) => {
+    expect(formatCents(cents, { notation: 'compact' })).toBe(expected)
+  })
 })
 
 describe('currencySymbol', () => {

@@ -4,6 +4,7 @@ import { NotFoundError } from '@ghar/core/errors'
 import { and, desc, eq, gte, isNull, lte, sql, sum } from 'drizzle-orm'
 import { transactions } from '../schema'
 import { recordAudit } from './audit'
+import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { requireTrip } from './scope'
 import type { Db, RequestContext } from './types'
 
@@ -60,6 +61,56 @@ export async function listTripTransactions(
     )
     .orderBy(desc(transactions.date), desc(transactions.createdAt), desc(transactions.id))
     .limit(limit)
+}
+
+const transactionOrder: Keyset = {
+  keys: [
+    { expr: transactions.date, kind: 'date', desc: true },
+    { expr: transactions.createdAt, kind: 'timestamp', desc: true },
+  ],
+  id: transactions.id,
+  idDesc: true,
+}
+
+/** One page of listTripTransactions, newest first as there. */
+export async function listTripTransactionsPage(
+  ctx: RequestContext,
+  db: Db,
+  options: Omit<ListTripTransactionsOptions, 'limit'>,
+  page: PageRequest
+): Promise<Page<TripTransactionRow>> {
+  requirePermission(ctx, 'finances.view')
+  const { tripId, untagged, from, to } = options
+  if (tripId) await requireTrip(ctx, db, tripId)
+
+  const rows = await db
+    .select({ ...tripTransactionColumns, pageKeys: pageKeys(transactionOrder) })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.householdId, ctx.householdId),
+        tripId ? eq(transactions.tripId, tripId) : undefined,
+        untagged ? isNull(transactions.tripId) : undefined,
+        from ? gte(transactions.date, from) : undefined,
+        to ? lte(transactions.date, to) : undefined,
+        keysetAfter(transactionOrder, page.after)
+      )
+    )
+    .orderBy(...keysetOrder(transactionOrder))
+    .limit(page.limit + 1)
+  return toPage(rows, page.limit)
+}
+
+/** One charge, as a trip sees it. */
+export async function getTripTransaction(ctx: RequestContext, db: Db, transactionId: string): Promise<TripTransactionRow> {
+  requirePermission(ctx, 'finances.view')
+  const [transaction] = await db
+    .select(tripTransactionColumns)
+    .from(transactions)
+    .where(and(eq(transactions.id, transactionId), eq(transactions.householdId, ctx.householdId)))
+    .limit(1)
+  if (!transaction) throw new NotFoundError('That transaction no longer exists.')
+  return transaction
 }
 
 /**

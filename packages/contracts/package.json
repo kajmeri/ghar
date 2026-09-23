@@ -12,8 +12,10 @@
   },
   "scripts": {
     "lint": "oxlint",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
+    "test": "vitest run",
+    "openapi": "tsx scripts/openapi.ts",
+    "openapi:check": "tsx scripts/openapi.ts --check"
   },
   "dependencies": {
     "zod": "^4.6.0"
@@ -21,6 +23,8 @@
   "devDependencies": {
     "@ghar/config": "workspace:*",
     "@ghar/core": "workspace:*",
+    "@types/node": "24.13.4",
+    "tsx": "^4.23.13",
     "typescript": "6.0.3",
     "vite": "^8.0.0",
     "vitest": "5.0.0"

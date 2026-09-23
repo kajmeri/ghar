@@ -8,13 +8,15 @@ import type {
   MaintenanceBody,
   MaintenanceLogEntry,
   MaintenanceTask,
+  PageQuery,
 } from '@ghar/contracts'
 import { todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
 import { expiryState } from '@ghar/core/documents'
 import { cadenceLabel, maintenanceState, searchAssets } from '@ghar/core/home'
 import * as queries from '@ghar/db/queries'
-import type { AssetRow, MaintenanceLogEntryRow, MaintenanceTaskRow } from '@ghar/db/queries'
+import type { AssetRow, MaintenanceLogEntryRow, MaintenanceTaskRow, PageRequest } from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
+import { collectPage, pageRequest, pageResponse, type PageResult } from '@/lib/api/cursor'
 import { getDb } from '@/lib/db'
 import { toDocument } from '@/lib/documents/service'
 
@@ -78,6 +80,28 @@ const householdToday = (session: Session) => todayInTimeZone(session.household.t
 
 // Assets
 
+/** Turns an asset row into a list item: the asset, its next job, and how many documents are filed under it. */
+function toAssetListItem(
+  tasks: readonly MaintenanceTaskRow[],
+  documentCounts: ReadonlyMap<string, number>,
+  today: CalendarDate
+): (row: AssetRow) => AssetListItem {
+  // Jobs arrive soonest due first, so the first one seen for an asset is its next.
+  const nextTask = new Map<string, MaintenanceTaskRow>()
+  for (const task of tasks) {
+    if (task.assetId !== null && !nextTask.has(task.assetId)) nextTask.set(task.assetId, task)
+  }
+
+  return row => {
+    const task = nextTask.get(row.id)
+    return {
+      ...toAsset(row, today),
+      nextTask: task ? { id: task.id, title: task.title, nextDueOn: task.nextDueOn, state: maintenanceState(task.nextDueOn, today) } : null,
+      documentCount: documentCounts.get(row.id) ?? 0,
+    }
+  }
+}
+
 export async function listAssets(session: Session, query: { q?: string } = {}): Promise<AssetListItem[]> {
   const { context } = session
   const db = getDb()
@@ -86,23 +110,49 @@ export async function listAssets(session: Session, query: { q?: string } = {}): 
     queries.listMaintenanceTasks(context, db),
     queries.countDocumentsByAsset(context, db),
   ])
-  const today = householdToday(session)
-
-  // Jobs arrive soonest due first, so the first one seen for an asset is its next.
-  const nextTask = new Map<string, MaintenanceTaskRow>()
-  for (const task of tasks) {
-    if (task.assetId !== null && !nextTask.has(task.assetId)) nextTask.set(task.assetId, task)
-  }
-
   const q = query.q?.trim()
-  return (q ? searchAssets(assets, q) : assets).map(row => {
-    const task = nextTask.get(row.id)
-    return {
-      ...toAsset(row, today),
-      nextTask: task ? { id: task.id, title: task.title, nextDueOn: task.nextDueOn, state: maintenanceState(task.nextDueOn, today) } : null,
-      documentCount: documentCounts.get(row.id) ?? 0,
-    }
-  })
+  return (q ? searchAssets(assets, q) : assets).map(toAssetListItem(tasks, documentCounts, householdToday(session)))
+}
+
+/** Just names, for the pickers that file a job or a document under a thing. One query. */
+export async function listAssetOptions(session: Session): Promise<{ id: string; name: string }[]> {
+  const rows = await queries.listAssets(session.context, getDb())
+  return rows.map(row => ({ id: row.id, name: row.name }))
+}
+
+/**
+ * The house page: every thing with its next job, and every job. The jobs are read once and feed
+ * both, where listAssets and listMaintenance would each read them.
+ */
+export async function getHouseOverview(session: Session): Promise<{ assets: AssetListItem[]; tasks: MaintenanceTask[] }> {
+  const { context } = session
+  const db = getDb()
+  const [assets, tasks, documentCounts] = await Promise.all([
+    queries.listAssets(context, db),
+    queries.listMaintenanceTasks(context, db),
+    queries.countDocumentsByAsset(context, db),
+  ])
+  const today = householdToday(session)
+  return {
+    assets: assets.map(toAssetListItem(tasks, documentCounts, today)),
+    tasks: tasks.map(task => toMaintenanceTask(task, today)),
+  }
+}
+
+/** A page of assets for the API, by name. With `q`, only the assets matching every word. */
+export async function listAssetsPage(session: Session, query: PageQuery & { q?: string }): Promise<PageResult<AssetListItem>> {
+  const { context } = session
+  const db = getDb()
+  const q = query.q?.trim() || undefined
+  const scope = { sort: 'assets:name', filters: { q } }
+  const fetchPage = (request: PageRequest) => queries.listAssetsPage(context, db, request)
+  const request = pageRequest(query, scope)
+  const [page, tasks, documentCounts] = await Promise.all([
+    q ? collectPage(fetchPage, request, row => searchAssets([row], q).length > 0) : fetchPage(request),
+    queries.listMaintenanceTasks(context, db),
+    queries.countDocumentsByAsset(context, db),
+  ])
+  return pageResponse(page, scope, toAssetListItem(tasks, documentCounts, householdToday(session)))
 }
 
 export interface AssetDetail {
@@ -149,6 +199,14 @@ export async function listMaintenance(session: Session): Promise<MaintenanceTask
   const today = householdToday(session)
   const tasks = await queries.listMaintenanceTasks(session.context, getDb())
   return tasks.map(task => toMaintenanceTask(task, today))
+}
+
+/** A page of jobs for the API, soonest due first as on the house page. */
+export async function listMaintenancePage(session: Session, query: PageQuery): Promise<PageResult<MaintenanceTask>> {
+  const today = householdToday(session)
+  const scope = { sort: 'maintenance:next-due' }
+  const page = await queries.listMaintenanceTasksPage(session.context, getDb(), pageRequest(query, scope))
+  return pageResponse(page, scope, task => toMaintenanceTask(task, today))
 }
 
 export async function getMaintenanceDetail(

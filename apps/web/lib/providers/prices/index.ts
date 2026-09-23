@@ -8,23 +8,21 @@ import type { PriceProviders } from './types'
 export { fakePriceStore, type FakePrice, type FakePriceStore } from './fake'
 export { PriceLookupError, type PricedBooking, type PriceProvider, type PriceProviders } from './types'
 
+/** Without a Travelpayouts token, local development quotes made-up prices. */
 export function usesFakePrices(): boolean {
-  return env().PRICE_PROVIDER === 'fake'
+  return !env().TRAVELPAYOUTS_TOKEN
 }
 
 export function getPriceProviders(): PriceProviders {
-  const { PRICE_PROVIDER, TRAVELPAYOUTS_TOKEN } = env()
-  if (PRICE_PROVIDER === 'fake') {
+  const { TRAVELPAYOUTS_TOKEN } = env()
+  if (!TRAVELPAYOUTS_TOKEN) {
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('PRICE_PROVIDER is fake, and production cannot watch made-up prices.')
+      throw new Error('TRAVELPAYOUTS_TOKEN is not set, and production cannot watch made-up prices.')
     }
     return {
       tripwire: createFakePriceProvider('cached'),
       verifier: createFakePriceProvider('exact'),
     }
-  }
-  if (!TRAVELPAYOUTS_TOKEN) {
-    throw new Error('PRICE_PROVIDER is travelpayouts, but TRAVELPAYOUTS_TOKEN is not set.')
   }
   return {
     tripwire: createTravelpayoutsProvider({ token: TRAVELPAYOUTS_TOKEN }),

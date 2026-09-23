@@ -5,6 +5,7 @@ import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@
 import { and, count, desc, eq, getTableColumns, gte, isNotNull, lte, sql } from 'drizzle-orm'
 import { assets, documents } from '../schema'
 import { recordAudit } from './audit'
+import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { isUniqueViolation } from './pg-errors'
 import type { Db, RequestContext } from './types'
 
@@ -78,6 +79,33 @@ export async function listDocuments(
       )
     )
     .orderBy(desc(documents.createdAt), desc(documents.id))
+}
+
+const documentOrder: Keyset = { keys: [{ expr: documents.createdAt, kind: 'timestamp', desc: true }], id: documents.id, idDesc: true }
+
+/** One page of listDocuments, in the same order and with the same sensitivity rule. */
+export async function listDocumentsPage(
+  ctx: RequestContext,
+  db: Db,
+  filter: { kind?: DocumentKind; assetId?: string },
+  page: PageRequest
+): Promise<Page<DocumentWithAssetRow>> {
+  requirePermission(ctx, 'documents.view')
+  const rows = await db
+    .select({ ...documentWithAssetColumns, pageKeys: pageKeys(documentOrder) })
+    .from(documents)
+    .leftJoin(assets, eq(assets.id, documents.assetId))
+    .where(
+      and(
+        visibleTo(ctx),
+        filter.kind === undefined ? undefined : eq(documents.kind, filter.kind),
+        filter.assetId === undefined ? undefined : eq(documents.assetId, filter.assetId),
+        keysetAfter(documentOrder, page.after)
+      )
+    )
+    .orderBy(...keysetOrder(documentOrder))
+    .limit(page.limit + 1)
+  return toPage(rows, page.limit)
 }
 
 export async function getDocument(ctx: RequestContext, db: Db, documentId: string): Promise<DocumentWithAssetRow> {

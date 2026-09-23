@@ -83,5 +83,42 @@ export const tripParamsSchema = z.object({ tripId: z.uuid() })
  */
 export const queryBooleanSchema = z.union([z.boolean(), z.stringbool()])
 
-/** Cursor-free paging. Household data is small; a limit is enough to bound a response. */
-export const limitSchema = z.coerce.number().int().min(1).max(200).default(50)
+/**
+ * Paging for the v1 lists. A list endpoint takes `cursor` and `limit` and answers with `items` and
+ * `nextCursor`, sometimes with a few fields about the whole list beside them. Send `nextCursor`
+ * back as `cursor` for the next page; null means that was the last. A cursor is opaque and fits
+ * only the list and filters it came from, so change a filter and start again from the first page;
+ * anything else is a 400. Each list keeps one order ending in the row's id, and a page starts after
+ * the last row of the one before, so rows added or removed meanwhile never repeat or skip one.
+ *
+ * Paged: contacts, assets, maintenance, documents, bills, trips, trip ideas, packing items, packing
+ * templates, travel bookings, transactions, accounts, categories, members, invitations, calendar
+ * links and mail drafts.
+ *
+ * Not paged, and why:
+ * - GET /api/v1/calendar/feed: a range of days, at most MAX_FEED_DAYS, which its query schema checks.
+ * - GET /api/v1/attention: what needs someone now, over fixed windows (bills due, jobs overdue,
+ *   expiries within 60 days or 30 days past).
+ * - GET /api/v1/travel: the hub, one view of current trips, unlinked bookings and ideas.
+ * - GET /api/v1/trips/:tripId/itinerary, decisions, travel-mode and budget: one trip's own tree.
+ * - Arrays inside one record (a bill's due dates, an asset's jobs, documents and history, a
+ *   booking's price checks): children of that record, not lists.
+ * - GET /api/v1/bank-connections: the household's bank connections, capped by the Plaid Item limit.
+ * - GET /api/v1/households/options: the runtime's fixed time zone and currency lists, not household data.
+ * - Single records: households/me, digest preferences, the mail link, the auth session, one-tap.
+ * - GET /api/v1/sync: it has its own cursor.
+ */
+export const pageQuerySchema = z.object({
+  /** `nextCursor` from the page before. Leave it out for the first page. */
+  cursor: z.string().min(1).max(512).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+})
+export type PageQuery = z.output<typeof pageQuerySchema>
+
+export function pageSchema<Item extends z.ZodType>(item: Item) {
+  return z.object({
+    items: z.array(item),
+    /** Send as `cursor` for the next page. Null on the last page. */
+    nextCursor: z.string().nullable(),
+  })
+}

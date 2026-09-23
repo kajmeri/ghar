@@ -24,8 +24,10 @@
   --color-accent-foreground: var(--ink);
   --color-destructive: var(--negative);
   --color-border: var(--line);
-  --color-input: var(--line);
-  --color-ring: var(--ink-muted);
+  /* Control borders need 3:1 against the page to be found at all; hairlines stay on --line. */
+  --color-input: var(--line-strong);
+  /* Focus is full-strength ink. A faint ring disappears on paper. */
+  --color-ring: var(--ink);
 
   --radius-xs: var(--radius-control);
   --radius-sm: var(--radius-control);
@@ -98,7 +100,16 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
+  }
+
+  /*
+   * One focus indicator for everything a keyboard can reach. Components that draw their own ring
+   * use outline-hidden, which keeps an outline in forced-colors mode.
+   */
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
   }
 
   body {
@@ -115,5 +126,19 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+/* Installed to the home screen, Ghar should feel like an app: no rubber-band page, no tap flash, no selecting tab labels. */
+@media (display-mode: standalone) {
+  body {
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  nav[aria-label='Primary'] {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
   }
 }

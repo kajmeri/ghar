@@ -1,9 +1,9 @@
 import { addCalendarDays, daysBetween, daysInMonth, type CalendarDate } from './dates'
 import type { Cents } from './money'
 
-// Recurring bills, when they fall due, and whether a bank transaction paid them. Nothing here marks
-// a bill paid by hand: a bill is paid when a transaction that looks like its payment shows up,
-// whether it came from a bank sync or was typed in.
+// Recurring bills, when they fall due, and whether they were paid. A bill is paid when a transaction
+// that looks like its payment shows up, whether it came from a bank sync or was typed in, or when
+// someone marks that due date paid, for a bill paid from an account nobody linked.
 
 export const BILL_CADENCES = ['monthly', 'quarterly', 'annual'] as const
 export type BillCadence = (typeof BILL_CADENCES)[number]
@@ -168,10 +168,17 @@ export interface PaymentCandidate {
 }
 
 export interface BillPayment {
-  transactionId: string
+  /** The transaction that paid it. Null when someone marked it paid themselves. */
+  transactionId: string | null
   paidOn: CalendarDate
-  /** Positive. */
-  amountCents: Cents
+  /** Positive. Null when marked paid by hand: nobody said how much. */
+  amountCents: Cents | null
+}
+
+/** A due date someone marked paid, for a bill paid in a way no synced transaction shows. */
+export interface ManualBillPayment {
+  dueOn: CalendarDate
+  paidOn: CalendarDate
 }
 
 export type BillStatus = 'paid' | 'due' | 'overdue'
@@ -195,6 +202,9 @@ export function isBillPaymentCandidate(bill: BillForMatching, transaction: Payme
  * Pairs each due date with the transaction that paid it. Each transaction pays at most one due
  * date; each due date takes the closest candidate in its window, earlier on a tie.
  *
+ * A due date marked paid by hand is paid, and takes no transaction, so a payment in its window is
+ * left for a neighbouring due date.
+ *
  * An unpaid due date is `overdue` once today is past it (plus the autopay grace) and `due` until
  * then. Unpaid due dates before `trackedFrom`, from before the bill was entered, are left out
  * rather than reported late.
@@ -205,14 +215,21 @@ export function matchBillPayments(input: {
   transactions: readonly PaymentCandidate[]
   today: CalendarDate
   trackedFrom?: CalendarDate
+  manualPayments?: readonly ManualBillPayment[]
 }): BillOccurrence[] {
   const { bill, today } = input
   const candidates = input.transactions.filter(transaction => isBillPaymentCandidate(bill, transaction))
+  const marked = new Map((input.manualPayments ?? []).map(payment => [payment.dueOn, payment.paidOn]))
   const used = new Set<string>()
   const grace = bill.autopay ? AUTOPAY_GRACE_DAYS : 0
   const occurrences: BillOccurrence[] = []
 
   for (const dueOn of input.dueDates.toSorted()) {
+    const paidOn = marked.get(dueOn)
+    if (paidOn !== undefined) {
+      occurrences.push({ dueOn, status: 'paid', payment: { transactionId: null, paidOn, amountCents: null } })
+      continue
+    }
     const earliest = addCalendarDays(dueOn, -MATCH_DAYS_BEFORE_DUE)
     const latest = addCalendarDays(dueOn, MATCH_DAYS_AFTER_DUE)
     const best = candidates

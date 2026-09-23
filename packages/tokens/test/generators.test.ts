@@ -7,8 +7,19 @@ import * as generated from '../generated/tokens.ts'
 const tokens = loadTokens()
 
 describe('tokens.json', () => {
-  it('holds the CLAUDE.md palette', () => {
-    expect(Object.keys(tokens.color)).toEqual(['paper', 'surface', 'ink', 'ink-muted', 'line', 'positive', 'caution', 'negative'])
+  it('holds the CLAUDE.md palette, plus the text-safe and control-border shades', () => {
+    expect(Object.keys(tokens.color)).toEqual([
+      'paper',
+      'surface',
+      'ink',
+      'ink-muted',
+      'line',
+      'line-strong',
+      'positive',
+      'caution',
+      'caution-ink',
+      'negative',
+    ])
   })
 
   it('rejects malformed tokens with a readable message', () => {

@@ -16,7 +16,7 @@ export function Agenda({ days, today, timeZone }: { days: AgendaDay<CalendarItem
             id={`day-${day.date}`}
             tabIndex={-1}
             aria-labelledby={`day-${day.date}-heading`}
-            className='scroll-mt-40 rounded-card outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50'
+            className='scroll-mt-40 rounded-card outline-hidden focus-visible:ring-2 focus-visible:ring-ring'
           >
             <h3 id={`day-${day.date}-heading`} className='pb-2 text-base font-semibold'>
               {dayLabel(day.date, today)}
@@ -55,7 +55,7 @@ function AgendaRow({ item, date, timeZone }: { item: CalendarItem; date: Calenda
   return href ? (
     <Link
       href={href}
-      className='block min-h-tap px-4 py-3 outline-none hover:bg-paper focus-visible:bg-paper focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset'
+      className='block min-h-tap px-4 py-3 outline-hidden hover:bg-paper focus-visible:bg-paper focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset'
     >
       {body}
     </Link>

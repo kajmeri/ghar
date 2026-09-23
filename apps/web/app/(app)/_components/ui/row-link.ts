@@ -3,4 +3,4 @@
  * needs `relative`; any button inside it needs `relative z-10` to stay above the link.
  */
 export const ROW_LINK =
-  'after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50 focus-visible:after:ring-inset'
+  'after:absolute after:inset-0 focus-visible:outline-hidden focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset'

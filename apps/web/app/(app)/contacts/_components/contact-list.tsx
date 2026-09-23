@@ -1,22 +1,22 @@
-'use client'
-
 import type { Contact } from '@ghar/contracts'
 import { phoneHref, searchContacts } from '@ghar/core/contacts'
 import { Phone } from 'lucide-react'
-import { useState } from 'react'
 import { Avatar } from '@/app/(app)/_components/ui/avatar'
 import { DataList } from '@/app/(app)/_components/ui/data-list'
 import { SearchField } from '@/app/(app)/_components/ui/search-field'
 import { Button } from '@/components/ui/button'
 
-/** Everyone the household calls, searchable by name, role or tag, with Call right on the row. */
-export function ContactList({ contacts }: { contacts: Contact[] }) {
-  const [query, setQuery] = useState('')
-  const shown = query.trim() === '' ? contacts : searchContacts(contacts, query)
+/**
+ * Everyone the household calls, searchable by name, role or tag, with Call right on the row. The
+ * search lives in the URL (?q=) and the matching happens on the server.
+ */
+export function ContactList({ contacts, query }: { contacts: Contact[]; query: string }) {
+  const trimmed = query.trim()
+  const shown = trimmed === '' ? contacts : searchContacts(contacts, trimmed)
 
   return (
     <div className='flex flex-col gap-3'>
-      <SearchField label='Search contacts' value={query} onChange={setQuery} placeholder='Name, or what they do, like plumber' />
+      <SearchField label='Search contacts' defaultValue={query} placeholder='Name, or what they do, like plumber' />
       <DataList
         label='Contacts'
         rows={shown}
@@ -58,7 +58,7 @@ export function ContactList({ contacts }: { contacts: Contact[] }) {
         }}
         empty={
           <p className='rounded-card border border-line bg-surface p-4 text-ink-muted'>
-            No one matches “{query.trim()}”. Try a name, or what they do.
+            No one matches “{trimmed}”. Try a name, or what they do.
           </p>
         }
       />

@@ -3,7 +3,7 @@ import { defineEndpoint } from '../endpoint'
 import { bookingSchema } from './travel'
 import { tripIdeaSchema } from './ideas'
 import { itinerarySlotSchema } from './itinerary'
-import { calendarDateSchema, centsSchema, instantSchema, queryBooleanSchema, shortTextSchema, tripParamsSchema } from './shared'
+import { calendarDateSchema, centsSchema, instantSchema, tripParamsSchema } from './shared'
 import { tripSchema, tripSummarySchema } from './trips'
 
 /**
@@ -84,50 +84,4 @@ export const getTripBudget = defineEndpoint({
   path: '/api/v1/trips/:tripId/budget',
   params: tripParamsSchema,
   response: tripBudgetSchema,
-})
-
-/** Everyday spending, so a charge can be found and tagged to a trip. */
-export const listTransactions = defineEndpoint({
-  method: 'GET',
-  path: '/api/v1/transactions',
-  query: z.object({
-    tripId: z.uuid().optional(),
-    /** Only what is not tagged to any trip yet. */
-    untagged: queryBooleanSchema.optional(),
-    from: calendarDateSchema.optional(),
-    to: calendarDateSchema.optional(),
-    limit: z.coerce.number().int().min(1).max(200).default(50),
-  }),
-  response: z.object({ transactions: z.array(tripTransactionSchema) }),
-})
-
-/**
- * A charge typed in by hand.
- *
- * The finances feature will bring these in from a bank connection and from parsed
- * receipts. Until it does, this is how a trip's actual spend gets anything to add up, and
- * it is also how you log the cash dinner no card will ever tell you about.
- *
- * `amountCents` is negative for money out, as the column is. `tripId` tags it on the way in.
- */
-export const createTransaction = defineEndpoint({
-  method: 'POST',
-  path: '/api/v1/transactions',
-  body: z.object({
-    postedOn: calendarDateSchema,
-    description: shortTextSchema,
-    merchant: shortTextSchema.nullable().default(null),
-    amountCents: centsSchema.refine(value => value !== 0, 'An amount of nothing is not a charge'),
-    tripId: z.uuid().nullable().default(null),
-  }),
-  response: z.object({ transaction: tripTransactionSchema }),
-})
-
-/** The trip tag. Null takes a charge back off a trip. */
-export const tagTransaction = defineEndpoint({
-  method: 'PATCH',
-  path: '/api/v1/transactions/:transactionId',
-  params: z.object({ transactionId: z.uuid() }),
-  body: z.object({ tripId: z.uuid().nullable() }),
-  response: z.object({ transaction: tripTransactionSchema }),
 })

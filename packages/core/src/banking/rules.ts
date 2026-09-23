@@ -1,4 +1,3 @@
-import { isCalendarDate, type CalendarDate } from '../dates'
 import { ConflictError, ValidationError } from '../errors'
 import type { Cents } from '../money'
 import type { BankEnvironment, BankItemStatus, BankTransaction, BankWebhookEvent } from './types'
@@ -61,6 +60,9 @@ export interface BankItemState {
  * transactions are picked up by the sync the webhook triggers).
  */
 export function bankItemStateForWebhook(event: BankWebhookEvent, current: BankItemState, now: Date): BankItemState | null {
+  // A connection the household turned off has no token left to act on. Plaid may still send one
+  // last webhook about it; nothing it says brings the connection back.
+  if (current.status === 'disconnected') return null
   switch (event.kind) {
     case 'item_error':
       return {
@@ -91,13 +93,19 @@ export type BankItemAttention =
   | 'reconnect'
   /** Works for now, but consent runs out within a week. Update mode renews it. */
   | 'consent_expiring'
-  /** Gone for good. Connecting again makes a new Item. */
-  | 'disconnected'
+  /** Taken away at the bank. Connecting again makes a new Item. */
+  | 'revoked'
   /** A temporary problem. The next sync may clear it. */
   | 'sync_error'
 
+/**
+ * What a connection needs from a person, or null when it needs nothing. A connection the
+ * household turned off needs nothing: that is a resting state, not a problem, and the screen
+ * says so in its own words.
+ */
 export function bankItemAttention(item: BankItemState, now: Date): BankItemAttention | null {
-  if (item.errorCode !== null && PERMANENT_ERROR_CODES.has(item.errorCode)) return 'disconnected'
+  if (item.status === 'disconnected') return null
+  if (item.errorCode !== null && PERMANENT_ERROR_CODES.has(item.errorCode)) return 'revoked'
   if (item.status === 'login_required') return 'reconnect'
   if (item.consentExpiresAt !== null && item.consentExpiresAt.getTime() - now.getTime() <= CONSENT_WARNING_MS) {
     return 'consent_expiring'
@@ -113,11 +121,19 @@ export function canReconnectBankItem(item: BankItemState, now: Date): boolean {
 }
 
 /**
+ * Turning a connection off is a one-way door until the bank is connected again, so asking twice is
+ * a mistake worth naming rather than a quiet no-op.
+ */
+export function assertCanDisconnectBankItem(item: Pick<BankItemState, 'status'>): void {
+  if (item.status === 'disconnected') throw new ConflictError('That connection is already turned off.')
+}
+
+/**
  * Whether a scheduled sync should call Plaid for this connection. One that needs a sign-in or is
  * gone would only fail again, and Plaid counts those calls.
  */
 export function shouldSyncBankItem(item: BankItemState): boolean {
-  if (item.status === 'login_required') return false
+  if (item.status === 'disconnected' || item.status === 'login_required') return false
   return item.errorCode === null || !PERMANENT_ERROR_CODES.has(item.errorCode)
 }
 
@@ -144,6 +160,18 @@ export function centsFromPlaidAmount(amount: number): Cents {
   return cents === 0 ? 0 : cents
 }
 
+/**
+ * A balance as Plaid reports it, in integer cents. Unlike a transaction amount the sign is kept: a
+ * card or loan balance is what's owed, positive, and BALANCE_SIGN in @ghar/core/finances signs it.
+ */
+export function centsFromPlaidBalance(amount: number): Cents {
+  if (!Number.isFinite(amount)) {
+    throw new ValidationError('Plaid balance is not a finite number', { details: { amount } })
+  }
+  const cents = Math.round(amount * 100)
+  return cents === 0 ? 0 : cents
+}
+
 export const ACCOUNT_GROUPS = ['cash', 'credit', 'loans', 'investments', 'other'] as const
 export type AccountGroup = (typeof ACCOUNT_GROUPS)[number]
 
@@ -161,24 +189,4 @@ export function accountGroup(type: string): AccountGroup {
     default:
       return 'other'
   }
-}
-
-/** A position in the transaction list, newest first: the last row's date and ID. */
-export interface TransactionListCursor {
-  date: CalendarDate
-  id: string
-}
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-export function encodeTransactionCursor(cursor: TransactionListCursor): string {
-  return `${cursor.date}_${cursor.id}`
-}
-
-export function decodeTransactionCursor(value: string): TransactionListCursor {
-  const [date, id, extra] = value.split('_')
-  if (extra !== undefined || !date || !id || !isCalendarDate(date) || !UUID.test(id)) {
-    throw new ValidationError('That page of transactions no longer exists. Reload the list.')
-  }
-  return { date, id: id.toLowerCase() }
 }

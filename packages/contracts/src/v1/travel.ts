@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
+import { pageQuerySchema, pageSchema } from './shared'
 
 // These lists mirror @ghar/core/travel. A test keeps them equal.
 export const bookingKindSchema = z.enum(['flight', 'hotel', 'car'])
@@ -161,7 +162,11 @@ export const bookingParamsSchema = z.object({ bookingId: z.uuid() })
 export const listBookings = defineEndpoint({
   method: 'GET',
   path: '/api/v1/travel/bookings',
-  response: z.object({ bookings: z.array(bookingListItemSchema) }),
+  query: pageQuerySchema,
+  response: pageSchema(bookingListItemSchema).extend({
+    /** Bookings found in your email and waiting for your review. 0 for anyone who can't manage travel. */
+    draftCount: z.int().nonnegative(),
+  }),
 })
 
 export const getBooking = defineEndpoint({

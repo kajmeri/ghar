@@ -167,6 +167,12 @@ const september: CalendarFeedInput = {
     }),
   ],
   bills,
+  debts: [
+    { accountId: 'card-overdue', name: 'Sapphire card', dueOn: '2026-09-08', overdue: true },
+    { accountId: 'card-rolled', name: 'Store card', dueOn: '2026-09-11', overdue: false },
+    { accountId: 'loan-soon', name: 'Car loan', dueOn: '2026-09-15', overdue: false },
+    { accountId: 'loan-october', name: 'Mortgage loan', dueOn: '2026-10-01', overdue: false },
+  ],
   maintenance: [{ id: 'm-filter', title: 'Replace HVAC filter', dueOn: '2026-09-22', done: false, assetId: 'a-hvac' }],
   expiries: [
     { kind: 'document', id: 'd-passport', title: 'Passport', expiresOn: '2026-09-25' },
@@ -237,12 +243,23 @@ describe('buildCalendarFeed', () => {
     const twice = buildCalendarFeed({
       ...september,
       sources: ['bills'],
+      debts: [],
       bills: [
         { id: 'b-weekly', name: 'Lawn', dueOn: '2026-09-07', amountCents: null, currency: null, paid: true },
         { id: 'b-weekly', name: 'Lawn', dueOn: '2026-09-21', amountCents: null, currency: null, paid: false },
       ],
     })
     expect(twice.map(item => item.startDate)).toEqual(['2026-09-07', '2026-09-21'])
+  })
+
+  it('puts card and loan payments under bills, overdue only on the lender’s flag', () => {
+    const debts = feed.filter(item => item.ref.kind === 'debt')
+    expect(debts.map(item => [item.title, item.startDate, item.tone, item.source])).toEqual([
+      ['Sapphire card payment overdue', '2026-09-08', 'negative', 'bills'],
+      ['Store card payment due', '2026-09-11', 'default', 'bills'],
+      ['Car loan payment due', '2026-09-15', 'caution', 'bills'],
+    ])
+    expect(debts[0]).toMatchObject({ id: 'bills:debt:card-overdue:2026-09-08', ref: { kind: 'debt', accountId: 'card-overdue' } })
   })
 
   it('links maintenance to its asset and tones expiries', () => {
@@ -261,7 +278,7 @@ describe('buildCalendarFeed', () => {
 
   it('includes only the sources asked for', () => {
     const onlyBills = buildCalendarFeed({ ...september, sources: ['bills'] })
-    expect(onlyBills).toHaveLength(4)
+    expect(onlyBills).toHaveLength(7)
     expect(onlyBills.every(item => item.source === 'bills')).toBe(true)
   })
 

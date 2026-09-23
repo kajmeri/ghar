@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { householdRoleSchema } from '../context'
 import { defineEndpoint } from '../endpoint'
 import { myHouseholdResponseSchema } from './households'
+import { pageQuerySchema, pageSchema } from './shared'
 
 /** Nobody is invited as owner. An owner promotes them after they join. */
 export const invitableRoleSchema = householdRoleSchema.exclude(['owner'])
@@ -16,10 +17,12 @@ export const invitationSchema = z.object({
 })
 export type Invitation = z.infer<typeof invitationSchema>
 
+/** Invitations still waiting for an answer, newest first. */
 export const listInvitations = defineEndpoint({
   method: 'GET',
   path: '/api/v1/households/me/invitations',
-  response: z.object({ invitations: z.array(invitationSchema) }),
+  query: pageQuerySchema,
+  response: pageSchema(invitationSchema),
 })
 
 export const createInvitationBodySchema = z.object({

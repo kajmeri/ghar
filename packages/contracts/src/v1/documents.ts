@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
-import { calendarDateSchema, instantSchema, longTextSchema, shortTextSchema } from './shared'
+import { calendarDateSchema, instantSchema, longTextSchema, pageQuerySchema, pageSchema, shortTextSchema } from './shared'
 
 // These lists mirror @ghar/core/documents. A test keeps them equal.
 export const documentKindSchema = z.enum(['insurance', 'warranty', 'tax', 'medical', 'legal', 'id', 'property', 'other'])
@@ -81,7 +81,7 @@ export const documentUploadSchema = z.object({
 })
 export type DocumentUpload = z.infer<typeof documentUploadSchema>
 
-export const listDocumentsQuerySchema = z.object({
+export const listDocumentsQuerySchema = pageQuerySchema.extend({
   /** Words to find in the title, issuer, reference number, notes or asset name. */
   q: z.string().max(200).optional(),
   kind: documentKindSchema.optional(),
@@ -93,7 +93,7 @@ export const listDocuments = defineEndpoint({
   method: 'GET',
   path: '/api/v1/documents',
   query: listDocumentsQuerySchema,
-  response: z.object({ documents: z.array(documentSchema) }),
+  response: pageSchema(documentSchema),
 })
 
 export const getDocument = defineEndpoint({

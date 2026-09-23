@@ -58,7 +58,7 @@ export default async function InvitePage({ searchParams }: PageProps<'/invite'>)
           </p>
         }
       >
-        <form action={signOut}>
+        <form action={signOut} data-sign-out>
           <input type='hidden' name='next' value={invitePath} />
           <Button type='submit' className='w-full'>
             Sign out and switch

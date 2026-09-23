@@ -63,7 +63,7 @@ export function MoneyInput({
     <Field id={id} label={label} hint={hint} error={shownError} className={className}>
       <div
         className={cn(
-          'flex h-tap w-full min-w-0 items-center rounded-control border border-input bg-surface has-[input:disabled]:opacity-40 has-[input:focus-visible]:ring-[3px] has-[input:focus-visible]:ring-ring/50',
+          'flex h-tap w-full min-w-0 items-center rounded-control border border-input bg-surface has-[input:disabled]:opacity-40 has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring',
           shownError && 'border-negative'
         )}
       >
@@ -91,7 +91,7 @@ export function MoneyInput({
             setLeft(true)
             if (result.cents !== null && !result.error) setText(format(result.cents))
           }}
-          className='h-full min-w-0 flex-1 bg-transparent pr-3 pl-1 text-base text-ink placeholder:text-ink-muted focus-visible:outline-none'
+          className='h-full min-w-0 flex-1 bg-transparent pr-3 pl-1 text-base text-ink placeholder:text-ink-muted focus-visible:outline-hidden'
         />
       </div>
       <input type='hidden' name={name} value={result.cents ?? ''} disabled={disabled} />

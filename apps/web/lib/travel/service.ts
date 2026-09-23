@@ -4,11 +4,13 @@ import type {
   BookingBody,
   BookingDetail,
   BookingListItem,
+  PageQuery,
   PriceAlert,
   PriceCheck,
   PriceSummary,
   RequestContext,
 } from '@ghar/contracts'
+import { can } from '@ghar/core/auth'
 import { addCalendarDays, todayInTimeZone } from '@ghar/core/dates'
 import {
   actionabilityFor,
@@ -20,7 +22,9 @@ import {
   type BookingFields,
 } from '@ghar/core/travel'
 import * as queries from '@ghar/db/queries'
+import { nextCursor, pageRequest, type PageResult } from '@/lib/api/cursor'
 import { getDb } from '@/lib/db'
+import { currentHousehold } from '@/lib/households/current'
 import { toBooking } from '@/lib/travel/serialize'
 
 // Bookings and their price history, shared by app/api/v1/travel and the travel pages. The rules
@@ -31,13 +35,41 @@ const RECENT_CHECKS = 20
 
 /** The household's zone and currency, which the travel pages render and enter amounts in. */
 export async function getTravelSettings(ctx: RequestContext): Promise<{ timezone: string; currency: string }> {
-  const { timezone, currency } = await queries.getHousehold(ctx, getDb())
+  const { timezone, currency } = await currentHousehold(ctx)
   return { timezone, currency }
 }
 
 export async function listBookings(ctx: RequestContext): Promise<BookingListItem[]> {
   const db = getDb()
-  const [household, rows] = await Promise.all([queries.getHousehold(ctx, db), queries.listBookings(ctx, db)])
+  const [household, rows] = await Promise.all([currentHousehold(ctx), queries.listBookings(ctx, db)])
+  return toBookingListItems(ctx, household.timezone, rows)
+}
+
+/**
+ * A page of bookings for the API, in the bookings page's order, with the count of email drafts
+ * waiting for review that the page shows beside them (0 for anyone who can't manage travel).
+ */
+export async function listBookingsPage(ctx: RequestContext, query: PageQuery): Promise<PageResult<BookingListItem> & { draftCount: number }> {
+  const db = getDb()
+  const scope = { sort: 'bookings:trip-start' }
+  const [household, page, draftCount] = await Promise.all([
+    queries.getHousehold(ctx, db),
+    queries.listBookingsPage(ctx, db, pageRequest(query, scope)),
+    can(ctx.role, 'travel.manage') ? queries.countBookingDrafts(ctx, db) : 0,
+  ])
+  return {
+    items: await toBookingListItems(ctx, household.timezone, page.rows),
+    nextCursor: nextCursor(page, scope),
+    draftCount,
+  }
+}
+
+type BookingRow = Awaited<ReturnType<typeof queries.listBookings>>[number]
+
+/** Each booking with where its price stands and its last month of prices. Checks are read once for all of them. */
+async function toBookingListItems(ctx: RequestContext, timezone: string, rows: readonly BookingRow[]): Promise<BookingListItem[]> {
+  const db = getDb()
+  const household = { timezone }
   const checks = await queries.listPriceChecks(ctx, db, {
     bookingIds: rows.map(row => row.id),
     since: null,
@@ -63,7 +95,7 @@ export async function listBookings(ctx: RequestContext): Promise<BookingListItem
 export async function getBookingDetail(ctx: RequestContext, input: { bookingId: string }): Promise<BookingDetail> {
   const db = getDb()
   const [household, row, alerts, floorCents] = await Promise.all([
-    queries.getHousehold(ctx, db),
+    currentHousehold(ctx),
     queries.getBooking(ctx, db, input),
     queries.listPriceAlerts(ctx, db, input),
     queries.getAlertFloor(ctx, db, input),

@@ -1,9 +1,10 @@
 import { requirePermission } from '@ghar/core/auth'
 import { NotFoundError, ValidationError } from '@ghar/core/errors'
 import { draftsFromTemplate, templateDraftsFromItems } from '@ghar/core/packing'
-import { and, eq, inArray, max, sql } from 'drizzle-orm'
+import { and, eq, getTableColumns, inArray, max, sql } from 'drizzle-orm'
 import { packingItems, packingTemplateItems, packingTemplates } from '../schema'
 import { recordAudit } from './audit'
+import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { requireHouseholdMembers, requireTrip } from './scope'
 import type { Db, RequestContext } from './types'
 
@@ -23,6 +24,26 @@ const TEMPLATE_NOT_FOUND = 'That packing template no longer exists.'
 export async function listPackingItems(ctx: RequestContext, db: Db, tripId: string): Promise<PackingItemRow[]> {
   await requireTrip(ctx, db, tripId)
   return db.select().from(packingItems).where(eq(packingItems.tripId, tripId)).orderBy(packingItems.sortOrder, packingItems.label)
+}
+
+const itemOrder: Keyset = {
+  keys: [
+    { expr: packingItems.sortOrder, kind: 'integer' },
+    { expr: packingItems.label, kind: 'text' },
+  ],
+  id: packingItems.id,
+}
+
+/** One page of listPackingItems, in the same order with the id breaking ties. */
+export async function listPackingItemsPage(ctx: RequestContext, db: Db, tripId: string, page: PageRequest): Promise<Page<PackingItemRow>> {
+  await requireTrip(ctx, db, tripId)
+  const rows = await db
+    .select({ ...getTableColumns(packingItems), pageKeys: pageKeys(itemOrder) })
+    .from(packingItems)
+    .where(and(eq(packingItems.tripId, tripId), keysetAfter(itemOrder, page.after)))
+    .orderBy(...keysetOrder(itemOrder))
+    .limit(page.limit + 1)
+  return toPage(rows, page.limit)
 }
 
 export async function createPackingItem(
@@ -90,6 +111,26 @@ export async function listPackingTemplates(ctx: RequestContext, db: Db): Promise
     .from(packingTemplates)
     .where(eq(packingTemplates.householdId, ctx.householdId))
     .orderBy(packingTemplates.name)
+  return withTemplateItems(db, templates)
+}
+
+const templateOrder: Keyset = { keys: [{ expr: packingTemplates.name, kind: 'text' }], id: packingTemplates.id }
+
+/** One page of listPackingTemplates, in the same order with the id breaking ties. Each carries all its items. */
+export async function listPackingTemplatesPage(ctx: RequestContext, db: Db, page: PageRequest): Promise<Page<PackingTemplateWithItems>> {
+  requirePermission(ctx, 'travel.view')
+  const fetched = await db
+    .select({ ...getTableColumns(packingTemplates), pageKeys: pageKeys(templateOrder) })
+    .from(packingTemplates)
+    .where(and(eq(packingTemplates.householdId, ctx.householdId), keysetAfter(templateOrder, page.after)))
+    .orderBy(...keysetOrder(templateOrder))
+    .limit(page.limit + 1)
+  const { rows, ...position } = toPage(fetched, page.limit)
+  return { ...position, rows: await withTemplateItems(db, rows) }
+}
+
+/** Callers have already scoped `templates` to the household. */
+async function withTemplateItems(db: Db, templates: PackingTemplateRow[]): Promise<PackingTemplateWithItems[]> {
   if (templates.length === 0) return []
 
   const items = await db

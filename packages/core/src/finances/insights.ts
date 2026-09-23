@@ -1,6 +1,6 @@
-import type { CalendarDate } from '../dates'
+import { addCalendarDays, type CalendarDate } from '../dates'
 import type { Cents } from '../money'
-import { addMonths, monthStart } from './budget'
+import { addMonths, daysInPeriod, monthStart, type CategorySpend } from './budget'
 import type { CategoryKind } from './types'
 
 /** A change smaller than this, in either direction, isn't worth pointing out. */
@@ -128,4 +128,109 @@ export function notableChanges(
     })
   }
   return changes.sort((a, b) => Math.abs(b.changeCents) - Math.abs(a.changeCents)).slice(0, limit)
+}
+
+// ---------------------------------------------------------------------------------------------
+// The month so far. What the Money overview says before anyone opens a list.
+
+/** A half-open range of calendar dates: `from` counts, `to` does not. */
+export interface DateWindow {
+  from: CalendarDate
+  to: CalendarDate
+}
+
+/**
+ * This month up to and including today, and the same stretch of the month before, so "spent so
+ * far" has something honest to sit beside. On the 31st the earlier window stops at the end of a
+ * shorter month rather than running into this one.
+ */
+export function monthToDateWindows(today: CalendarDate): { current: DateWindow; previous: DateWindow } {
+  const from = monthStart(today)
+  const previousFrom = addMonths(from, -1)
+  const elapsedDays = Number(today.slice(8, 10))
+  return {
+    current: { from, to: addCalendarDays(today, 1) },
+    previous: { from: previousFrom, to: addCalendarDays(previousFrom, Math.min(elapsedDays, daysInPeriod(previousFrom))) },
+  }
+}
+
+export interface SpendSummary {
+  /** Money out, refunds already taken off. */
+  spentCents: Cents
+  /** Money in: what landed in an income category. */
+  incomeCents: Cents
+}
+
+/**
+ * What a window's category spend adds up to. The rows count money spent, so an income category
+ * arrives negative and is turned back around here. Transfers between the household's own accounts
+ * are neither, and money out with no category yet still counts as spent.
+ */
+export function summarizeSpend(rows: readonly CategorySpend[], categories: readonly InsightCategory[]): SpendSummary {
+  const byId = new Map(categories.map(category => [category.id, category]))
+  const summary: SpendSummary = { spentCents: 0, incomeCents: 0 }
+  for (const row of rows) {
+    const kind = row.categoryId === null ? 'expense' : (byId.get(row.categoryId)?.kind ?? 'expense')
+    if (kind === 'transfer') continue
+    if (kind === 'income') summary.incomeCents -= row.spentCents
+    else summary.spentCents += row.spentCents
+  }
+  return summary
+}
+
+export interface CategoryShare {
+  /** A top-level category, or null for money out nobody has filed yet. */
+  categoryId: string | null
+  spentCents: Cents
+  /** This category's part of everything spent in the window, 0 to 1. */
+  share: number
+}
+
+/**
+ * Where a window's money went, biggest first: top-level expense categories, with a child's
+ * spending counted towards its parent. A category that came out even or ahead isn't where money
+ * went, so it is left out.
+ */
+export function topCategorySpend(
+  rows: readonly CategorySpend[],
+  categories: readonly InsightCategory[],
+  options: { limit: number }
+): CategoryShare[] {
+  const byId = new Map(categories.map(category => [category.id, category]))
+  const totals = new Map<string | null, Cents>()
+  let spentCents = 0
+
+  for (const row of rows) {
+    let topId: string | null = null
+    if (row.categoryId !== null) {
+      const category = byId.get(row.categoryId)
+      if (category && category.kind !== 'expense') continue
+      topId = category?.parentId ?? row.categoryId
+    }
+    totals.set(topId, (totals.get(topId) ?? 0) + row.spentCents)
+    spentCents += row.spentCents
+  }
+
+  return (
+    [...totals.entries()]
+      .filter(([, cents]) => cents > 0)
+      // A refund can leave the total smaller than a single category, so a share never runs past all of it.
+      .map(([categoryId, cents]) => ({ categoryId, spentCents: cents, share: spentCents > 0 ? Math.min(cents / spentCents, 1) : 0 }))
+      .sort((a, b) => b.spentCents - a.spentCents)
+      .slice(0, options.limit)
+  )
+}
+
+export interface SpendComparison {
+  /** Positive when this window spent more than the one before. */
+  changeCents: Cents
+  /** The change as a share of the earlier window, or null when there is nothing to compare with. */
+  changeShare: number | null
+}
+
+export function compareSpend(currentCents: Cents, previousCents: Cents): SpendComparison {
+  return {
+    changeCents: currentCents - previousCents,
+    changeShare: previousCents > 0 ? (currentCents - previousCents) / previousCents : null,
+  }
 }

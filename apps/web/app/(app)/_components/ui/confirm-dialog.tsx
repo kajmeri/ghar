@@ -60,7 +60,7 @@ export function ConfirmDialog({
       {trigger ? <AlertDialog.Trigger asChild>{trigger}</AlertDialog.Trigger> : null}
       <AlertDialog.Portal>
         <AlertDialog.Overlay className='fixed inset-0 z-50 bg-ink/30 motion-safe:data-[state=closed]:animate-fade-out motion-safe:data-[state=open]:animate-fade-in' />
-        <AlertDialog.Content className='fixed inset-x-4 bottom-[max(--spacing(4),env(safe-area-inset-bottom))] z-50 mx-auto max-w-md rounded-card border border-line bg-surface p-6 shadow-overlay focus:outline-none motion-safe:data-[state=closed]:animate-lift-out motion-safe:data-[state=open]:animate-lift-in md:top-1/2 md:bottom-auto md:-translate-y-1/2'>
+        <AlertDialog.Content className='fixed inset-x-4 bottom-[max(--spacing(4),env(safe-area-inset-bottom))] z-50 mx-auto max-w-md rounded-card border border-line bg-surface p-6 shadow-overlay focus:outline-hidden motion-safe:data-[state=closed]:animate-lift-out motion-safe:data-[state=open]:animate-lift-in md:top-1/2 md:bottom-auto md:-translate-y-1/2'>
           <AlertDialog.Title className='text-lg font-semibold break-words'>{title}</AlertDialog.Title>
           <AlertDialog.Description className='mt-2 text-base text-ink-muted'>{description}</AlertDialog.Description>
           {formAction ? (

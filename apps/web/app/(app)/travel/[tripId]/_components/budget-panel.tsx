@@ -137,7 +137,7 @@ function TaggedTransactions({ budget }: { budget: Budget }) {
                 </p>
                 <button
                   type='button'
-                  className='shrink-0 text-sm text-ink-muted underline underline-offset-4'
+                  className='inline-flex min-h-tap shrink-0 items-center px-1 text-sm text-ink-muted underline underline-offset-4'
                   disabled={untag.pending}
                   onClick={() => {
                     untag.mutate(transaction.id)
@@ -163,7 +163,7 @@ function UntaggedTransactions({ tripId }: { tripId: string }) {
     let cancelled = false
     api
       .request(listTransactions, { query: { untagged: true, limit: 25 } })
-      .then(({ transactions: found }) => {
+      .then(({ items: found }) => {
         if (!cancelled) setTransactions(found)
       })
       .catch((cause: unknown) => {

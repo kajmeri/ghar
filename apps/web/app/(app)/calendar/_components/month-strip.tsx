@@ -91,11 +91,11 @@ export function MonthStrip({
                   select(date)
                 }}
                 className={cn(
-                  'flex min-h-16 w-full flex-col items-center justify-center gap-0.5 rounded-control outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-40',
+                  'flex min-h-16 w-full flex-col items-center justify-center gap-0.5 rounded-control outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40',
                   selected === date && 'bg-line/60'
                 )}
               >
-                <span aria-hidden className='text-sm text-ink-muted'>
+                <span aria-hidden className={cn('text-sm', selected === date ? 'text-ink' : 'text-ink-muted')}>
                   {formatCalendarDate(date, 'EEEEE')}
                 </span>
                 <span

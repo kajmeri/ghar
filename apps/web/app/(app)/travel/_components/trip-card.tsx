@@ -18,11 +18,17 @@ export function TripCard({ trip, countdown, status }: { trip: TripSummary; count
   const packed = trip.packingItemCount === 0 ? null : trip.packedCount / trip.packingItemCount
 
   return (
-    <Card className='h-full transition-colors hover:border-ink-muted/40'>
-      <Link href={`/travel/${trip.id}`} className='flex h-full flex-col gap-3 p-4 md:p-5'>
+    // The link is the trip name alone, stretched over the card, so its accessible name is the name
+    // rather than every figure on the card read as one run-on link. The ring moves to the card.
+    <Card className='relative h-full transition-colors hover:border-ink-muted/40 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring'>
+      <div className='flex h-full flex-col gap-3 p-4 md:p-5'>
         <div className='flex items-start justify-between gap-3'>
           <div className='min-w-0'>
-            <p className='truncate text-base font-semibold'>{trip.name}</p>
+            <h3 className='truncate text-base font-semibold'>
+              <Link href={`/travel/${trip.id}`} className='outline-hidden after:absolute after:inset-0 after:rounded-card'>
+                {trip.name}
+              </Link>
+            </h3>
             {trip.destination ? <p className='truncate text-sm text-ink-muted'>{trip.destination}</p> : null}
           </div>
           <Pill tone={status === 'booked' ? 'positive' : 'neutral'}>{STATUS_LABEL[status]}</Pill>
@@ -38,7 +44,7 @@ export function TripCard({ trip, countdown, status }: { trip: TripSummary; count
           {trip.openDecisionCount === 0 ? null : (
             <div className='flex gap-1'>
               <dt>To decide</dt>
-              <dd className='text-caution'>{trip.openDecisionCount}</dd>
+              <dd className='text-caution-ink'>{trip.openDecisionCount}</dd>
             </div>
           )}
           <div className='flex gap-1'>
@@ -61,7 +67,7 @@ export function TripCard({ trip, countdown, status }: { trip: TripSummary; count
             </p>
           </div>
         )}
-      </Link>
+      </div>
     </Card>
   )
 }

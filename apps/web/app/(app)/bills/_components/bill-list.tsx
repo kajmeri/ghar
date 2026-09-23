@@ -1,5 +1,3 @@
-'use client'
-
 import type { Bill } from '@ghar/contracts'
 import type { CalendarDate } from '@ghar/core/dates'
 import { DataList } from '@/app/(app)/_components/ui/data-list'

@@ -13,7 +13,7 @@ import {
 } from '@ghar/contracts'
 import { compareMembers, memberLabel, memberLabelFor } from '@ghar/core/household'
 import { byAssignee, byCategory, packingProgress } from '@ghar/core/packing'
-import { useEffect, useState, type SyntheticEvent } from 'react'
+import { useEffect, useId, useRef, useState, type SyntheticEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -106,8 +106,8 @@ export function PackingPanel({
                 }}
                 className={
                   grouping === value
-                    ? 'rounded-pill border border-ink px-3 py-1'
-                    : 'rounded-pill border border-line px-3 py-1 text-ink-muted'
+                    ? 'inline-flex min-h-tap items-center rounded-pill border border-ink px-4'
+                    : 'inline-flex min-h-tap items-center rounded-pill border border-line px-4 text-ink-muted'
                 }
               >
                 {value === 'person' ? 'Person' : 'Category'}
@@ -161,7 +161,7 @@ export function PackingPanel({
                               assignedUserId: event.target.value || null,
                             })
                           }}
-                          className='h-9 w-32 shrink-0 text-sm'
+                          className='w-32 shrink-0 text-sm'
                         >
                           <option value=''>Nobody</option>
                           {roster.map(member => (
@@ -174,7 +174,7 @@ export function PackingPanel({
                         <button
                           type='button'
                           aria-label={`Remove ${item.label}`}
-                          className='shrink-0 px-2 text-sm text-ink-muted underline underline-offset-4'
+                          className='inline-flex min-h-tap shrink-0 items-center px-2 text-sm text-ink-muted underline underline-offset-4'
                           disabled={remove.pending}
                           onClick={() => {
                             remove.mutate(item.id)
@@ -196,6 +196,7 @@ export function PackingPanel({
 }
 
 function AddItemForm({ tripId, members, currentUserId }: { tripId: string; members: HouseholdMember[]; currentUserId: string }) {
+  const id = useId()
   const { mutate, pending, error } = useMutation(async (form: HTMLFormElement) => {
     const data = new FormData(form)
     await api.request(createPackingItem, {
@@ -217,8 +218,15 @@ function AddItemForm({ tripId, members, currentUserId }: { tripId: string; membe
         mutate(event.currentTarget)
       }}
     >
-      <Input name='label' required maxLength={200} placeholder='Passport' className='md:flex-1' />
-      <Input name='category' maxLength={200} placeholder='Documents' className='md:w-40' />
+      {/* The placeholders are examples, not names, so each field keeps a label for screen readers. */}
+      <label htmlFor={`${id}-label`} className='sr-only'>
+        What to pack
+      </label>
+      <Input id={`${id}-label`} name='label' required maxLength={200} placeholder='Passport' className='md:flex-1' />
+      <label htmlFor={`${id}-category`} className='sr-only'>
+        Category
+      </label>
+      <Input id={`${id}-category`} name='category' maxLength={200} placeholder='Documents' className='md:w-40' />
       <Select name='assignedUserId' aria-label='Who packs it' className='md:w-36'>
         <option value=''>Nobody</option>
         {members.map(member => (
@@ -240,12 +248,25 @@ function TemplateBar({ tripId, hasItems }: { tripId: string; hasItems: boolean }
   const [templates, setTemplates] = useState<PackingTemplate[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const nameId = useId()
+  const openerRef = useRef<HTMLButtonElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+  const wasSaving = useRef(saving)
+
+  // The form replaces the button that opened it, so focus follows: into the name field, then
+  // back to the button when the form closes, instead of falling to the top of the page.
+  useEffect(() => {
+    if (wasSaving.current === saving) return
+    wasSaving.current = saving
+    if (saving) nameRef.current?.focus()
+    else openerRef.current?.focus()
+  }, [saving])
 
   useEffect(() => {
     let cancelled = false
     api
       .request(listPackingTemplates)
-      .then(({ templates: found }) => {
+      .then(({ items: found }) => {
         if (!cancelled) setTemplates(found)
       })
       .catch((cause: unknown) => {
@@ -292,8 +313,9 @@ function TemplateBar({ tripId, hasItems }: { tripId: string; hasItems: boolean }
 
         {hasItems && !saving ? (
           <button
+            ref={openerRef}
             type='button'
-            className='text-sm text-ink-muted underline underline-offset-4'
+            className='inline-flex min-h-tap items-center text-sm text-ink-muted underline underline-offset-4'
             onClick={() => {
               setSaving(true)
             }}
@@ -312,7 +334,10 @@ function TemplateBar({ tripId, hasItems }: { tripId: string; hasItems: boolean }
             if (name !== '') save.mutate(name)
           }}
         >
-          <Input name='name' required maxLength={200} placeholder='Beach week' className='md:w-64' />
+          <label htmlFor={nameId} className='sr-only'>
+            Template name
+          </label>
+          <Input ref={nameRef} id={nameId} name='name' required maxLength={200} placeholder='Beach week' className='md:w-64' />
           <Button type='submit' variant='outline' disabled={save.pending}>
             {save.pending ? 'Saving…' : 'Save template'}
           </Button>

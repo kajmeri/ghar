@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 const TONES = {
   neutral: 'border-line text-ink-muted',
   positive: 'border-positive/30 text-positive',
-  caution: 'border-caution/40 text-caution',
+  caution: 'border-caution/40 text-caution-ink',
   negative: 'border-negative/30 text-negative',
 } as const
 

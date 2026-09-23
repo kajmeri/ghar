@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { ValidationError } from '../src/errors'
-import { GOAL_NAME_MAX_LENGTH, GOAL_NOTES_MAX_LENGTH, MAX_PLANNED_CENTS, goalProgress, goalSavedCents, validateGoal } from '../src/finances'
+import {
+  GOAL_NAME_MAX_LENGTH,
+  GOAL_NOTES_MAX_LENGTH,
+  MAX_PLANNED_CENTS,
+  goalProgress,
+  goalSavedCents,
+  goalSchedule,
+  goalTotals,
+  validateGoal,
+} from '../src/finances'
 
 const goal = { name: 'Emergency fund', targetCents: 1_000_000, targetDate: null, notes: null }
 
@@ -85,5 +94,59 @@ describe('goal progress', () => {
       fraction: 0,
       reached: false,
     })
+  })
+})
+
+describe('what a goal asks for each month', () => {
+  const today = '2026-09-23'
+
+  it('spreads what is left over the months to the target', () => {
+    expect(goalSchedule({ remainingCents: 600_000, targetDate: '2026-12-31', today })).toEqual({
+      monthsLeft: 3,
+      perMonthCents: 200_000,
+      overdue: false,
+    })
+  })
+
+  it('asks for all of it inside the target month, and rounds up to whole cents', () => {
+    expect(goalSchedule({ remainingCents: 100_001, targetDate: '2026-09-30', today })).toMatchObject({
+      monthsLeft: 0,
+      perMonthCents: 100_001,
+    })
+    expect(goalSchedule({ remainingCents: 1000, targetDate: '2026-12-01', today }).perMonthCents).toBe(334)
+  })
+
+  it('says a goal is overdue once its date has gone without it being reached', () => {
+    expect(goalSchedule({ remainingCents: 50_000, targetDate: '2026-08-31', today })).toEqual({
+      monthsLeft: 0,
+      perMonthCents: 50_000,
+      overdue: true,
+    })
+  })
+
+  it('asks for nothing once there is nothing left, or nothing to go on', () => {
+    expect(goalSchedule({ remainingCents: 0, targetDate: '2026-08-31', today })).toEqual({
+      monthsLeft: 0,
+      perMonthCents: null,
+      overdue: false,
+    })
+    expect(goalSchedule({ remainingCents: null, targetDate: '2026-12-31', today })).toMatchObject({ perMonthCents: null })
+    expect(goalSchedule({ remainingCents: 600_000, targetDate: null, today })).toEqual({
+      monthsLeft: null,
+      perMonthCents: null,
+      overdue: false,
+    })
+  })
+})
+
+describe('every goal together', () => {
+  it('adds the targets up, counting nothing for a goal with no account behind it', () => {
+    expect(
+      goalTotals([
+        { targetCents: 1_000_000, savedCents: 250_000 },
+        { targetCents: 500_000, savedCents: null },
+      ])
+    ).toEqual({ targetCents: 1_500_000, savedCents: 250_000 })
+    expect(goalTotals([])).toEqual({ targetCents: 0, savedCents: 0 })
   })
 })

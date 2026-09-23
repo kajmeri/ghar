@@ -8,7 +8,11 @@ import type { Cents } from '../money'
 export const BANK_ENVIRONMENTS = ['fake', 'sandbox', 'production'] as const
 export type BankEnvironment = (typeof BANK_ENVIRONMENTS)[number]
 
-export const BANK_ITEM_STATUSES = ['good', 'login_required', 'error'] as const
+/**
+ * `disconnected` is Ghar's own: somebody turned the connection off, and the access token was
+ * revoked at Plaid. Nothing syncs after, and the rows it brought in all stay.
+ */
+export const BANK_ITEM_STATUSES = ['good', 'login_required', 'error', 'disconnected'] as const
 export type BankItemStatus = (typeof BANK_ITEM_STATUSES)[number]
 
 /** An account as the bank reports it. */
@@ -23,6 +27,38 @@ export interface BankAccount {
   currentBalanceCents: Cents | null
   availableBalanceCents: Cents | null
   isoCurrency: string | null
+}
+
+/** One position from /investments/holdings/get, with its security's details. */
+export interface BankHolding {
+  plaidAccountId: string
+  plaidSecurityId: string
+  ticker: string | null
+  name: string | null
+  /** Plaid's security type: equity, etf, mutual fund, fixed income, cash, cryptocurrency, derivative, other. */
+  securityType: string | null
+  /** Shares or units. */
+  quantity: number
+  /** What was paid for the whole position. Null when the institution doesn't report it. */
+  costBasisCents: Cents | null
+  valueCents: Cents
+  /** When the institution last priced it. */
+  asOf: CalendarDate
+}
+
+/** The detail /liabilities/get adds to a credit card, student loan or mortgage. Amounts are never negative. */
+export interface BankLiability {
+  plaidAccountId: string
+  kind: 'credit' | 'student' | 'mortgage'
+  /** A card's purchase APR, or a loan's interest rate, as a percent. */
+  aprPercent: number | null
+  minimumPaymentCents: Cents | null
+  nextPaymentDueOn: CalendarDate | null
+  lastPaymentCents: Cents | null
+  lastPaymentOn: CalendarDate | null
+  originationDate: CalendarDate | null
+  originalPrincipalCents: Cents | null
+  isOverdue: boolean
 }
 
 /** A transaction as the bank reports it. */
@@ -51,6 +87,35 @@ export interface TransactionChanges {
   added: readonly BankTransaction[]
   modified: readonly BankTransaction[]
   removed: readonly string[]
+}
+
+/** Everything one /transactions/sync run fetched, however many pages it took. */
+export interface BankTransactionSync {
+  /** The connection's accounts as the same response reports them. */
+  accounts: readonly BankAccount[]
+  pages: readonly TransactionChanges[]
+  /** Store this only once every page has been applied. */
+  nextCursor: string
+  /** More changes are waiting. Sync again from `nextCursor` to fetch them. */
+  hasMore: boolean
+}
+
+/** A short-lived token that opens the bank's sign-in flow in the browser. */
+export interface BankLinkToken {
+  token: string
+  expiresAt: Date
+}
+
+/** What a finished sign-in leaves behind. The access token is sealed before it is stored. */
+export interface BankItemCredentials {
+  accessToken: string
+  plaidItemId: string
+}
+
+/** The bank behind a connection, for showing which one it is. */
+export interface BankInstitution {
+  institutionId: string | null
+  name: string | null
 }
 
 /** What a Plaid webhook means for Ghar, once verified and parsed. */

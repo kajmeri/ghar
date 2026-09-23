@@ -1,0 +1,7 @@
+{
+  "extends": "@ghar/config/tsconfig/isomorphic.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["scripts", "test/openapi.test.ts"]
+}

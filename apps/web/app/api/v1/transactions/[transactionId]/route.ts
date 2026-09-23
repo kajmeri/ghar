@@ -1,10 +1,8 @@
 import { tagTransaction } from '@ghar/contracts'
-import { tagTransactionTrip as tag } from '@ghar/db/queries'
 import { authedRoute } from '@/lib/api/authed'
-import { getDb } from '@/lib/db'
-import { toTripTransaction } from '@/lib/travel/serialize'
+import { editTransaction } from '@/lib/finances/transactions'
 
-/** The trip tag on a charge. This is what makes a trip's actual spend add up. */
-export const PATCH = authedRoute(tagTransaction, async ({ params, body }, { context }) => ({
-  transaction: toTripTransaction(await tag(context, getDb(), params.transactionId, body.tripId)),
+/** A charge's category, its trip tag, whether it counts towards spending, or its note. */
+export const PATCH = authedRoute(tagTransaction, async ({ params, body }, session) => ({
+  transaction: await editTransaction(session, params.transactionId, body),
 }))
