@@ -27,6 +27,7 @@ export const SYNC_ENTITIES = [
   'contact',
   'asset',
   'document',
+  'renewal',
   'maintenance',
   'maintenance_log',
   'booking_draft',

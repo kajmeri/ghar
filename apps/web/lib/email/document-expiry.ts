@@ -1,6 +1,7 @@
 import 'server-only'
 import { formatCalendarDate, type CalendarDate } from '@ghar/core/dates'
 import { expiryPhrase } from '@ghar/core/documents'
+import { renewsPhrase } from '@ghar/core/renewals'
 import { colors } from '@ghar/tokens'
 import type { EmailMessage } from '@/lib/providers/email'
 import { escapeHtml } from './html'
@@ -9,14 +10,16 @@ export interface DocumentExpiryEmailInput {
   to: string
   householdName: string
   subject: {
-    kind: 'document' | 'warranty'
-    /** The document's title, or the asset's name for a warranty. */
+    kind: 'document' | 'warranty' | 'renewal'
+    /** The document's title, the asset's name for a warranty, or the renewal's title. */
     title: string
     expiresOn: CalendarDate
+    /** A renewal that renews on its own: the email is a heads-up, not a to-do. */
+    autoRenews?: boolean
   }
   /** In the household's zone. */
   today: CalendarDate
-  /** The document's or the asset's page. */
+  /** The document's, the asset's or the renewal's page. */
   url: string
 }
 
@@ -27,15 +30,19 @@ export interface DocumentExpiryEmailInput {
 export function documentExpiryEmail(input: DocumentExpiryEmailInput): EmailMessage {
   const { subject } = input
   const name = subject.kind === 'warranty' ? `${subject.title} warranty` : subject.title
-  const phrase = expiryPhrase(subject.expiresOn, input.today)
+  const renews = subject.kind === 'renewal' && subject.autoRenews === true
+  const phrase = renews ? renewsPhrase(subject.expiresOn, input.today) : expiryPhrase(subject.expiresOn, input.today)
   const when = phrase.charAt(0).toLowerCase() + phrase.slice(1)
 
   const intro = `${name} ${when}, on ${formatCalendarDate(subject.expiresOn)}.`
-  const nudge =
-    subject.kind === 'warranty'
+  const nudge = renews
+    ? 'Nothing to do if you want to keep it. If you don’t, cancel before then.'
+    : subject.kind === 'warranty'
       ? 'If anything about it isn’t working right, get it looked at while the warranty still covers it.'
-      : 'Renewals can take weeks, so it’s worth starting now. When the new one arrives, update the expiry date in Ghar and the reminders start over.'
-  const linkLabel = subject.kind === 'warranty' ? 'See the warranty in Ghar' : 'See the document in Ghar'
+      : subject.kind === 'renewal'
+        ? 'Renewals can take weeks, so it’s worth starting now. Once it’s renewed, update the date in Ghar and the reminders start over.'
+        : 'Renewals can take weeks, so it’s worth starting now. When the new one arrives, update the expiry date in Ghar and the reminders start over.'
+  const linkLabel = { warranty: 'See the warranty in Ghar', document: 'See the document in Ghar', renewal: 'See the renewal in Ghar' }[subject.kind]
   const footer = `You get this because you’re an owner or adult in ${input.householdName}. Ghar sends a reminder 60, 30 and 7 days before something expires.`
 
   const text = [intro, '', nudge, '', `${linkLabel}: ${input.url}`, '', footer].join('\n')

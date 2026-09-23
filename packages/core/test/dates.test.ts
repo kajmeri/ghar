@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   addCalendarDays,
   assertTimeZone,
+  distancePhrase,
   formatCalendarDate,
   formatInstant,
   instantInTimeZone,
   instantFromWallClock,
   isCalendarDate,
   isWallClock,
+  monthsBetween,
   startOfDayInTimeZone,
   toCalendarDate,
   todayInTimeZone,
@@ -129,6 +131,26 @@ describe('calendar dates', () => {
   it('formats without a zone', () => {
     expect(formatCalendarDate('2026-09-13')).toBe('Sep 13, 2026')
     expect(formatCalendarDate('2026-09-13', 'EEEE')).toBe('Sunday')
+  })
+
+  it('counts whole months the way adding them steps', () => {
+    expect(monthsBetween('2026-01-31', '2026-02-28')).toBe(1)
+    expect(monthsBetween('2026-02-28', '2026-03-27')).toBe(0)
+    expect(monthsBetween('2026-09-23', '2027-10-22')).toBe(12)
+    expect(monthsBetween('2027-10-22', '2026-09-23')).toBe(-12)
+  })
+
+  it('says a distance in days, then months, then years', () => {
+    expect(distancePhrase('2026-09-23', '2026-09-24')).toBe('1 day')
+    expect(distancePhrase('2026-09-23', '2026-11-22')).toBe('60 days')
+    // Sixty days across February is two whole months, and still reads in days.
+    expect(distancePhrase('2026-02-01', '2026-04-02')).toBe('60 days')
+    // Sixty-one days that fall short of two whole months stay in days too.
+    expect(distancePhrase('2026-07-01', '2026-08-31')).toBe('61 days')
+    expect(distancePhrase('2026-09-23', '2026-12-09')).toBe('2 months')
+    expect(distancePhrase('2026-09-23', '2028-09-22')).toBe('23 months')
+    expect(distancePhrase('2026-09-23', '2030-10-26')).toBe('4 years')
+    expect(distancePhrase('2030-10-26', '2026-09-23')).toBe('4 years')
   })
 })
 

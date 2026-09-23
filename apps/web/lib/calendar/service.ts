@@ -84,7 +84,7 @@ export async function getCalendarFeed(
   const wants = (source: FeedSource) => input.sources.includes(source)
   const range = { from: input.from, to: input.to }
 
-  const [events, bookings, bills, liabilityDues, tasks, documents, warranties, links] = await Promise.all([
+  const [events, bookings, bills, liabilityDues, tasks, documents, warranties, renewals, links] = await Promise.all([
     wants('native') || wants('google') ? queries.listEventsInWindow(ctx, db, window) : [],
     wants('trips') && can(ctx.role, 'travel.view') ? queries.listTripBookingsInRange(ctx, db, input) : [],
     wants('bills') && can(ctx.role, 'finances.view') ? listBillDues(ctx, db, { ...range, timeZone: timezone, currency }) : [],
@@ -94,6 +94,7 @@ export async function getCalendarFeed(
       : [],
     wants('expiries') && can(ctx.role, 'documents.view') ? queries.listDocumentExpiries(ctx, db, range) : [],
     wants('expiries') && can(ctx.role, 'home.view') ? queries.listWarrantyExpiries(ctx, db, range) : [],
+    wants('expiries') && can(ctx.role, 'documents.view') ? queries.listRenewalExpiries(ctx, db, range) : [],
     // Only whether any calendar is linked, for availableSources.
     can(ctx.role, 'calendar.view') ? calendarLinkRows(ctx) : [],
   ])
@@ -110,6 +111,13 @@ export async function getCalendarFeed(
       id: asset.id,
       title: `${asset.name} warranty`,
       expiresOn: asset.warrantyExpiresOn,
+    })),
+    ...renewals.map(renewal => ({
+      kind: 'renewal' as const,
+      id: renewal.id,
+      title: renewal.title,
+      expiresOn: renewal.expiresOn,
+      autoRenews: renewal.autoRenews,
     })),
   ]
 

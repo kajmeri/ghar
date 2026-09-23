@@ -6,7 +6,8 @@ import type { Db, ExpirySubject, ReminderHousehold, ReminderRecipient, SystemCon
 import { documentExpiryEmail } from '@/lib/email/document-expiry'
 import type { EmailProvider } from '@/lib/providers/email'
 
-// The daily expiry reminders. For every document and warranty that runs out within 60 days, the
+// The daily expiry reminders. First, automatic renewals whose date has passed move on to the end of
+// their current term. Then, for every document, warranty and renewal that runs out within 60 days, the
 // tightest reminder tier it has reached (60, 30 or 7 days, from @ghar/core/documents) is claimed
 // with a row, then emailed to the household's owners and adults. A tier already claimed is never
 // sent again, so a second run in a day sends nothing, and a day the job missed is caught up with
@@ -22,7 +23,9 @@ export interface ExpiryReminderDeps {
 
 export type ExpiryReminderResult = {
   households: number
-  /** Documents and warranties expiring within the reminder window. */
+  /** Automatic renewals whose date moved on to their current term. */
+  renewed: number
+  /** Documents, warranties and renewals running out within the reminder window. */
   subjects: number
   /** Subjects that got a reminder this run. */
   reminded: number
@@ -38,7 +41,7 @@ export async function runExpiryReminders(
   deps: ExpiryReminderDeps,
   options: { householdId?: string } = {}
 ): Promise<ExpiryReminderResult> {
-  const result: ExpiryReminderResult = { households: 0, subjects: 0, reminded: 0, emails: 0, skipped: 0, errors: 0 }
+  const result: ExpiryReminderResult = { households: 0, renewed: 0, subjects: 0, reminded: 0, emails: 0, skipped: 0, errors: 0 }
   const households = await queries.listHouseholdsForReminders(deps.db)
   for (const household of households) {
     if (options.householdId !== undefined && household.id !== options.householdId) continue
@@ -53,6 +56,12 @@ export async function runExpiryReminders(
   return result
 }
 
+const SUBJECT_PATHS = {
+  document: '/documents',
+  warranty: '/home/assets',
+  renewal: '/renewals',
+} as const satisfies Record<ExpirySubject['kind'], string>
+
 /** One household's run: its day, and its recipients, looked up once and only if something is due. */
 interface HouseholdRun {
   name: string
@@ -65,6 +74,8 @@ async function remindHousehold(deps: ExpiryReminderDeps, household: ReminderHous
   const today = todayInTimeZone(household.timezone, deps.now)
   // The household comes from the stored row, never from a request.
   const actor: SystemContext = { householdId: household.id, userId: null }
+  // Before the reminders, so an automatic renewal is reminded about its next date, not its last.
+  result.renewed += await queries.rollForwardRenewals(actor, deps.db, today)
   const subjects = await queries.listExpiriesForReminders(actor, deps.db, {
     from: today,
     to: addCalendarDays(today, EXPIRY_SOON_DAYS),
@@ -106,8 +117,7 @@ async function remind(deps: ExpiryReminderDeps, run: HouseholdRun, subject: Expi
     return
   }
 
-  const url =
-    subject.kind === 'document' ? `${deps.appUrl}/documents/${subject.id}` : `${deps.appUrl}/home/assets/${subject.id}`
+  const url = `${deps.appUrl}${SUBJECT_PATHS[subject.kind]}/${subject.id}`
   let sent = 0
   try {
     for (const recipient of recipients) {

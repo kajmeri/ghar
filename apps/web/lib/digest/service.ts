@@ -291,10 +291,11 @@ async function readManualValues(db: Db, { ctx }: DigestReader, today: CalendarDa
 async function readUpkeep(db: Db, { ctx }: DigestReader, today: CalendarDate): Promise<DigestUpkeepItem[]> {
   const range = { from: today, to: addCalendarDays(today, DIGEST_EXPIRY_DAYS) }
   const maintenanceUntil = addCalendarDays(today, DIGEST_MAINTENANCE_DAYS)
-  const [tasks, documents, warranties] = await Promise.all([
+  const [tasks, documents, warranties, renewals] = await Promise.all([
     queries.listMaintenanceTasks(ctx, db),
     can(ctx.role, 'documents.view') ? queries.listDocumentExpiries(ctx, db, range) : [],
     queries.listWarrantyExpiries(ctx, db, range),
+    can(ctx.role, 'documents.view') ? queries.listRenewalExpiries(ctx, db, range) : [],
   ])
   return [
     ...tasks.flatMap(task =>
@@ -317,6 +318,14 @@ async function readUpkeep(db: Db, { ctx }: DigestReader, today: CalendarDate): P
       title: `${asset.name} warranty`,
       dueOn: asset.warrantyExpiresOn,
       overdue: false,
+    })),
+    ...renewals.map(renewal => ({
+      kind: 'renewal' as const,
+      id: renewal.id,
+      title: renewal.title,
+      dueOn: renewal.expiresOn,
+      overdue: false,
+      autoRenews: renewal.autoRenews,
     })),
   ]
 }

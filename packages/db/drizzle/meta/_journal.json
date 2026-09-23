@@ -85,6 +85,13 @@
       "when": 1790178613686,
       "tag": "0011_soft_disconnect",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790184475096,
+      "tag": "0012_renewals",
+      "breakpoints": true
     }
   ]
 }

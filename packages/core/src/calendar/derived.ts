@@ -3,7 +3,7 @@ import type { Cents } from '../money'
 import { bookingTitle } from '../travel/bookings'
 import type { BookingFields } from '../travel/types'
 import { allDayRange } from './all-day'
-import type { CalendarItemInput } from './feed'
+import type { CalendarItemInput, CalendarItemRef } from './feed'
 import type { CalendarTone } from './types'
 
 // Items the calendar shows that belong to other features. They're computed when the feed is read
@@ -35,12 +35,14 @@ export interface MaintenanceDue {
   assetId: string | null
 }
 
-/** Something that runs out: a document's expiry date, or an asset's warranty. */
+/** Something that runs out: a document's expiry date, an asset's warranty, or a renewal's term. */
 export interface ExpiryDue {
-  kind: 'document' | 'asset'
+  kind: 'document' | 'asset' | 'renewal'
   id: string
   title: string
   expiresOn: CalendarDate
+  /** A renewal that renews on its own. Its day is a renewal, not a deadline, so it takes no colour. */
+  autoRenews?: boolean
 }
 
 /** A connected card or loan's next payment, as Plaid Liabilities last reported it. */
@@ -172,17 +174,35 @@ export function maintenanceItems(tasks: readonly MaintenanceDue[], today: Calend
 export function expiryItems(expiries: readonly ExpiryDue[], today: CalendarDate): CalendarItemInput[] {
   return expiries.map(expiry => {
     const lapsed = expiry.expiresOn < today
+    const renews = expiry.autoRenews === true && !lapsed
     return {
       id: `expiries:${expiry.kind}:${expiry.id}`,
       source: 'expiries',
-      title: `${expiry.title} ${lapsed ? 'expired' : 'expires'}`,
+      title: `${expiry.title} ${renews ? 'renews' : lapsed ? 'expired' : 'expires'}`,
       location: null,
       ...allDayRange(expiry.expiresOn, expiry.expiresOn),
       allDay: true,
       category: 'household',
-      tone: lapsed ? 'negative' : expiry.expiresOn <= addCalendarDays(today, EXPIRY_CAUTION_DAYS) ? 'caution' : 'default',
+      tone: renews
+        ? 'default'
+        : lapsed
+          ? 'negative'
+          : expiry.expiresOn <= addCalendarDays(today, EXPIRY_CAUTION_DAYS)
+            ? 'caution'
+            : 'default',
       recurring: false,
-      ref: expiry.kind === 'document' ? { kind: 'document', documentId: expiry.id } : { kind: 'asset', assetId: expiry.id },
+      ref: expiryRef(expiry),
     }
   })
+}
+
+function expiryRef(expiry: ExpiryDue): CalendarItemRef {
+  switch (expiry.kind) {
+    case 'document':
+      return { kind: 'document', documentId: expiry.id }
+    case 'asset':
+      return { kind: 'asset', assetId: expiry.id }
+    case 'renewal':
+      return { kind: 'renewal', renewalId: expiry.id }
+  }
 }

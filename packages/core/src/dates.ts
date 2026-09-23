@@ -272,3 +272,32 @@ export function daysBetween(from: CalendarDate, to: CalendarDate): number {
     Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10)))
   return Math.round((utc(assertCalendarDate(to)) - utc(assertCalendarDate(from))) / DAY_MS)
 }
+
+/**
+ * Whole calendar months from one date to another, stepping the way addCalendarMonths does, so
+ * Jan 31 to Feb 28 is one month. Negative when `to` is earlier.
+ */
+export function monthsBetween(from: CalendarDate, to: CalendarDate): number {
+  assertCalendarDate(from)
+  assertCalendarDate(to)
+  if (to < from) return -monthsBetween(to, from)
+  const months = (Number(to.slice(0, 4)) - Number(from.slice(0, 4))) * 12 + Number(to.slice(5, 7)) - Number(from.slice(5, 7))
+  return addCalendarMonths(from, months) > to ? months - 1 : months
+}
+
+/** Up to here a distance is counted in days, so a 60-day reminder never reads "2 months". */
+const DISTANCE_DAYS_MAX = 60
+
+/**
+ * How far apart two dates are, in the unit a person would say: days up to two months, whole
+ * months under two years, whole years after that. "12 days", "5 months", "4 years". Rounded down,
+ * so it never says more time is left than there is. The order of the dates doesn't matter.
+ */
+export function distancePhrase(from: CalendarDate, to: CalendarDate): string {
+  const [earlier, later] = from <= to ? [from, to] : [to, from]
+  const days = daysBetween(earlier, later)
+  const months = monthsBetween(earlier, later)
+  if (days <= DISTANCE_DAYS_MAX || months < 2) return days === 1 ? '1 day' : `${String(days)} days`
+  if (months < 24) return `${String(months)} months`
+  return `${String(Math.floor(months / 12))} years`
+}

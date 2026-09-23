@@ -13,6 +13,6 @@ export type PillTone = keyof typeof TONES
 /** A 999px label. Colour only when it says something about money or state. */
 export function Pill({ tone = 'neutral', className, ...props }: React.ComponentProps<'span'> & { tone?: PillTone }) {
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-pill border px-2.5 py-0.5 text-xs', TONES[tone], className)} {...props} />
+    <span className={cn('inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-pill border px-2.5 py-0.5 text-xs', TONES[tone], className)} {...props} />
   )
 }

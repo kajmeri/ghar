@@ -33,6 +33,7 @@ import {
   packingTemplates,
   plaidItems,
   profiles,
+  renewals,
   syncTombstones,
   transactions,
   tripIdeas,
@@ -53,6 +54,7 @@ import type { ItineraryOptionWithVotes, ItinerarySlotWithOptions, OptionVoteReco
 import type { BookingDraftRow } from './mail'
 import { manualAccountColumns, type ManualAccountRow, type ManualValueRow } from './manual-accounts'
 import type { MemberRow } from './members'
+import { selectRenewalsWithLinks, type RenewalWithLinksRow } from './renewals'
 import type { PackingItemRow, PackingTemplateItemRow, PackingTemplateWithItems } from './packing'
 import type { TripRow } from './scope'
 import { bookingColumns, type BookingRow } from './travel'
@@ -159,6 +161,7 @@ const SYNC_PERMISSIONS = {
   contact: 'contacts.view',
   asset: 'home.view',
   document: 'documents.view',
+  renewal: 'documents.view',
   maintenance: 'home.view',
   maintenance_log: 'home.view',
   booking_draft: 'travel.manage',
@@ -213,6 +216,7 @@ export interface SyncRows {
   contact: ContactRow
   asset: AssetRow
   document: DocumentWithAssetRow
+  renewal: RenewalWithLinksRow
   maintenance: MaintenanceTaskRow
   maintenance_log: MaintenanceLogEntryRow
   booking_draft: BookingDraftRow
@@ -657,6 +661,16 @@ const readDocuments: SyncReader<DocumentWithAssetRow> = async (ctx, db, window) 
   return rows.map(({ syncAt, ...row }) => (row.isSensitive && !seesSensitive ? hidden(syncAt, row.id) : change(syncAt, row.id, row)))
 }
 
+/** A linked sensitive document's title reads as null for anyone who can't see it, as it does online. */
+const readRenewals: SyncReader<RenewalWithLinksRow> = async (ctx, db, window) => {
+  requireSyncEntity(ctx, 'renewal')
+  const rows = await selectRenewalsWithLinks(ctx, db, { syncAt: syncStamp(renewals.updatedAt) })
+    .where(and(eq(renewals.householdId, ctx.householdId), inWindow(renewals.updatedAt, renewals.id, window)))
+    .orderBy(...syncOrder(renewals.updatedAt, renewals.id))
+    .limit(window.limit)
+  return rows.map(({ syncAt, ...row }) => change(syncAt, row.id, row))
+}
+
 const readMaintenance: SyncReader<MaintenanceTaskRow> = async (ctx, db, window) => {
   requireSyncEntity(ctx, 'maintenance')
   const rows = await db
@@ -780,6 +794,7 @@ const SYNC_READERS: { [E in SyncEntity]: SyncReader<SyncRows[E]> } = {
   contact: readContacts,
   asset: readAssets,
   document: readDocuments,
+  renewal: readRenewals,
   maintenance: readMaintenance,
   maintenance_log: readMaintenanceLog,
   booking_draft: readBookingDrafts,

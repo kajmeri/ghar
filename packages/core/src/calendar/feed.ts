@@ -37,6 +37,7 @@ export type CalendarItemRef =
   | { kind: 'maintenance'; taskId: string; assetId: string | null }
   | { kind: 'document'; documentId: string }
   | { kind: 'asset'; assetId: string }
+  | { kind: 'renewal'; renewalId: string }
 
 export interface CalendarItem {
   /** Stable across reads, so it can key a list. Unique within one feed. */

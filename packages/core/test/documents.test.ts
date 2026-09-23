@@ -106,6 +106,10 @@ describe('expiry', () => {
     expect(expiryPhrase('2026-10-14', today)).toBe('Expires in 30 days')
     expect(expiryPhrase('2026-09-13', today)).toBe('Expired yesterday')
     expect(expiryPhrase('2026-09-04', today)).toBe('Expired 10 days ago')
+    expect(expiryPhrase('2027-02-24', today)).toBe('Expires in 5 months')
+    expect(expiryPhrase('2027-10-22', today)).toBe('Expires in 13 months')
+    expect(expiryPhrase('2030-10-26', today)).toBe('Expires in 4 years')
+    expect(expiryPhrase('2026-03-01', today)).toBe('Expired 6 months ago')
   })
 })
 

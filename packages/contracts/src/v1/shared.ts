@@ -91,7 +91,7 @@ export const queryBooleanSchema = z.union([z.boolean(), z.stringbool()])
  * anything else is a 400. Each list keeps one order ending in the row's id, and a page starts after
  * the last row of the one before, so rows added or removed meanwhile never repeat or skip one.
  *
- * Paged: contacts, assets, maintenance, documents, bills, trips, trip ideas, packing items, packing
+ * Paged: contacts, assets, maintenance, documents, expiries, bills, trips, trip ideas, packing items, packing
  * templates, travel bookings, transactions, accounts, categories, members, invitations, calendar
  * links and mail drafts.
  *

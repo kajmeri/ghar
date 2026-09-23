@@ -1,7 +1,7 @@
 import type { CalendarDate } from '@ghar/core/dates'
 import { and, eq, gte, inArray, lte } from 'drizzle-orm'
 import { authUsers } from 'drizzle-orm/supabase'
-import { assets, documents, expiryReminders, householdMembers, households, profiles } from '../schema'
+import { assets, documents, expiryReminders, householdMembers, households, profiles, renewals } from '../schema'
 import { authorize } from './authorize'
 import type { Actor, Db } from './types'
 
@@ -21,21 +21,23 @@ export async function listHouseholdsForReminders(db: Db): Promise<ReminderHouseh
 }
 
 export interface ExpirySubject {
-  kind: 'document' | 'warranty'
-  /** The document's id, or the asset's for a warranty. */
+  kind: 'document' | 'warranty' | 'renewal'
+  /** The document's id, the asset's for a warranty, or the renewal's. */
   id: string
   title: string
   expiresOn: CalendarDate
+  /** A renewal that renews on its own. */
+  autoRenews?: boolean
 }
 
-/** Documents, sensitive ones included, and warranties that expire from `from` through `to`. */
+/** Documents, sensitive ones included, warranties and renewals that run out from `from` through `to`. */
 export async function listExpiriesForReminders(
   actor: Actor,
   db: Db,
   range: { from: CalendarDate; to: CalendarDate }
 ): Promise<ExpirySubject[]> {
   authorize(actor, 'documents.viewSensitive')
-  const [documentRows, assetRows] = await Promise.all([
+  const [documentRows, assetRows, renewalRows] = await Promise.all([
     db
       .select({ id: documents.id, title: documents.title, expiresOn: documents.expiresOn })
       .from(documents)
@@ -56,16 +58,24 @@ export async function listExpiriesForReminders(
           lte(assets.warrantyExpiresOn, range.to)
         )
       ),
+    db
+      .select({ id: renewals.id, title: renewals.title, expiresOn: renewals.expiresOn, autoRenews: renewals.autoRenews })
+      .from(renewals)
+      .where(
+        and(eq(renewals.householdId, actor.householdId), gte(renewals.expiresOn, range.from), lte(renewals.expiresOn, range.to))
+      ),
   ])
   const subjects: ExpirySubject[] = []
   for (const row of documentRows) if (row.expiresOn !== null) subjects.push({ kind: 'document', ...row, expiresOn: row.expiresOn })
   for (const row of assetRows) if (row.expiresOn !== null) subjects.push({ kind: 'warranty', ...row, expiresOn: row.expiresOn })
+  for (const row of renewalRows) subjects.push({ kind: 'renewal', ...row })
   return subjects.toSorted((a, b) => a.expiresOn.localeCompare(b.expiresOn) || a.title.localeCompare(b.title))
 }
 
 /**
  * Claims one reminder tier for one expiry date. Returns the claim's id, or null when that reminder
- * was already sent. A renewed document has a new expiry date, so its reminders start over.
+ * was already sent. A renewed document, or a renewal whose date moved on, has a new expiry date,
+ * so its reminders start over.
  */
 export async function claimExpiryReminder(
   actor: Actor,
@@ -80,6 +90,7 @@ export async function claimExpiryReminder(
       householdId: actor.householdId,
       documentId: subject.kind === 'document' ? subject.id : null,
       assetId: subject.kind === 'warranty' ? subject.id : null,
+      renewalId: subject.kind === 'renewal' ? subject.id : null,
       thresholdDays: input.thresholdDays,
       expiresOn: subject.expiresOn,
     })

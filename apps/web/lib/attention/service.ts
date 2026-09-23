@@ -17,12 +17,13 @@ export async function getAttention(session: Session): Promise<Attention> {
   const today = todayInTimeZone(household.timeZone)
   const range = { from: addCalendarDays(today, -EXPIRED_VISIBLE_DAYS), to: addCalendarDays(today, EXPIRY_SOON_DAYS) }
 
-  const [tasks, bills, documents, warranties] = await Promise.all([
+  const [tasks, bills, documents, warranties, renewals] = await Promise.all([
     // Only jobs already due or due within the due-soon window; the state filter below still decides.
     queries.listMaintenanceTasks(context, db, { dueTo: addCalendarDays(today, MAINTENANCE_DUE_SOON_DAYS) }),
     can(context.role, 'finances.view') ? listBillsWithStatus(context, db, household.timeZone) : null,
     queries.listDocumentExpiries(context, db, range),
     queries.listWarrantyExpiries(context, db, range),
+    queries.listRenewalExpiries(context, db, range),
   ])
 
   const expiries: AttentionExpiry[] = [
@@ -32,6 +33,7 @@ export async function getAttention(session: Session): Promise<Attention> {
       title: document.title,
       expiresOn: document.expiresOn,
       state: expiryState(document.expiresOn, today),
+      documentKind: document.kind,
     })),
     ...warranties.map(asset => ({
       kind: 'warranty' as const,
@@ -39,6 +41,16 @@ export async function getAttention(session: Session): Promise<Attention> {
       title: asset.name,
       expiresOn: asset.warrantyExpiresOn,
       state: expiryState(asset.warrantyExpiresOn, today),
+    })),
+    ...renewals.map(renewal => ({
+      kind: 'renewal' as const,
+      renewalId: renewal.id,
+      title: renewal.title,
+      expiresOn: renewal.expiresOn,
+      state: expiryState(renewal.expiresOn, today),
+      renewalKind: renewal.kind,
+      autoRenews: renewal.autoRenews,
+      costCents: renewal.costCents,
     })),
   ].toSorted((a, b) => a.expiresOn.localeCompare(b.expiresOn) || a.title.localeCompare(b.title))
 

@@ -177,6 +177,8 @@ const september: CalendarFeedInput = {
   expiries: [
     { kind: 'document', id: 'd-passport', title: 'Passport', expiresOn: '2026-09-25' },
     { kind: 'asset', id: 'a-dishwasher', title: 'Dishwasher warranty', expiresOn: '2026-09-03' },
+    { kind: 'renewal', id: 'r-costco', title: 'Costco', expiresOn: '2026-09-28', autoRenews: true },
+    { kind: 'renewal', id: 'r-plates', title: 'Car registration', expiresOn: '2026-09-29' },
   ],
 }
 
@@ -274,6 +276,15 @@ describe('buildCalendarFeed', () => {
       tone: 'negative',
       ref: { kind: 'asset', assetId: 'a-dishwasher' },
     })
+  })
+
+  it('says an automatic renewal renews, without a colour', () => {
+    expect(feed.find(item => item.id === 'expiries:renewal:r-costco')).toMatchObject({
+      title: 'Costco renews',
+      tone: 'default',
+      ref: { kind: 'renewal', renewalId: 'r-costco' },
+    })
+    expect(feed.find(item => item.id === 'expiries:renewal:r-plates')).toMatchObject({ title: 'Car registration expires', tone: 'caution' })
   })
 
   it('includes only the sources asked for', () => {

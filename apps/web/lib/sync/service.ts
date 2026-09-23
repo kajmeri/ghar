@@ -32,6 +32,7 @@ import { listBillsWithStatus } from '@/lib/bills/service'
 import { toContact } from '@/lib/contacts/service'
 import { getDb } from '@/lib/db'
 import { toDocument } from '@/lib/documents/service'
+import { toRenewal } from '@/lib/renewals/service'
 import { toAsset, toLogEntry, toMaintenanceTask } from '@/lib/home/service'
 import { toManualAccount, toManualValue } from '@/lib/networth/serialize'
 import {
@@ -349,6 +350,8 @@ async function readEntityPage(ctx: RequestContext, db: Db, entity: SyncEntity, w
       return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toAsset(row, env.today) }))
     case 'document':
       return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toDocument(row, env.today) }))
+    case 'renewal':
+      return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toRenewal(row, env.today) }))
     case 'maintenance':
       return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({
         entity,

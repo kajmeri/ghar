@@ -30,6 +30,7 @@
     "./packing": "./src/packing.ts",
     "./progress": "./src/progress.ts",
     "./redirects": "./src/redirects.ts",
+    "./renewals": "./src/renewals.ts",
     "./search": "./src/search.ts",
     "./sync": "./src/sync.ts",
     "./travel": "./src/travel/index.ts",

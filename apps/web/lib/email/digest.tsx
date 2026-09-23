@@ -246,6 +246,12 @@ function upkeepLine(item: DigestUpkeepItem, input: DigestEmailInput): Line {
       return { primary: item.title, secondary: `Expires ${when}`, action: { label: 'Open document', url: `${appUrl}/documents/${item.id}` } }
     case 'warranty':
       return { primary: item.title, secondary: `Ends ${when}`, action: { label: 'Open item', url: `${appUrl}/home/assets/${item.id}` } }
+    case 'renewal':
+      return {
+        primary: item.title,
+        secondary: item.autoRenews ? `Renews ${when}` : `Expires ${when}`,
+        action: { label: 'Open renewal', url: `${appUrl}/renewals/${item.id}` },
+      }
   }
 }
 

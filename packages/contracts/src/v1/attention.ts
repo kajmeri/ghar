@@ -1,26 +1,12 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
 import { billSchema } from './bills'
-import { expiryStateSchema } from './documents'
 import { maintenanceTaskSchema } from './home'
+import { expirySchema } from './renewals'
 import { calendarDateSchema } from './shared'
 
-export const attentionExpirySchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('document'),
-    documentId: z.uuid(),
-    title: z.string(),
-    expiresOn: calendarDateSchema,
-    state: expiryStateSchema,
-  }),
-  z.object({
-    kind: z.literal('warranty'),
-    assetId: z.uuid(),
-    title: z.string(),
-    expiresOn: calendarDateSchema,
-    state: expiryStateSchema,
-  }),
-])
+/** The same shape as an item in GET /api/v1/expiries. */
+export const attentionExpirySchema = expirySchema
 export type AttentionExpiry = z.infer<typeof attentionExpirySchema>
 
 export const attentionSchema = z.object({

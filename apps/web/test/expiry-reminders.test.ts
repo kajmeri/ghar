@@ -1,7 +1,7 @@
 import type { PGlite } from '@electric-sql/pglite'
 import type { CalendarDate } from '@ghar/core/dates'
 import { documentStoragePath } from '@ghar/core/documents'
-import { createAsset, createDocument, createHousehold, type Db, type RequestContext } from '@ghar/db/queries'
+import { createAsset, createDocument, createHousehold, createRenewal, getRenewal, type Db, type RequestContext } from '@ghar/db/queries'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
 import { runExpiryReminders } from '@/lib/documents/expiry-reminders'
@@ -57,6 +57,37 @@ function run(ctx: RequestContext, email: EmailProvider, today: CalendarDate) {
 }
 
 describe('expiry reminders', () => {
+  it('moves an automatic renewal on, then says when it renews', async () => {
+    const { ctx } = await household()
+    const streaming = await createRenewal(ctx, db, {
+      title: 'Streaming',
+      kind: 'membership',
+      expiresOn: '2026-09-15',
+      cadenceMonths: 1,
+      autoRenews: true,
+      costCents: 1_599,
+      provider: null,
+      referenceNumber: 'M-99812',
+      url: null,
+      contactId: null,
+      assetId: null,
+      documentId: null,
+      notes: null,
+    })
+    const inbox = createMemoryProvider()
+
+    const result = await run(ctx, inbox, '2026-10-02')
+    expect(result).toMatchObject({ renewed: 1, subjects: 1, reminded: 1 })
+    expect((await getRenewal(ctx, db, streaming.id)).expiresOn).toBe('2026-10-15')
+    const [reminder] = inbox.sent
+    expect(reminder?.subject).toBe('Streaming renews in 13 days')
+    expect(reminder?.text).toContain('cancel before then')
+    expect(reminder?.text).toContain(`https://ghar.test/renewals/${streaming.id}`)
+    expect(reminder?.text).not.toContain('M-99812')
+
+    expect(await run(ctx, inbox, '2026-10-02')).toMatchObject({ renewed: 0, reminded: 0 })
+  })
+
   it('sends one reminder at 60, 30 and 7 days, and never twice', async () => {
     const { ctx, email } = await household()
     const passport = await addDocument(ctx, { title: 'Passport', expiresOn: '2026-12-01' })

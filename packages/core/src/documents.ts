@@ -1,5 +1,5 @@
 import { can, type HouseholdRole } from './auth/permissions'
-import { daysBetween, type CalendarDate } from './dates'
+import { daysBetween, distancePhrase, type CalendarDate } from './dates'
 import { matchesSearch } from './search'
 
 // The household's paperwork: what a document is, who may see it, where its file lives, and when it
@@ -109,14 +109,14 @@ export function reminderThreshold(expiresOn: CalendarDate, today: CalendarDate):
   return crossed.at(-1) ?? null
 }
 
-/** "Expires in 12 days", "Expired yesterday". */
+/** "Expires in 12 days", "Expires in 5 months", "Expired yesterday". */
 export function expiryPhrase(expiresOn: CalendarDate, today: CalendarDate): string {
   const daysLeft = daysBetween(today, expiresOn)
   if (daysLeft === 0) return 'Expires today'
   if (daysLeft === 1) return 'Expires tomorrow'
   if (daysLeft === -1) return 'Expired yesterday'
-  if (daysLeft < 0) return `Expired ${String(-daysLeft)} days ago`
-  return `Expires in ${String(daysLeft)} days`
+  if (daysLeft < 0) return `Expired ${distancePhrase(expiresOn, today)} ago`
+  return `Expires in ${distancePhrase(today, expiresOn)}`
 }
 
 /** The longest side a photo is scaled to before upload. Enough to read the fine print on a policy. */

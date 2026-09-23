@@ -225,6 +225,8 @@ export function itemHref(item: CalendarItem): string {
       return `/documents/${item.ref.documentId}`
     case 'asset':
       return `/home/assets/${item.ref.assetId}`
+    case 'renewal':
+      return `/renewals/${item.ref.renewalId}`
   }
 }
 

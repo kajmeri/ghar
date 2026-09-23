@@ -1,6 +1,5 @@
 import { can } from '@ghar/core/auth'
 import { formatCalendarDate, formatInstant } from '@ghar/core/dates'
-import { expiryPhrase } from '@ghar/core/documents'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -8,8 +7,8 @@ import { Pill } from '@/components/ui/pill'
 import { getPageSession } from '@/lib/api/authed'
 import { getAttention } from '@/lib/attention/service'
 import { billAmountText, billTone, occurrenceText } from '@/lib/bills/display'
-import { EXPIRY_TONES } from '@/lib/documents/display'
 import * as households from '@/lib/households/service'
+import { expiryHref, expiryLabel, expiryStatus } from '@/lib/renewals/display'
 import { EmptyState } from './_components/ui/empty-state'
 import { ChecklistIllustration, PeopleIllustration } from './_components/ui/illustrations'
 import { PageHeader } from './_components/ui/page-header'
@@ -123,28 +122,29 @@ export default async function HomePage() {
           <section aria-labelledby='expiries-heading'>
             <SectionHeader
               id='expiries-heading'
-              title='Expiring'
-              description='Passports, policies and warranties'
+              title='Running out'
+              description='Papers, warranties and renewals'
               action={
                 <Button asChild variant='ghost'>
-                  <Link href='/documents'>All documents</Link>
+                  <Link href='/renewals'>See all</Link>
                 </Button>
               }
             />
-            <ul aria-label='Papers and warranties expiring' className={LIST}>
+            <ul aria-label='Papers, warranties and renewals running out' className={LIST}>
               {expiries.map(expiry => {
-                const href = expiry.kind === 'document' ? `/documents/${expiry.documentId}` : `/home/assets/${expiry.assetId}`
+                const href = expiryHref(expiry)
+                const status = expiryStatus(expiry, today)
                 return (
                   <li key={href} className={ROW}>
                     <div className='min-w-0'>
                       <p className='font-medium break-words'>
                         <Link href={href} className={ROW_LINK}>
-                          {expiry.kind === 'warranty' ? `${expiry.title} warranty` : expiry.title}
+                          {expiryLabel(expiry)}
                         </Link>
                       </p>
                       <p className='text-sm text-ink-muted tabular-nums'>{formatCalendarDate(expiry.expiresOn)}</p>
                     </div>
-                    <Pill tone={EXPIRY_TONES[expiry.state]}>{expiryPhrase(expiry.expiresOn, today)}</Pill>
+                    <Pill tone={status.tone}>{status.phrase}</Pill>
                   </li>
                 )
               })}

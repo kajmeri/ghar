@@ -17,6 +17,7 @@ const PAGED = [
   'listCategories',
   'listContacts',
   'listDocuments',
+  'listExpiries',
   'listInvitations',
   'listMailBookingDrafts',
   'listMaintenance',

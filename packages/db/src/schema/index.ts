@@ -83,6 +83,14 @@ import {
   type Cabin,
 } from '@ghar/core/travel'
 import { COST_BASES, OPTION_SOURCES, OPTION_STATUSES, OPTION_VOTES, SLOT_BANDS, SLOT_KINDS, SLOT_STATUSES } from '@ghar/core/itinerary'
+import {
+  MAX_RENEWAL_CADENCE_MONTHS,
+  MAX_RENEWAL_CENTS,
+  RENEWAL_FIELD_MAX_LENGTH,
+  RENEWAL_KINDS,
+  RENEWAL_NOTES_MAX_LENGTH,
+  RENEWAL_TITLE_MAX_LENGTH,
+} from '@ghar/core/renewals'
 import { TRIP_STATUSES } from '@ghar/core/trips'
 import { DIGEST_SECTIONS, ONE_TAP_ACTIONS, type DigestSection } from '@ghar/core/digest'
 import { BOOKING_DRAFT_STATUSES, MAIL_LINK_STATUSES, MAIL_MESSAGE_OUTCOMES, MAIL_SUBJECT_MAX_LENGTH } from '@ghar/core/mail'
@@ -156,6 +164,7 @@ export const mailLinkStatus = pgEnum('mail_link_status', MAIL_LINK_STATUSES)
 export const mailMessageOutcome = pgEnum('mail_message_outcome', MAIL_MESSAGE_OUTCOMES)
 export const bookingDraftStatus = pgEnum('booking_draft_status', BOOKING_DRAFT_STATUSES)
 export const oneTapAction = pgEnum('one_tap_action', ONE_TAP_ACTIONS)
+export const renewalKind = pgEnum('renewal_kind', RENEWAL_KINDS)
 
 const timestamptz = () => timestamp({ withTimezone: true })
 const metadata = () =>
@@ -1691,6 +1700,65 @@ export const bills = pgTable(
 ).enableRLS()
 
 /**
+ * Something the household keeps current that isn't a paper Ghar holds, or not only one: a car's
+ * registration, a license, a membership, a policy's term, a lease. `expiresOn` is where the current
+ * term ends. One that renews on its own has that date moved on a term by the daily job once it
+ * passes, so every reader can range over the stored date.
+ *
+ * Deleting the contact, asset or document it points at keeps the renewal.
+ */
+export const renewals = pgTable(
+  'renewals',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    title: text().notNull(),
+    kind: renewalKind().notNull().default('other'),
+    expiresOn: date({ mode: 'string' }).notNull(),
+    /** Null when it doesn't renew on a schedule. */
+    cadenceMonths: smallint(),
+    autoRenews: boolean().notNull().default(false),
+    costCents: cents(),
+    provider: text(),
+    referenceNumber: text(),
+    url: text(),
+    contactId: uuid().references(() => contacts.id, { onDelete: 'set null' }),
+    assetId: uuid().references(() => assets.id, { onDelete: 'set null' }),
+    /** The paper for the current term. */
+    documentId: uuid().references(() => documents.id, { onDelete: 'set null' }),
+    notes: text(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('renewals_household_expires_idx').on(table.householdId, table.expiresOn, table.id),
+    index('renewals_contact_idx')
+      .on(table.contactId)
+      .where(sql`${table.contactId} is not null`),
+    index('renewals_asset_idx')
+      .on(table.assetId)
+      .where(sql`${table.assetId} is not null`),
+    index('renewals_document_idx')
+      .on(table.documentId)
+      .where(sql`${table.documentId} is not null`),
+    check('renewals_title_length', sql`char_length(${table.title}) between 1 and ${sql.raw(String(RENEWAL_TITLE_MAX_LENGTH))}`),
+    check(
+      'renewals_text_lengths',
+      sql`char_length(${table.provider}) <= ${sql.raw(String(RENEWAL_FIELD_MAX_LENGTH))}
+        and char_length(${table.referenceNumber}) <= ${sql.raw(String(RENEWAL_FIELD_MAX_LENGTH))}
+        and char_length(${table.url}) <= ${sql.raw(String(URL_MAX_LENGTH))}
+        and char_length(${table.notes}) <= ${sql.raw(String(RENEWAL_NOTES_MAX_LENGTH))}`
+    ),
+    check('renewals_cadence', sql`${table.cadenceMonths} between 1 and ${sql.raw(String(MAX_RENEWAL_CADENCE_MONTHS))}`),
+    check('renewals_cost', sql`${table.costCents} between 1 and ${sql.raw(String(MAX_RENEWAL_CENTS))}`),
+    // Moving the date on by itself needs to know how far.
+    check('renewals_auto_renews_cadence', sql`not ${table.autoRenews} or ${table.cadenceMonths} is not null`),
+  ]
+).enableRLS()
+
+/**
  * An expiry reminder email that went out. The row is claimed before sending, so two runs on the
  * same day can't both send, and each tier goes once per expiry date: renewing a passport moves its
  * date and the reminders start over.
@@ -1707,6 +1775,7 @@ export const expiryReminders = pgTable(
     documentId: uuid().references(() => documents.id, { onDelete: 'cascade' }),
     /** For a warranty. */
     assetId: uuid().references(() => assets.id, { onDelete: 'cascade' }),
+    renewalId: uuid().references(() => renewals.id, { onDelete: 'cascade' }),
     /** One of EXPIRY_REMINDER_DAYS. */
     thresholdDays: smallint().notNull(),
     expiresOn: date({ mode: 'string' }).notNull(),
@@ -1720,7 +1789,10 @@ export const expiryReminders = pgTable(
     uniqueIndex('expiry_reminders_asset_unique')
       .on(table.assetId, table.thresholdDays, table.expiresOn)
       .where(sql`${table.assetId} is not null`),
-    check('expiry_reminders_one_subject', sql`num_nonnulls(${table.documentId}, ${table.assetId}) = 1`),
+    uniqueIndex('expiry_reminders_renewal_unique')
+      .on(table.renewalId, table.thresholdDays, table.expiresOn)
+      .where(sql`${table.renewalId} is not null`),
+    check('expiry_reminders_one_subject', sql`num_nonnulls(${table.documentId}, ${table.assetId}, ${table.renewalId}) = 1`),
     check('expiry_reminders_threshold', sql`${table.thresholdDays} in (${sql.raw(EXPIRY_REMINDER_DAYS.join(', '))})`),
   ]
 ).enableRLS()

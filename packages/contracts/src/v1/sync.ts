@@ -14,6 +14,7 @@ import { mailBookingDraftSchema } from './mail'
 import { memberSchema } from './members'
 import { manualAccountSchema, manualValueSchema } from './networth'
 import { packingItemSchema, packingTemplateSchema } from './packing'
+import { renewalSchema } from './renewals'
 import { calendarDateSchema, centsSchema, instantSchema } from './shared'
 import { bookingSchema } from './travel'
 import { tripTransactionSchema } from './travel-hub'
@@ -49,6 +50,7 @@ export const syncEntitySchema = z.enum([
   'contact',
   'asset',
   'document',
+  'renewal',
   'maintenance',
   'maintenance_log',
   'booking_draft',
@@ -138,6 +140,7 @@ export const syncChangeSchema = z.discriminatedUnion('entity', [
   z.object({ entity: z.literal('contact'), data: contactSchema }),
   z.object({ entity: z.literal('asset'), data: assetSchema }),
   z.object({ entity: z.literal('document'), data: documentSchema }),
+  z.object({ entity: z.literal('renewal'), data: renewalSchema }),
   z.object({ entity: z.literal('maintenance'), data: maintenanceTaskSchema }),
   z.object({ entity: z.literal('maintenance_log'), data: maintenanceLogEntrySchema }),
   z.object({ entity: z.literal('booking_draft'), data: mailBookingDraftSchema }),

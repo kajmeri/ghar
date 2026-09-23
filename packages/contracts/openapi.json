@@ -75,6 +75,9 @@
       "name": "packing"
     },
     {
+      "name": "renewals"
+    },
+    {
       "name": "sync"
     },
     {
@@ -3823,6 +3826,99 @@
                   "required": [
                     "url",
                     "expiresAt"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/expiries": {
+      "get": {
+        "operationId": "listExpiries",
+        "tags": [
+          "renewals"
+        ],
+        "description": "Soonest first, so what has expired leads, then what's coming up. Sensitive documents are left\nout for members and viewers.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CalendarDate"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AttentionExpiry"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
                   ]
                 }
               }
@@ -7824,6 +7920,260 @@
                   },
                   "required": [
                     "deleted"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/renewals": {
+      "post": {
+        "operationId": "createRenewal",
+        "tags": [
+          "renewals"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenewalBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "renewal": {
+                      "$ref": "#/components/schemas/Renewal"
+                    }
+                  },
+                  "required": [
+                    "renewal"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/renewals/{renewalId}": {
+      "get": {
+        "operationId": "getRenewal",
+        "tags": [
+          "renewals"
+        ],
+        "parameters": [
+          {
+            "name": "renewalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "renewal": {
+                      "$ref": "#/components/schemas/Renewal"
+                    }
+                  },
+                  "required": [
+                    "renewal"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateRenewal",
+        "tags": [
+          "renewals"
+        ],
+        "parameters": [
+          {
+            "name": "renewalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenewalBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "renewal": {
+                      "$ref": "#/components/schemas/Renewal"
+                    }
+                  },
+                  "required": [
+                    "renewal"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteRenewal",
+        "tags": [
+          "renewals"
+        ],
+        "parameters": [
+          {
+            "name": "renewalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "renewalId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "renewalId"
                   ]
                 }
               }
@@ -12623,6 +12973,9 @@
               },
               "state": {
                 "$ref": "#/components/schemas/ExpiryState"
+              },
+              "documentKind": {
+                "$ref": "#/components/schemas/DocumentKind"
               }
             },
             "required": [
@@ -12630,7 +12983,8 @@
               "documentId",
               "title",
               "expiresOn",
-              "state"
+              "state",
+              "documentKind"
             ]
           },
           {
@@ -12660,6 +13014,54 @@
               "title",
               "expiresOn",
               "state"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "renewal"
+              },
+              "renewalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "title": {
+                "type": "string"
+              },
+              "expiresOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "state": {
+                "$ref": "#/components/schemas/ExpiryState"
+              },
+              "renewalKind": {
+                "$ref": "#/components/schemas/RenewalKind"
+              },
+              "autoRenews": {
+                "type": "boolean"
+              },
+              "costCents": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Cents"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "renewalId",
+              "title",
+              "expiresOn",
+              "state",
+              "renewalKind",
+              "autoRenews",
+              "costCents"
             ]
           }
         ]
@@ -14191,6 +14593,23 @@
             "required": [
               "kind",
               "assetId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "renewal"
+              },
+              "renewalId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": [
+              "kind",
+              "renewalId"
             ]
           }
         ]
@@ -19631,6 +20050,297 @@
           "refundable"
         ]
       },
+      "Renewal": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RenewalKind"
+          },
+          "expiresOn": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "expiryState": {
+            "$ref": "#/components/schemas/ExpiryState"
+          },
+          "cadenceMonths": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "autoRenews": {
+            "type": "boolean"
+          },
+          "costCents": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cents"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "referenceNumber": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contactId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contactName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "assetId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assetName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "documentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "documentTitle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/Instant"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "kind",
+          "expiresOn",
+          "expiryState",
+          "cadenceMonths",
+          "autoRenews",
+          "costCents",
+          "provider",
+          "referenceNumber",
+          "url",
+          "contactId",
+          "contactName",
+          "assetId",
+          "assetName",
+          "documentId",
+          "documentTitle",
+          "notes",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "RenewalBody": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "maxLength": 120,
+            "$ref": "#/components/schemas/ShortText"
+          },
+          "kind": {
+            "default": "other",
+            "$ref": "#/components/schemas/RenewalKind"
+          },
+          "expiresOn": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "cadenceMonths": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 120
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "autoRenews": {
+            "default": false,
+            "type": "boolean"
+          },
+          "costCents": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000000,
+                "$ref": "#/components/schemas/Cents"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "default": null,
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShortText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "referenceNumber": {
+            "default": null,
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShortText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "url": {
+            "default": null,
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HttpUrl"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contactId": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assetId": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "documentId": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "default": null,
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LongText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "title",
+          "expiresOn"
+        ]
+      },
+      "RenewalKind": {
+        "type": "string",
+        "enum": [
+          "registration",
+          "license",
+          "membership",
+          "policy",
+          "lease",
+          "other"
+        ]
+      },
       "RuleSuggestion": {
         "type": "object",
         "properties": {
@@ -20274,6 +20984,22 @@
             "properties": {
               "entity": {
                 "type": "string",
+                "const": "renewal"
+              },
+              "data": {
+                "$ref": "#/components/schemas/Renewal"
+              }
+            },
+            "required": [
+              "entity",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "entity": {
+                "type": "string",
                 "const": "maintenance"
               },
               "data": {
@@ -20408,6 +21134,7 @@
           "contact",
           "asset",
           "document",
+          "renewal",
           "maintenance",
           "maintenance_log",
           "booking_draft",
