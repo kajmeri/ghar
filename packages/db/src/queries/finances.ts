@@ -34,6 +34,7 @@ import {
   type CategoryMatcherType,
   type CategoryRuleInput,
   type CategorySpend,
+  type DailyCategorySpend,
   type DefaultCategory,
   type DeterministicAssignment,
   type GoalFields,
@@ -803,6 +804,22 @@ export async function listMonthlyCategorySpend(
     .leftJoin(accounts, eq(accounts.id, transactions.accountId))
     .where(spendingConditions(ctx.householdId, input.from, input.to))
     .groupBy(month, transactions.categoryId)
+}
+
+/** Spending per category per day in [from, to), for a month's running total. */
+export async function listDailyCategorySpend(
+  ctx: RequestContext,
+  db: Db,
+  input: { from: CalendarDate; to: CalendarDate }
+): Promise<DailyCategorySpend[]> {
+  requirePermission(ctx, 'finances.view')
+  const date = sql<string>`${transactions.date}::text`
+  return db
+    .select({ date, categoryId: transactions.categoryId, spentCents })
+    .from(transactions)
+    .leftJoin(accounts, eq(accounts.id, transactions.accountId))
+    .where(spendingConditions(ctx.householdId, input.from, input.to))
+    .groupBy(transactions.date, transactions.categoryId)
 }
 
 export interface MerchantSpend {

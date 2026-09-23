@@ -19924,6 +19924,19 @@
           "cardsCents": {
             "$ref": "#/components/schemas/Cents"
           },
+          "pace": {
+            "$ref": "#/components/schemas/MonthPace"
+          },
+          "netWorth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NetWorthGlance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "reviewCount": {
             "type": "integer",
             "minimum": -9007199254740991,
@@ -19948,8 +19961,87 @@
           "budget",
           "cashCents",
           "cardsCents",
+          "pace",
+          "netWorth",
           "reviewCount",
           "recent"
+        ]
+      },
+      "MonthPace": {
+        "type": "object",
+        "properties": {
+          "monthStart": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "previousMonthStart": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "daysInMonth": {
+            "type": "integer",
+            "minimum": 28,
+            "maximum": 31
+          },
+          "day": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 31
+          },
+          "current": {
+            "maxItems": 32,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Cents"
+            }
+          },
+          "previous": {
+            "maxItems": 32,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Cents"
+            }
+          },
+          "previousByNowCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "budgetCents": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cents"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "budgetByNowCents": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cents"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "domain": {
+            "$ref": "#/components/schemas/ChartDomain"
+          },
+          "empty": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "monthStart",
+          "previousMonthStart",
+          "daysInMonth",
+          "day",
+          "current",
+          "previous",
+          "previousByNowCents",
+          "budgetCents",
+          "budgetByNowCents",
+          "domain",
+          "empty"
         ]
       },
       "MonthStart": {
@@ -20322,6 +20414,60 @@
           "cents",
           "percent",
           "includesStale"
+        ]
+      },
+      "NetWorthGlance": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "netCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "points": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "asOf": {
+                  "$ref": "#/components/schemas/CalendarDate"
+                },
+                "netCents": {
+                  "$ref": "#/components/schemas/Cents"
+                }
+              },
+              "required": [
+                "asOf",
+                "netCents"
+              ]
+            }
+          },
+          "minCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "maxCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "month": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NetWorthDelta"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "asOf",
+          "netCents",
+          "points",
+          "minCents",
+          "maxCents",
+          "month"
         ]
       },
       "NetWorthHistoryBody": {

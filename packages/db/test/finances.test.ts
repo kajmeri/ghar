@@ -35,6 +35,7 @@ import {
   listCategoryRules,
   listCategorySpend,
   listGoals,
+  listDailyCategorySpend,
   listMonthlyCategorySpend,
   listTopMerchants,
   loadCategorizationInput,
@@ -469,6 +470,17 @@ describe('insights', () => {
     expect(find('2026-08-01', null)).toBe(12_000)
     expect(find('2026-08-01', (await categoryByKey(a, 'paychecks')).id)).toBe(-500_000)
     expect(await listMonthlyCategorySpend(b, db, { from: '2026-08-01', to: '2026-10-01' })).toEqual([])
+  })
+
+  it('sums spending by day and category', async () => {
+    const rows = await listDailyCategorySpend(a, db, { from: '2026-08-01', to: '2026-09-01' })
+    const groceries = await categoryByKey(a, 'groceries')
+    const find = (date: string, categoryId: string | null) => rows.find(row => row.date === date && row.categoryId === categoryId)?.spentCents
+    expect(find('2026-08-03', groceries.id)).toBe(4520)
+    expect(find('2026-08-20', groceries.id)).toBe(3010)
+    expect(find('2026-08-10', null)).toBe(12_000)
+    expect(rows.some(row => row.date === '2026-09-02')).toBe(false)
+    expect(await listDailyCategorySpend(b, db, { from: '2026-08-01', to: '2026-09-01' })).toEqual([])
   })
 
   it('ranks merchants by money out', async () => {

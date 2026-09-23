@@ -1,11 +1,14 @@
 import 'server-only'
 import type { MoneyOverview } from '@ghar/contracts'
-import { todayInTimeZone } from '@ghar/core/dates'
+import { addCalendarDays, todayInTimeZone } from '@ghar/core/dates'
 import {
+  addMonths,
   cashAndCards,
   compareSpend,
+  monthPace,
   monthStart,
   monthToDateWindows,
+  netWorthGlance,
   summarizeSpend,
   topCategorySpend,
   type InsightCategory,
@@ -15,7 +18,8 @@ import type { Session } from '@/lib/api/authed'
 import { getDb } from '@/lib/db'
 import { toTransaction } from '@/lib/finances/transactions'
 
-// The Money screen's one answer: the month so far, where it went, and what is waiting. Everything
+// The Money screen's one answer: the month so far, day by day and where it went, net worth at a
+// glance, and what is waiting. Everything
 // it says is worked out in @ghar/core from rows the database added up; this file only asks.
 
 /** How many categories the overview names before it stops. The rest are one line on the list. */
@@ -30,7 +34,7 @@ export async function loadMoneyOverview(session: Session): Promise<MoneyOverview
   const periodStart = monthStart(today)
   const { current, previous } = monthToDateWindows(today)
 
-  const [thisMonth, lastMonth, categoryRows, accounts, period, reviewCount, recent] = await Promise.all([
+  const [thisMonth, lastMonth, categoryRows, accounts, period, reviewCount, recent, daily, snapshots] = await Promise.all([
     queries.listCategorySpend(context, db, current),
     queries.listCategorySpend(context, db, previous),
     queries.listCategories(context, db),
@@ -38,6 +42,8 @@ export async function loadMoneyOverview(session: Session): Promise<MoneyOverview
     queries.getBudgetPeriod(context, db, { periodStart, today }),
     queries.countReviewQueue(context, db),
     queries.listTransactions(context, db, {}, { limit: RECENT_CHARGES }),
+    queries.listDailyCategorySpend(context, db, { from: addMonths(periodStart, -1), to: addCalendarDays(today, 1) }),
+    queries.listNetWorthSnapshots(context, db),
   ])
 
   const categories: InsightCategory[] = categoryRows.map(row => ({ id: row.id, parentId: row.parentId, kind: row.kind }))
@@ -69,6 +75,8 @@ export async function loadMoneyOverview(session: Session): Promise<MoneyOverview
             pace: total.pace,
             elapsedShare: period.summary.elapsedShare,
           },
+    pace: monthPace({ rows: daily, categories, today, budgetCents: period.lines.length === 0 ? null : total.availableCents }),
+    netWorth: netWorthGlance(snapshots),
     ...cashAndCards(accounts),
     reviewCount,
     recent: recent.rows.map(toTransaction),

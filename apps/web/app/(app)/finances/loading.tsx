@@ -14,6 +14,10 @@ export default function Loading() {
         <StatGroupSkeleton />
         <div>
           <SectionHeaderSkeleton description />
+          <div className='h-72 rounded-card border border-line bg-surface md:h-80' />
+        </div>
+        <div>
+          <SectionHeaderSkeleton description />
           <DataListSkeleton rows={5} trailing />
         </div>
         <div>

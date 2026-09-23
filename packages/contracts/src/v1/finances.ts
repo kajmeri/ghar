@@ -10,7 +10,7 @@ import {
   queryBooleanSchema,
   shortTextSchema,
 } from './shared'
-import { chartDomainSchema } from './networth'
+import { chartDomainSchema, netWorthDeltaSchema } from './networth'
 
 // Accounts and categories as a picker needs them: where a bill is paid from, and what a charge is
 // filed under. Balances and anything from Plaid beyond the account's name stay out.
@@ -333,6 +333,43 @@ export const categorySpendSchema = z.object({
   share: z.number().min(0).max(1),
 })
 
+/**
+ * The month's spending as a running total, day by day, against last month and the plan. Mirrors
+ * MonthPace in @ghar/core/finances. Each array's index is the day of the month, from 0.
+ */
+export const monthPaceSchema = z.object({
+  monthStart: calendarDateSchema,
+  previousMonthStart: calendarDateSchema,
+  daysInMonth: z.int().min(28).max(31),
+  /** Today's day of the month. */
+  day: z.int().min(1).max(31),
+  /** Spent by the end of each day this month, up to today. */
+  current: z.array(centsSchema).max(32),
+  /** The same for last month, held to this month's length. */
+  previous: z.array(centsSchema).max(32),
+  previousByNowCents: centsSchema,
+  /** Null until someone plans the month. */
+  budgetCents: centsSchema.nullable(),
+  /** What the plan expects spent by today, if spending went evenly. */
+  budgetByNowCents: centsSchema.nullable(),
+  domain: chartDomainSchema,
+  /** Neither month has anything to draw. */
+  empty: z.boolean(),
+})
+export type MonthPaceValue = z.infer<typeof monthPaceSchema>
+
+/** Net worth for the overview: the latest figure and a few months of it. Mirrors NetWorthGlance. */
+export const netWorthGlanceSchema = z.object({
+  asOf: calendarDateSchema,
+  netCents: centsSchema,
+  /** Oldest first, one a week, about three months. */
+  points: z.array(z.object({ asOf: calendarDateSchema, netCents: centsSchema })).max(20),
+  minCents: centsSchema,
+  maxCents: centsSchema,
+  month: netWorthDeltaSchema.nullable(),
+})
+export type NetWorthGlanceValue = z.infer<typeof netWorthGlanceSchema>
+
 export const moneyOverviewSchema = z.object({
   /** The household's today, and the month it falls in. */
   today: calendarDateSchema,
@@ -362,6 +399,10 @@ export const moneyOverviewSchema = z.object({
   /** What's in the everyday accounts, and what the cards owe. Hidden accounts are left out. */
   cashCents: centsSchema,
   cardsCents: centsSchema,
+  /** The month day by day, for the running total chart. */
+  pace: monthPaceSchema,
+  /** Null before net worth has ever been recorded. */
+  netWorth: netWorthGlanceSchema.nullable(),
   /** How many charges are waiting to be filed. */
   reviewCount: z.int(),
   /** The newest few charges, for the "recently" list. */

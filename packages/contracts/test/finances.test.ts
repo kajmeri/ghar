@@ -5,6 +5,8 @@ import {
   CATEGORY_NAME_MAX_LENGTH,
   CATEGORY_SOURCES,
   MATCHER_VALUE_MAX_LENGTH,
+  monthPace,
+  netWorthGlance,
   spendingTrends,
   TREND_RANGES,
 } from '@ghar/core/finances'
@@ -16,6 +18,8 @@ import {
   categorySourceSchema,
   createCategory,
   getSpendingTrends,
+  monthPaceSchema,
+  netWorthGlanceSchema,
   saveCategoryRule,
   trendRangeSchema,
 } from '../src/v1/finances'
@@ -49,6 +53,32 @@ describe('finances contracts', () => {
     }
     expect(getSpendingTrends.response.parse(named)).toEqual(named)
     expect(getSpendingTrends.query?.parse({})).toEqual({ range: '6M' })
+  })
+
+  it('carries the month day by day, and net worth at a glance, as core works them out', () => {
+    const pace = monthPace({
+      rows: [
+        { date: '2026-08-31', categoryId: null, spentCents: 1_000 },
+        { date: '2026-09-02', categoryId: null, spentCents: 2_000 },
+      ],
+      categories: [],
+      today: '2026-09-23',
+      budgetCents: 50_000,
+    })
+    expect(monthPaceSchema.parse(pace)).toEqual(pace)
+
+    // A full three months of daily readings still fits.
+    const snapshots = Array.from({ length: 120 }, (_, index) => ({
+      asOf: new Date(Date.UTC(2026, 5, 1 + index)).toISOString().slice(0, 10),
+      netCents: 100_000 + index,
+      assetsCents: 100_000 + index,
+      liabilitiesCents: 0,
+      accountCount: 1,
+      staleAccountCount: 0,
+      source: 'automatic' as const,
+    }))
+    const glance = netWorthGlance(snapshots)
+    expect(netWorthGlanceSchema.parse(glance)).toEqual(glance)
   })
 
   it('holds a category name and a matcher to the same lengths core does', () => {

@@ -1,5 +1,5 @@
 import type { PGlite } from '@electric-sql/pglite'
-import type { RequestContext, Transaction } from '@ghar/contracts'
+import type { MonthPaceValue, NetWorthGlanceValue, RequestContext, Transaction } from '@ghar/contracts'
 import { invitationExpiresAt } from '@ghar/core/invitations'
 import {
   acceptInvitation,
@@ -59,6 +59,8 @@ interface OverviewBody {
   budget: { periodStart: string; availableCents: number; spentCents: number; pace: string; elapsedShare: number } | null
   cashCents: number
   cardsCents: number
+  pace: MonthPaceValue
+  netWorth: NetWorthGlanceValue | null
   reviewCount: number
   recent: Transaction[]
 }
@@ -395,6 +397,12 @@ describe('the month so far', () => {
     expect(body.incomeCents).toBe(0)
     expect(body.categories).toEqual([{ categoryId: null, name: 'Not filed yet', spentCents: 3600, share: 1 }])
     expect(body.budget).toBeNull()
+    // Day by day: September runs to today, August is there whole to set it against.
+    expect(body.pace).toMatchObject({ monthStart: '2026-09-01', daysInMonth: 30, day: 22, budgetCents: null, empty: false })
+    expect(body.pace.current).toHaveLength(23)
+    expect(body.pace.current.at(-1)).toBe(3600)
+    expect(body.pace.previousByNowCents).toBe(7520)
+    expect(body.netWorth).toBeNull()
 
     // Both bank accounts are everyday accounts, and there are no cards.
     expect(body).toMatchObject({ cashCents: 200_000, cardsCents: 0 })
@@ -422,6 +430,7 @@ describe('the month so far', () => {
     expect(body.categories).toEqual([{ categoryId: food, name: 'Food and drink', spentCents: 3600, share: 1 }])
     expect(body.budget).toMatchObject({ periodStart: '2026-09-01', availableCents: 50_000, spentCents: 3600, pace: 'under_pace' })
     expect(body.budget?.elapsedShare).toBeCloseTo(22 / 30)
+    expect(body.pace).toMatchObject({ budgetCents: 50_000, budgetByNowCents: Math.round((50_000 * 22) / 30) })
     // Filing it answers for it, so only the savings interest is still waiting.
     expect(body.reviewCount).toBe(1)
   })

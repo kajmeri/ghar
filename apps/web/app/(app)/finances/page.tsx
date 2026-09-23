@@ -13,7 +13,9 @@ import { LockIllustration } from '../_components/ui/illustrations'
 import { PageHeader } from '../_components/ui/page-header'
 import { BankConnections } from './_components/bank-connections'
 import { BudgetProgress } from './_components/budget-progress'
+import { MonthPace } from './_components/month-pace'
 import { MonthSummary } from './_components/month-summary'
+import { NetWorthGlance } from './_components/net-worth-glance'
 import { RecentCharges } from './_components/recent-charges'
 import { SpendBreakdown } from './_components/spend-breakdown'
 
@@ -60,9 +62,12 @@ export default async function FinancesPage() {
 
         {overview.budget === null ? null : <BudgetProgress budget={overview.budget} currency={household.currency} />}
 
+        <MonthPace pace={overview.pace} currency={household.currency} />
+
         <SpendBreakdown categories={overview.categories} month={month} currency={household.currency} />
 
         <div className='flex flex-col gap-3'>
+          {overview.netWorth === null ? null : <NetWorthGlance glance={overview.netWorth} currency={household.currency} />}
           {overview.budget === null ? (
             <Link href={budgetHref()} className={SECTION_LINK}>
               <span className='min-w-0'>
@@ -109,15 +114,17 @@ export default async function FinancesPage() {
             </span>
             <ChevronRight aria-hidden className='size-5 shrink-0 text-ink-muted' />
           </Link>
-          <Link href={NET_WORTH_PATH} className={SECTION_LINK}>
-            <span className='min-w-0'>
-              <span className='block font-medium'>Net worth</span>
-              <span className='block text-sm text-ink-muted'>
-                What you own less what you owe, including the house and anything Ghar can’t connect to
+          {overview.netWorth === null ? (
+            <Link href={NET_WORTH_PATH} className={SECTION_LINK}>
+              <span className='min-w-0'>
+                <span className='block font-medium'>Net worth</span>
+                <span className='block text-sm text-ink-muted'>
+                  What you own less what you owe, including the house and anything Ghar can’t connect to
+                </span>
               </span>
-            </span>
-            <ChevronRight aria-hidden className='size-5 shrink-0 text-ink-muted' />
-          </Link>
+              <ChevronRight aria-hidden className='size-5 shrink-0 text-ink-muted' />
+            </Link>
+          ) : null}
         </div>
 
         {overview.recent.length === 0 ? null : <RecentCharges transactions={overview.recent} currency={household.currency} />}
