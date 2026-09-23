@@ -1,6 +1,6 @@
-import type { CategoryMatcherTypeValue, CategoryRule, CategorySourceValue } from '@ghar/contracts'
+import type { CategoryMatcherTypeValue, CategoryRule, CategorySourceValue, TrendRangeValue } from '@ghar/contracts'
 import { formatCalendarDate, isCalendarDate, type CalendarDate } from '@ghar/core/dates'
-import { daysInPeriod, isMonthStart, parseAmountRange } from '@ghar/core/finances'
+import { daysInPeriod, DEFAULT_TREND_RANGE, isMonthStart, isTrendRange, parseAmountRange } from '@ghar/core/finances'
 import { formatCents } from '@ghar/core/money'
 
 // Names and URL shapes for the money pages. Nothing here decides anything: the figures are already
@@ -11,6 +11,22 @@ export const BUDGET_PATH = '/finances/budget'
 export const GOALS_PATH = '/finances/goals'
 export const CATEGORIES_PATH = '/finances/categories'
 export const RULES_PATH = '/finances/rules'
+export const TRENDS_PATH = '/finances/trends'
+
+export const TREND_RANGE_OPTIONS: { value: TrendRangeValue; label: string; name: string }[] = [
+  { value: '6M', label: '6M', name: 'Six months' },
+  { value: '12M', label: '12M', name: 'Twelve months' },
+]
+
+/** The range the trends page was asked for, or six months. */
+export function parseTrendRange(value: string | string[] | undefined): TrendRangeValue {
+  return typeof value === 'string' && isTrendRange(value) ? value : DEFAULT_TREND_RANGE
+}
+
+/** Leaves the default out, so the plain page is six months. */
+export function trendsHref(range: TrendRangeValue = DEFAULT_TREND_RANGE): string {
+  return range === DEFAULT_TREND_RANGE ? TRENDS_PATH : `${TRENDS_PATH}?range=${range}`
+}
 
 /** One month's plan. Without a month, the one the household is in. */
 export function budgetHref(periodStart?: string): string {

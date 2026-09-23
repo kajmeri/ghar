@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Pill } from '@/components/ui/pill'
 import { getPageSession } from '@/lib/api/authed'
 import { listConnections } from '@/lib/banking/service'
-import { budgetHref, CATEGORIES_PATH, GOALS_PATH, transactionsHref } from '@/lib/finances/display'
+import { budgetHref, CATEGORIES_PATH, GOALS_PATH, transactionsHref, TRENDS_PATH } from '@/lib/finances/display'
 import { loadMoneyOverview } from '@/lib/finances/overview'
 import { NET_WORTH_PATH } from '@/lib/networth/display'
 import { EmptyState } from '../_components/ui/empty-state'
@@ -88,6 +88,13 @@ export default async function FinancesPage() {
               <ChevronRight aria-hidden className='size-5 shrink-0 text-ink-muted' />
             </Link>
           ) : null}
+          <Link href={TRENDS_PATH} className={SECTION_LINK}>
+            <span className='min-w-0'>
+              <span className='block font-medium'>Spending over time</span>
+              <span className='block text-sm text-ink-muted'>What came in against what went out, month by month, and where it went</span>
+            </span>
+            <ChevronRight aria-hidden className='size-5 shrink-0 text-ink-muted' />
+          </Link>
           <Link href={GOALS_PATH} className={SECTION_LINK}>
             <span className='min-w-0'>
               <span className='block font-medium'>Goals</span>

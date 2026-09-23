@@ -5,6 +5,8 @@ import {
   CATEGORY_NAME_MAX_LENGTH,
   CATEGORY_SOURCES,
   MATCHER_VALUE_MAX_LENGTH,
+  spendingTrends,
+  TREND_RANGES,
 } from '@ghar/core/finances'
 import { describe, expect, it } from 'vitest'
 import {
@@ -13,7 +15,9 @@ import {
   categoryMatcherTypeSchema,
   categorySourceSchema,
   createCategory,
+  getSpendingTrends,
   saveCategoryRule,
+  trendRangeSchema,
 } from '../src/v1/finances'
 
 describe('finances contracts', () => {
@@ -22,6 +26,29 @@ describe('finances contracts', () => {
     expect(categoryColorTokenSchema.options).toEqual([...CATEGORY_COLOR_TOKENS])
     expect(categoryMatcherTypeSchema.options).toEqual([...CATEGORY_MATCHER_TYPES])
     expect(categorySourceSchema.options).toEqual([...CATEGORY_SOURCES])
+    expect(trendRangeSchema.options).toEqual([...TREND_RANGES])
+  })
+
+  it('carries what core works out for spending over time, once names are on it', () => {
+    const categoryId = '3f6f1f4e-1b2a-4c3d-8e9f-0a1b2c3d4e5f'
+    const trends = spendingTrends({
+      rows: [
+        { month: '2026-08-01', categoryId, spentCents: 40_000 },
+        { month: '2026-09-01', categoryId, spentCents: 10_000 },
+      ],
+      categories: [{ id: categoryId, parentId: null, kind: 'expense' }],
+      today: '2026-09-23',
+      range: '6M',
+    })
+    const named = {
+      ...trends,
+      today: '2026-09-23',
+      categories: trends.categories.map(category => ({ ...category, name: 'Food', icon: 'utensils', colorToken: 'ink-muted' })),
+      merchants: [],
+      changes: trends.changes.map(change => ({ ...change, name: 'Food' })),
+    }
+    expect(getSpendingTrends.response.parse(named)).toEqual(named)
+    expect(getSpendingTrends.query?.parse({})).toEqual({ range: '6M' })
   })
 
   it('holds a category name and a matcher to the same lengths core does', () => {

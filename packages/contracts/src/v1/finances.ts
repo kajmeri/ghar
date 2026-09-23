@@ -10,6 +10,7 @@ import {
   queryBooleanSchema,
   shortTextSchema,
 } from './shared'
+import { chartDomainSchema } from './networth'
 
 // Accounts and categories as a picker needs them: where a bill is paid from, and what a charge is
 // filed under. Balances and anything from Plaid beyond the account's name stay out.
@@ -376,6 +377,95 @@ export const getMoneyOverview = defineEndpoint({
   method: 'GET',
   path: '/api/v1/finances/overview',
   response: moneyOverviewSchema,
+})
+
+// ---------------------------------------------------------------------------------------------
+// Spending over time: month by month, and how each category moved. Mirrors SpendingTrends in
+// @ghar/core/finances, with names put on the categories.
+
+export const trendRangeSchema = z.enum(['6M', '12M'])
+export type TrendRangeValue = z.infer<typeof trendRangeSchema>
+
+export const trendMonthSchema = z.object({
+  /** The month's first day. */
+  month: calendarDateSchema,
+  spentCents: centsSchema,
+  incomeCents: centsSchema,
+  /** What came in less what went out. Negative when more went out. */
+  keptCents: centsSchema,
+  /** The month the household is in, which isn't over yet. */
+  partial: z.boolean(),
+})
+
+export const trendCategorySchema = z.object({
+  /** A top-level expense category, or null for money out nobody has filed yet. */
+  categoryId: z.uuid().nullable(),
+  name: z.string(),
+  icon: categoryIconSchema,
+  colorToken: categoryColorTokenSchema,
+  /** One figure per month, in the order of `months`. */
+  monthlyCents: z.array(centsSchema),
+  totalCents: centsSchema,
+  /** Over the whole months only. Null before there is one. */
+  averageCents: centsSchema.nullable(),
+  /** The biggest month, which the category's own bars are drawn against. */
+  peakCents: centsSchema,
+})
+export type TrendCategory = z.infer<typeof trendCategorySchema>
+
+export const trendMerchantSchema = z.object({
+  merchant: z.string(),
+  spentCents: centsSchema,
+  transactionCount: z.int().nonnegative(),
+  /** This merchant's part of everything spent in the range, 0 to 1. */
+  share: z.number().min(0).max(1),
+})
+
+export const trendChangeSchema = z.object({
+  categoryId: z.uuid(),
+  name: z.string(),
+  month: calendarDateSchema,
+  previousMonth: calendarDateSchema,
+  currentCents: centsSchema,
+  previousCents: centsSchema,
+  /** Positive when spending went up. */
+  changeCents: centsSchema,
+  /** The change as a share of the month before, or null when that month had nothing. */
+  changeShare: z.number().nullable(),
+})
+
+export const spendingTrendsSchema = z.object({
+  range: trendRangeSchema,
+  today: calendarDateSchema,
+  /**
+   * empty: nothing came in or went out in the range. starting: only the month so far has, so there
+   * is nothing to compare it with. ready: draw it.
+   */
+  status: z.enum(['empty', 'starting', 'ready']),
+  /** Month starts, oldest first, ending with the month the household is in. Months before the first charge are left off. */
+  months: z.array(calendarDateSchema),
+  monthly: z.array(trendMonthSchema),
+  /** Whether anything came in over the range. Without it, what was kept means nothing, so leave it out. */
+  tracksIncome: z.boolean(),
+  /** For money in and spending side by side, both from zero. */
+  domain: chartDomainSchema,
+  averageSpentCents: centsSchema.nullable(),
+  averageIncomeCents: centsSchema.nullable(),
+  /** Biggest over the range first, with money nobody has filed last. */
+  categories: z.array(trendCategorySchema),
+  /** Where the money went over the range, by merchant, biggest first. */
+  merchants: z.array(trendMerchantSchema),
+  /** The last whole month against the one before, where a category moved enough to mention. */
+  changes: z.array(trendChangeSchema),
+})
+export type SpendingTrendsValue = z.infer<typeof spendingTrendsSchema>
+
+/** Owners and adults. Spending and money in, month by month, over the last six or twelve months. */
+export const getSpendingTrends = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/finances/trends',
+  query: z.object({ range: trendRangeSchema.default('6M') }),
+  response: spendingTrendsSchema,
 })
 
 // ---------------------------------------------------------------------------------------------

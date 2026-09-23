@@ -56,6 +56,7 @@ const EXEMPT: Record<string, string> = {
   listCategoryRules: 'the household’s filing rules, in the order they run, which a page would break',
   getBudget: 'one month’s plan: a line per category the household planned for, and the month’s own totals',
   getMoneyOverview: 'the month in one answer: a few top categories and the newest few charges, both capped by the server',
+  getSpendingTrends: 'at most twelve months, a category per top-level category and a capped list of merchants',
   listPeople: 'the household’s own people, a handful of rows, which pickers need whole',
   syncChanges: 'it has its own cursor',
 }
