@@ -7,12 +7,14 @@ import type { Metadata } from 'next'
 import { getPageContext } from '@/lib/auth/context'
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/lib/households/roles'
 import * as households from '@/lib/households/service'
+import * as people from '@/lib/people/service'
 import { Avatar } from '../../_components/ui/avatar'
 import { PageHeader } from '../../_components/ui/page-header'
 import { SectionHeader } from '../../_components/ui/section-header'
 import { InvitationControls } from './_components/invitation-controls'
 import { InviteForm } from './_components/invite-form'
 import { MemberControls } from './_components/member-controls'
+import { AddPersonForm, PersonControls } from './_components/people-controls'
 
 export const metadata: Metadata = { title: 'Household' }
 
@@ -23,12 +25,16 @@ export default async function HouseholdSettingsPage() {
   const canInvite = can(ctx.role, 'members.invite')
   const canChangeRole = can(ctx.role, 'members.changeRole')
   const canRemove = can(ctx.role, 'members.remove')
+  const canManagePeople = can(ctx.role, 'people.manage')
 
-  const [{ household }, members, invitations] = await Promise.all([
+  const [{ household }, members, invitations, everyone] = await Promise.all([
     households.getMyHousehold(ctx, session),
     households.listMembers(ctx),
     canInvite ? households.listInvitations(ctx) : Promise.resolve<Invitation[]>([]),
+    people.listPeople(ctx),
   ])
+  // Members are listed above. These are the others: children, and anyone who has left.
+  const others = everyone.filter(person => person.userId === null)
   const inviteRoles = INVITABLE_ROLES[ctx.role].map(value => ({
     value,
     label: ROLE_LABELS[value],
@@ -81,6 +87,41 @@ export default async function HouseholdSettingsPage() {
             })}
           </ul>
           {canInvite && !canRemove ? <p className='mt-3 text-sm text-ink-muted'>Only owners change roles or remove people.</p> : null}
+        </section>
+
+        <section id='people' aria-labelledby='people-heading' className='scroll-mt-6'>
+          <SectionHeader
+            id='people-heading'
+            title={
+              <>
+                Without an account <span className='font-normal text-ink-muted'>{others.length}</span>
+              </>
+            }
+            description='Children, and anyone else whose passport, renewals or trips you keep track of. They can’t sign in.'
+          />
+          {others.length === 0 ? (
+            <p className='mb-3 rounded-card border border-line bg-surface p-4 text-ink-muted'>
+              {canManagePeople
+                ? 'Add a child here to keep their passport and trips with everyone else’s.'
+                : 'Ask an owner or adult to add a child or anyone else without an account.'}
+            </p>
+          ) : (
+            <ul className='mb-3 flex flex-col gap-3'>
+              {others.map(person => {
+                const name = person.name ?? 'Unnamed'
+                return (
+                  <li key={person.id} className='rounded-card border border-line bg-surface p-4'>
+                    <div className='flex items-center gap-3'>
+                      <Avatar name={name} />
+                      <p className='min-w-0 flex-1 font-medium break-words'>{name}</p>
+                    </div>
+                    {canManagePeople ? <PersonControls personId={person.id} name={name} /> : null}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          {canManagePeople ? <AddPersonForm /> : null}
         </section>
 
         {canInvite ? (

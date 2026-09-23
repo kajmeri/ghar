@@ -3,11 +3,14 @@ import type { PageQuery, TravelHub, TravelMode, TripDetail } from '@ghar/contrac
 import { can } from '@ghar/core/auth'
 import { todayInTimeZone } from '@ghar/core/dates'
 import { plannedCents } from '@ghar/core/itinerary'
+import { tripDocumentIssues } from '@ghar/core/people'
 import {
   countPastTrips,
   getTripWithCounts,
   listItinerary,
   listMembers,
+  listPassports,
+  listPeople,
   listPackingItems,
   listPackingItemsPage,
   listPackingTemplatesPage,
@@ -23,6 +26,7 @@ import {
 import type { Session } from '../api/authed'
 import { pageRequest, pageResponse } from '../api/cursor'
 import { getDb } from '../db'
+import { toPerson } from '../people/service'
 import { decisionsFor, itineraryView, travelersOn } from './itinerary'
 import {
   toBooking,
@@ -77,21 +81,34 @@ export async function loadTripDetail(session: Session, tripId: string): Promise<
   const db = getDb()
   const { context, household } = session
 
-  const [trip, members, itinerary, bookings, packing, actualCents] = await Promise.all([
+  const [trip, members, people, itinerary, bookings, packing, actualCents] = await Promise.all([
     getTripWithCounts(context, db, tripId),
     listMembers(context, db),
+    listPeople(context, db),
     listItinerary(context, db, tripId),
     listTripBookings(context, db, { tripId }),
     listPackingItems(context, db, tripId),
     sumTripActualCents(context, db, tripId),
   ])
   const travelers = travelersOn(trip)
+  const today = todayInTimeZone(household.timeZone)
+
+  // Only someone who can see sensitive documents sees passports, so only they get the check:
+  // anyone else would be told a traveller has no passport when they do.
+  // A trip at home has nothing to check, so it skips the read.
+  const documentIssues = !can(context.role, 'documents.viewSensitive')
+    ? null
+    : trip.international
+      ? tripDocumentIssues(trip, trip.travellerIds, await listPassports(context, db, trip.travellerIds), today)
+      : []
 
   return {
     trip: toTrip(trip),
     timeZone: household.timeZone,
-    today: todayInTimeZone(household.timeZone),
+    today,
     members: members.map(toHouseholdMember),
+    people: people.map(toPerson),
+    documentIssues,
     itinerary: await itineraryView(itinerary, travelers, household.timeZone),
     bookings: bookings.map(toBooking),
     packing: packing.map(toPackingItem),

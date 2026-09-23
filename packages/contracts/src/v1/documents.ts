@@ -3,7 +3,7 @@ import { defineEndpoint } from '../endpoint'
 import { calendarDateSchema, instantSchema, longTextSchema, pageQuerySchema, pageSchema, shortTextSchema } from './shared'
 
 // These lists mirror @ghar/core/documents. A test keeps them equal.
-export const documentKindSchema = z.enum(['insurance', 'warranty', 'tax', 'medical', 'legal', 'id', 'property', 'other'])
+export const documentKindSchema = z.enum(['insurance', 'warranty', 'tax', 'medical', 'legal', 'id', 'passport', 'property', 'other'])
 export type DocumentKindValue = z.infer<typeof documentKindSchema>
 export const documentMimeTypeSchema = z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'])
 export type DocumentMimeTypeValue = z.infer<typeof documentMimeTypeSchema>
@@ -40,6 +40,10 @@ export const documentSchema = z.object({
   referenceNumber: z.string().nullable(),
   assetId: z.uuid().nullable(),
   assetName: z.string().nullable(),
+  /** Whose it is. */
+  personId: z.uuid().nullable(),
+  /** What to call them, as personLabel says it for the caller. Null when it's nobody's. */
+  personName: z.string().nullable(),
   notes: z.string().nullable(),
   uploadedBy: z.uuid().nullable(),
   /** Only owners and adults ever receive one of these. */
@@ -60,6 +64,7 @@ const documentFieldsSchema = z.object({
   issuer: shortTextSchema.nullable().default(null),
   referenceNumber: shortTextSchema.nullable().default(null),
   assetId: z.uuid().nullable().default(null),
+  personId: z.uuid().nullable().default(null),
   notes: longTextSchema.nullable().default(null),
   /** Owners and adults only. */
   isSensitive: z.boolean().default(false),

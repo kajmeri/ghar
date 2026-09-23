@@ -19,6 +19,7 @@ import type { DocumentFile, DocumentWithAssetRow, PageRequest } from '@ghar/db/q
 import type { Session } from '@/lib/api/authed'
 import { collectPage, pageRequest, pageResponse, type PageResult } from '@/lib/api/cursor'
 import { getDb } from '@/lib/db'
+import { personNameFor } from '@/lib/people/service'
 import { getStorageProvider } from '@/lib/providers/storage'
 
 // What the /api/v1/documents routes and the documents pages call. The queries decide who sees
@@ -26,7 +27,7 @@ import { getStorageProvider } from '@/lib/providers/storage'
 // arrived, and a link to read it that stops working in minutes. A storage path never leaves the server.
 
 /** Rows in, contract out. The storage path stays behind. */
-export function toDocument(row: DocumentWithAssetRow, today: CalendarDate): HouseholdDocument {
+export function toDocument(row: DocumentWithAssetRow, today: CalendarDate, currentUserId: string): HouseholdDocument {
   const leadDays = reminderLeadDays({ kind: 'document', documentKind: row.kind }, row.remindFromDays)
   return {
     id: row.id,
@@ -43,6 +44,8 @@ export function toDocument(row: DocumentWithAssetRow, today: CalendarDate): Hous
     referenceNumber: row.referenceNumber,
     assetId: row.assetId,
     assetName: row.assetName,
+    personId: row.personId,
+    personName: personNameFor(row, currentUserId),
     notes: row.notes,
     uploadedBy: row.uploadedBy,
     isSensitive: row.isSensitive,
@@ -60,7 +63,7 @@ export async function listDocuments(
   const rows = await queries.listDocuments(session.context, getDb(), { kind: query.kind, assetId: query.assetId })
   const q = query.q?.trim()
   const today = householdToday(session)
-  return (q ? searchDocuments(rows, q) : rows).map(row => toDocument(row, today))
+  return (q ? searchDocuments(rows, q) : rows).map(row => toDocument(row, today, session.context.userId))
 }
 
 /** A page of documents for the API, newest first, with the same filters and sensitivity rule as the page. */
@@ -76,11 +79,11 @@ export async function listDocumentsPage(
   const request = pageRequest(query, scope)
   const page = q ? await collectPage(fetchPage, request, row => searchDocuments([row], q).length > 0) : await fetchPage(request)
   const today = householdToday(session)
-  return pageResponse(page, scope, row => toDocument(row, today))
+  return pageResponse(page, scope, row => toDocument(row, today, session.context.userId))
 }
 
 export async function getDocument(session: Session, documentId: string): Promise<HouseholdDocument> {
-  return toDocument(await queries.getDocument(session.context, getDb(), documentId), householdToday(session))
+  return toDocument(await queries.getDocument(session.context, getDb(), documentId), householdToday(session), session.context.userId)
 }
 
 /** Step one of adding a document: a fresh path in this household's folder and a link that takes one upload. */
@@ -105,7 +108,7 @@ export async function createDocument(session: Session, body: CreateDocumentBody)
   const { storagePath, ...fields } = body
   const file = await verifyUploadedFile(session, storagePath)
   const row = await queries.createDocument(context, getDb(), { ...fields, ...file })
-  return toDocument(row, householdToday(session))
+  return toDocument(row, householdToday(session), session.context.userId)
 }
 
 /**
@@ -134,7 +137,7 @@ export async function verifyUploadedFile(session: Session, storagePath: string):
 }
 
 export async function updateDocument(session: Session, documentId: string, body: DocumentBody): Promise<HouseholdDocument> {
-  return toDocument(await queries.updateDocument(session.context, getDb(), documentId, body), householdToday(session))
+  return toDocument(await queries.updateDocument(session.context, getDb(), documentId, body), householdToday(session), session.context.userId)
 }
 
 export async function deleteDocument(session: Session, documentId: string): Promise<{ documentId: string }> {

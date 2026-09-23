@@ -66,6 +66,7 @@ export default async function RenewalPage({ params }: PageProps<'/renewals/[rene
       ),
     },
     { label: renews ? 'Renews on' : 'Runs out on', value: <span className='tabular-nums'>{formatCalendarDate(renewal.expiresOn)}</span> },
+    renewal.personName === null ? null : { label: 'Whose it is', value: renewal.personName },
     renewal.cadenceMonths === null ? null : { label: 'How often', value: renewalCadenceLabel(renewal.cadenceMonths) },
     next === null ? null : { label: 'Renewed, it runs to', value: <span className='tabular-nums'>{formatCalendarDate(next)}</span> },
     renewal.costCents === null

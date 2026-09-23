@@ -58,7 +58,7 @@ const trip = {
   coverImageUrl: null,
   budgetCents: null,
   notes: null,
-  memberUserIds: [],
+  travellerIds: [],
 } as const
 
 const slot = {
@@ -80,6 +80,7 @@ const document = (title: string, isSensitive: boolean) => ({
   issuer: null,
   referenceNumber: null,
   assetId: null,
+  personId: null,
   notes: null,
   isSensitive,
   storagePath: documentStoragePath(owner.householdId, crypto.randomUUID(), 'application/pdf'),

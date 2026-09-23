@@ -14,6 +14,10 @@ export default function Loading() {
         </div>
         <div>
           <SectionHeaderSkeleton />
+          <CardSkeleton lines={2} />
+        </div>
+        <div>
+          <SectionHeaderSkeleton />
           <CardSkeleton lines={4} />
         </div>
       </div>

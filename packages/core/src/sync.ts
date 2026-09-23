@@ -8,6 +8,7 @@
 export const SYNC_ENTITIES = [
   'household',
   'member',
+  'person',
   'invitation',
   'account',
   'category',

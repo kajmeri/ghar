@@ -1,12 +1,13 @@
 'use client'
 
-import { deleteTrip, updateTrip, type HouseholdMember, type Trip } from '@ghar/contracts'
-import { compareMembers, memberLabel } from '@ghar/core/household'
+import { deleteTrip, updateTrip, type Person, type Trip } from '@ghar/contracts'
+import { comparePeople, personLabel } from '@ghar/core/people'
 import { parseMoneyInput } from '@ghar/core/money'
 import { TRIP_STATUSES, type TripStatus } from '@ghar/core/trips'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useId, useRef, useState, type SyntheticEvent } from 'react'
+import { CheckboxField } from '@/app/(app)/_components/ui/checkbox-field'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Field, Input, Select, Textarea } from '@/components/ui/field'
@@ -26,7 +27,7 @@ const STATUS_LABEL: Record<TripStatus, string> = {
  * Editing the trip itself. Mostly this is where an idea gets its dates, which is the
  * moment it stops being an idea, so the status follows along unless you set it yourself.
  */
-export function TripSettings({ trip, members, currentUserId }: { trip: Trip; members: HouseholdMember[]; currentUserId: string }) {
+export function TripSettings({ trip, people, currentUserId }: { trip: Trip; people: Person[]; currentUserId: string }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -41,7 +42,8 @@ export function TripSettings({ trip, members, currentUserId }: { trip: Trip; mem
       params: { tripId: trip.id },
       body: {
         // Checkboxes send nothing when unticked, so the roster is whatever is ticked now.
-        memberUserIds: form.getAll('memberUserIds').filter(id => typeof id === 'string'),
+        travellerIds: form.getAll('travellerIds').filter(id => typeof id === 'string'),
+        international: form.get('international') === 'on',
         name: formText(form, 'name'),
         destination: formText(form, 'destination') || null,
         status: formText(form, 'status') as TripStatus,
@@ -152,26 +154,35 @@ export function TripSettings({ trip, members, currentUserId }: { trip: Trip; mem
           <fieldset className='md:col-span-2'>
             <legend className='text-sm font-medium'>Who is going</legend>
             <div className='mt-2 flex flex-wrap gap-x-5 gap-y-2'>
-              {[...members].sort(compareMembers(currentUserId)).map(member => (
-                <label key={member.userId} className='flex min-h-tap items-center gap-2'>
+              {[...people].sort(comparePeople(currentUserId)).map(person => (
+                <label key={person.id} className='flex min-h-tap items-center gap-2'>
                   <input
                     type='checkbox'
-                    name='memberUserIds'
-                    value={member.userId}
-                    defaultChecked={trip.memberUserIds.includes(member.userId)}
+                    name='travellerIds'
+                    value={person.id}
+                    defaultChecked={trip.travellerIds.includes(person.id)}
                     className='size-5 accent-ink'
                   />
-                  {memberLabel(member, currentUserId)}
+                  {personLabel(person, currentUserId)}
                 </label>
               ))}
             </div>
             <p className='mt-1 text-xs text-ink-muted'>
-              Names come from your household.{' '}
-              <Link href='/household' className='underline underline-offset-4'>
-                Change them
+              Someone missing, like a child without an account?{' '}
+              <Link href='/settings/household#people' className='underline underline-offset-4'>
+                Add them to the household
               </Link>
             </p>
           </fieldset>
+
+          <div className='md:col-span-2'>
+            <CheckboxField
+              name='international'
+              defaultChecked={trip.international}
+              label='Leaving the country'
+              hint='Checks that everyone going has a passport that lasts the trip.'
+            />
+          </div>
         </div>
 
         <FormError>{budgetError ?? save.error ?? remove.error}</FormError>

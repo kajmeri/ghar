@@ -5,7 +5,7 @@ import { matchesSearch } from './search'
 // The household's paperwork: what a document is, who may see it, where its file lives, and when it
 // needs renewing. Signing URLs and moving bytes are I/O, so they live in apps/web.
 
-export const DOCUMENT_KINDS = ['insurance', 'warranty', 'tax', 'medical', 'legal', 'id', 'property', 'other'] as const
+export const DOCUMENT_KINDS = ['insurance', 'warranty', 'tax', 'medical', 'legal', 'id', 'passport', 'property', 'other'] as const
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number]
 
 export const DOCUMENT_TITLE_MAX_LENGTH = 200

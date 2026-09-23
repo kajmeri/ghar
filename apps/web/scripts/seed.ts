@@ -386,7 +386,7 @@ async function ensureDemoTrip(db: Database, owner: RequestContext, adult: Reques
     coverImageUrl: null,
     budgetCents: DEMO_TRIP.budgetCents,
     notes: null,
-    memberUserIds: [adult.userId],
+    travellerIds: [await queries.requireOwnPerson(adult, db)],
   })
 
   for (const demo of demoSlots(today)) {

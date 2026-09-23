@@ -2,17 +2,19 @@ import { requirePermission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
 import type { TripStatus } from '@ghar/core/trips'
 import { and, count, eq, getTableColumns, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
-import { bookings, itinerarySlots, packingItems, tripMembers, trips } from '../schema'
+import { bookings, itinerarySlots, packingItems, trips, tripTravellers } from '../schema'
 import { recordAudit } from './audit'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
-import { requireHouseholdMembers, requireTrip, type TripRow } from './scope'
+import { requireHouseholdPeople, requireOwnPerson } from './people'
+import { requireTrip, type TripRow } from './scope'
 import type { Db, RequestContext } from './types'
 
 // Trips: the dated container bookings, the itinerary, packing and tagged charges hang off.
 
 /** A trip with the counts its card shows, so a list does not cost one query per trip. */
 export interface TripWithCounts extends TripRow {
-  readonly memberUserIds: string[]
+  /** Household people going, by person id. */
+  readonly travellerIds: string[]
   readonly slotCount: number
   /** Slots still open: being debated, or waiting for a first option. */
   readonly openDecisionCount: number
@@ -96,14 +98,16 @@ export interface CreateTripInput {
   readonly coverImageUrl: string | null
   readonly budgetCents: number | null
   readonly notes: string | null
-  readonly memberUserIds: readonly string[]
+  readonly international?: boolean
+  /** People going besides whoever creates it, who always is. */
+  readonly travellerIds: readonly string[]
 }
 
 /** Whoever creates a trip is on it; nobody plans a trip they are not going on by accident. */
 export async function createTrip(ctx: RequestContext, db: Db, input: CreateTripInput): Promise<TripWithCounts> {
   requirePermission(ctx, 'travel.manage')
-  const userIds = [...new Set([ctx.userId, ...input.memberUserIds])]
-  await requireHouseholdMembers(ctx, db, userIds)
+  const travellerIds = [...new Set([await requireOwnPerson(ctx, db), ...input.travellerIds])]
+  await requireHouseholdPeople(ctx, db, travellerIds)
 
   return db.transaction(async tx => {
     const [trip] = await tx
@@ -117,27 +121,28 @@ export async function createTrip(ctx: RequestContext, db: Db, input: CreateTripI
         status: input.status,
         coverImageUrl: input.coverImageUrl,
         budgetCents: input.budgetCents,
+        international: input.international ?? false,
         notes: input.notes,
       })
       .returning()
     if (!trip) throw new Error('The trip was not created')
 
-    await tx.insert(tripMembers).values(userIds.map(userId => ({ tripId: trip.id, userId })))
+    await tx.insert(tripTravellers).values(travellerIds.map(personId => ({ tripId: trip.id, personId })))
     await recordAudit(ctx, tx, { action: 'trip.created', entity: 'trip', entityId: trip.id })
 
-    return { ...trip, ...emptyCounts, memberUserIds: userIds }
+    return { ...trip, ...emptyCounts, travellerIds }
   })
 }
 
-export type UpdateTripInput = Partial<Omit<CreateTripInput, 'memberUserIds'>> & {
-  readonly memberUserIds?: readonly string[]
+export type UpdateTripInput = Partial<Omit<CreateTripInput, 'travellerIds'>> & {
+  readonly travellerIds?: readonly string[]
 }
 
 export async function updateTrip(ctx: RequestContext, db: Db, tripId: string, patch: UpdateTripInput): Promise<TripWithCounts> {
   requirePermission(ctx, 'travel.manage')
   await requireTrip(ctx, db, tripId)
-  const { memberUserIds, ...columns } = patch
-  if (memberUserIds) await requireHouseholdMembers(ctx, db, memberUserIds)
+  const { travellerIds, ...columns } = patch
+  if (travellerIds) await requireHouseholdPeople(ctx, db, travellerIds)
 
   await db.transaction(async tx => {
     if (Object.keys(columns).length > 0) {
@@ -146,12 +151,12 @@ export async function updateTrip(ctx: RequestContext, db: Db, tripId: string, pa
         .set({ ...columns, updatedAt: sql`now()` })
         .where(and(eq(trips.id, tripId), eq(trips.householdId, ctx.householdId)))
     }
-    if (memberUserIds) {
-      // Replace the roster wholesale: a PATCH that sends members is stating who is going.
-      await tx.delete(tripMembers).where(eq(tripMembers.tripId, tripId))
-      const userIds = [...new Set(memberUserIds)]
-      if (userIds.length > 0) {
-        await tx.insert(tripMembers).values(userIds.map(userId => ({ tripId, userId })))
+    if (travellerIds) {
+      // Replace the roster wholesale: a PATCH that sends travellers is stating who is going.
+      await tx.delete(tripTravellers).where(eq(tripTravellers.tripId, tripId))
+      const personIds = [...new Set(travellerIds)]
+      if (personIds.length > 0) {
+        await tx.insert(tripTravellers).values(personIds.map(personId => ({ tripId, personId })))
       }
     }
     await recordAudit(ctx, tx, {
@@ -197,8 +202,12 @@ async function withCounts(db: Db, rows: TripRow[]): Promise<TripWithCounts[]> {
   if (rows.length === 0) return []
   const tripIds = rows.map(trip => trip.id)
 
-  const [members, itineraryCounts, bookingCounts, packingCounts] = await Promise.all([
-    db.select({ tripId: tripMembers.tripId, userId: tripMembers.userId }).from(tripMembers).where(inArray(tripMembers.tripId, tripIds)),
+  const [travellers, itineraryCounts, bookingCounts, packingCounts] = await Promise.all([
+    db
+      .select({ tripId: tripTravellers.tripId, personId: tripTravellers.personId })
+      .from(tripTravellers)
+      .where(inArray(tripTravellers.tripId, tripIds))
+      .orderBy(tripTravellers.createdAt, tripTravellers.personId),
     db
       .select({
         tripId: itinerarySlots.tripId,
@@ -220,11 +229,11 @@ async function withCounts(db: Db, rows: TripRow[]): Promise<TripWithCounts[]> {
       .groupBy(packingItems.tripId),
   ])
 
-  const memberIds = new Map<string, string[]>()
-  for (const { tripId, userId } of members) {
-    const existing = memberIds.get(tripId)
-    if (existing) existing.push(userId)
-    else memberIds.set(tripId, [userId])
+  const travellerIds = new Map<string, string[]>()
+  for (const { tripId, personId } of travellers) {
+    const existing = travellerIds.get(tripId)
+    if (existing) existing.push(personId)
+    else travellerIds.set(tripId, [personId])
   }
   const itineraryByTrip = new Map(itineraryCounts.map(row => [row.tripId, row]))
   const bookingsByTrip = new Map(bookingCounts.flatMap(row => (row.tripId === null ? [] : [[row.tripId, row.value] as const])))
@@ -232,7 +241,7 @@ async function withCounts(db: Db, rows: TripRow[]): Promise<TripWithCounts[]> {
 
   return rows.map(trip => ({
     ...trip,
-    memberUserIds: memberIds.get(trip.id) ?? [],
+    travellerIds: travellerIds.get(trip.id) ?? [],
     slotCount: itineraryByTrip.get(trip.id)?.value ?? 0,
     openDecisionCount: itineraryByTrip.get(trip.id)?.open ?? 0,
     bookingCount: bookingsByTrip.get(trip.id) ?? 0,

@@ -250,6 +250,7 @@ describe('the daily digest', () => {
       contactId: null,
       assetId: null,
       documentId: null,
+      personId: null,
       notes: null,
     })
     await prefer(owner, { sections: ['upkeep'] })

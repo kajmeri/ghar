@@ -8,6 +8,7 @@ import { useId, useState, type SyntheticEvent } from 'react'
 import { CheckboxField } from '@/app/(app)/_components/ui/checkbox-field'
 import { DateField } from '@/app/(app)/_components/ui/date-field'
 import { MoneyInput } from '@/app/(app)/_components/ui/money-input'
+import { PersonField } from '@/app/(app)/_components/ui/person-field'
 import { ReminderLeadField, remindFromDaysOf } from '@/app/(app)/_components/ui/reminder-lead-field'
 import { Sheet, SheetClose } from '@/app/(app)/_components/ui/sheet'
 import { Button } from '@/components/ui/button'
@@ -73,6 +74,7 @@ export function RenewalSheet({ renewal, options, currency }: { renewal?: Renewal
       url: withScheme(formText(data, 'url')) || null,
       contactId: formText(data, 'contactId') || null,
       assetId: formText(data, 'assetId') || null,
+      personId: formText(data, 'personId') || null,
       documentId: hiddenDocument ? (renewal.documentId ?? null) : formText(data, 'documentId') || null,
       notes: formText(data, 'notes') || null,
     })
@@ -154,6 +156,8 @@ export function RenewalSheet({ renewal, options, currency }: { renewal?: Renewal
         </Field>
 
         <ReminderLeadField value={renewal?.remindFromDays} defaultLeadDays={DEFAULT_REMINDER_LEAD_DAYS} />
+
+        <PersonField people={options.people} defaultValue={renewal?.personId ?? null} hint='A driving licence or a membership belongs to someone.' />
 
         <MoneyInput
           id={`${formId}-cost`}

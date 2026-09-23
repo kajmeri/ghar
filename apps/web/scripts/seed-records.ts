@@ -163,6 +163,7 @@ async function ensureDocuments(db: Database, input: RecordsSeedInput, assetIds: 
       issuer: demo.issuer,
       referenceNumber: demo.referenceNumber,
       assetId: demo.asset === null ? null : (assetIds.get(demo.asset) ?? null),
+      personId: null,
       notes: demo.notes,
       isSensitive: demo.isSensitive,
       storagePath,

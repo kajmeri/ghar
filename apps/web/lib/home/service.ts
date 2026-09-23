@@ -179,7 +179,7 @@ export async function getAssetDetail(session: Session, assetId: string): Promise
   return {
     asset: toAsset(asset, today),
     tasks: tasks.map(task => toMaintenanceTask(task, today)),
-    documents: documents.map(document => toDocument(document, today)),
+    documents: documents.map(document => toDocument(document, today, context.userId)),
     history: history.map(toLogEntry),
   }
 }

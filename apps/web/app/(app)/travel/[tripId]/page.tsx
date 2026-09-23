@@ -11,6 +11,7 @@ import { densityCookieName, parseDensity } from '@/lib/travel/itinerary-display'
 import { loadTripBudget, loadTripDetail, loadTripIdeas } from '@/lib/travel/trips'
 import { BudgetPanel } from './_components/budget-panel'
 import { ItineraryPanel } from './_components/itinerary-panel'
+import { PassportsCard } from './_components/passports-card'
 import { PackingPanel } from './_components/packing-panel'
 import { TripSettings } from './_components/trip-settings'
 import { TripTabs, type TripTab } from './_components/trip-tabs'
@@ -72,7 +73,7 @@ export default async function TripPage({
           </div>
 
           <div className='flex flex-wrap items-center gap-2'>
-            <TripSettings trip={trip} members={detail.members} currentUserId={userId} />
+            <TripSettings trip={trip} people={detail.people} currentUserId={userId} />
             {phase === 'current' || phase === 'upcoming' ? (
               <Button asChild variant={phase === 'current' ? 'default' : 'outline'}>
                 <Link href={`/travel/${trip.id}/mode`}>Travel mode</Link>
@@ -81,6 +82,17 @@ export default async function TripPage({
           </div>
         </div>
       </header>
+
+      {trip.international && detail.documentIssues !== null && phase !== 'past' ? (
+        <PassportsCard
+          issues={detail.documentIssues}
+          people={detail.people}
+          travellerIds={trip.travellerIds}
+          currentUserId={userId}
+          today={today}
+          canEdit={can(role, 'travel.manage')}
+        />
+      ) : null}
 
       <TripTabs tripId={trip.id} active={tab} />
 
@@ -98,7 +110,7 @@ export default async function TripPage({
           tripId={trip.id}
           items={detail.packing}
           members={detail.members}
-          travellingUserIds={trip.memberUserIds}
+          travellingUserIds={detail.people.flatMap(person => (person.userId !== null && trip.travellerIds.includes(person.id) ? [person.userId] : []))}
           currentUserId={userId}
         />
       ) : (

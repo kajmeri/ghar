@@ -2,6 +2,7 @@ import { BILL_CADENCES } from '@ghar/core/bills'
 import { DOCUMENT_KINDS, DOCUMENT_MIME_TYPES, MAX_DOCUMENT_BYTES } from '@ghar/core/documents'
 import { ASSET_KINDS } from '@ghar/core/home'
 import { EXPIRY_SUBJECT_KINDS, REMINDER_LEAD_DAYS_MAX, REMINDER_LEAD_DAYS_MIN } from '@ghar/core/expiries'
+import { PERSON_NAME_MAX_LENGTH, tripDocumentIssuePhrase, tripDocumentIssueTone } from '@ghar/core/people'
 import { MAX_RENEWAL_CADENCE_MONTHS, MAX_RENEWAL_CENTS, RENEWAL_KINDS } from '@ghar/core/renewals'
 import { describe, expect, it } from 'vitest'
 import { billBodySchema, billCadenceSchema } from '../src/v1/bills'
@@ -16,6 +17,7 @@ import {
   REMINDER_LEAD_MIN_DAYS,
 } from '../src/v1/documents'
 import { assetKindSchema, completeMaintenanceBodySchema } from '../src/v1/home'
+import { PERSON_NAME_MAX, personBodySchema, tripDocumentIssueKindSchema } from '../src/v1/people'
 import { expiryKindSchema, RENEWAL_MAX_CADENCE_MONTHS, RENEWAL_MAX_CENTS, renewalBodySchema, renewalKindSchema } from '../src/v1/renewals'
 
 describe('household operations lists', () => {
@@ -30,6 +32,12 @@ describe('household operations lists', () => {
     expect(RENEWAL_MAX_CADENCE_MONTHS).toBe(MAX_RENEWAL_CADENCE_MONTHS)
     expect(RENEWAL_MAX_CENTS).toBe(MAX_RENEWAL_CENTS)
     expect([REMINDER_LEAD_MIN_DAYS, REMINDER_LEAD_MAX_DAYS]).toEqual([REMINDER_LEAD_DAYS_MIN, REMINDER_LEAD_DAYS_MAX])
+    expect(PERSON_NAME_MAX).toBe(PERSON_NAME_MAX_LENGTH)
+    // Every kind tripDocumentIssues can report has a phrase and a tone.
+    for (const kind of tripDocumentIssueKindSchema.options) {
+      expect(tripDocumentIssuePhrase({ kind, expiresOn: '2027-01-01' }, '2026-09-23')).not.toBe('')
+      expect(['negative', 'caution']).toContain(tripDocumentIssueTone(kind))
+    }
   })
 })
 
@@ -49,6 +57,7 @@ describe('renewal bodies', () => {
       contactId: null,
       assetId: null,
       documentId: null,
+      personId: null,
       notes: null,
     })
   })
@@ -81,6 +90,7 @@ describe('document bodies', () => {
       issuer: null,
       referenceNumber: null,
       assetId: null,
+      personId: null,
       notes: null,
       isSensitive: false,
       storagePath: path,
@@ -101,6 +111,13 @@ describe('document bodies', () => {
     expect(documentUploadBodySchema.safeParse({ mimeType: 'image/jpeg', sizeBytes: MAX_DOCUMENT_BYTES + 1 }).success).toBe(false)
     expect(documentUploadBodySchema.safeParse({ mimeType: 'text/html', sizeBytes: 10 }).success).toBe(false)
     expect(documentUploadBodySchema.safeParse({ mimeType: 'application/pdf', sizeBytes: 10 }).success).toBe(true)
+  })
+})
+
+describe('person bodies', () => {
+  it('trims a name and refuses a blank one', () => {
+    expect(personBodySchema.parse({ name: ' Maya ' })).toEqual({ name: 'Maya' })
+    expect(personBodySchema.safeParse({ name: '   ' }).success).toBe(false)
   })
 })
 

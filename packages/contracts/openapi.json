@@ -75,6 +75,9 @@
       "name": "packing"
     },
     {
+      "name": "people"
+    },
+    {
       "name": "renewals"
     },
     {
@@ -8248,6 +8251,256 @@
         }
       }
     },
+    "/api/v1/people": {
+      "get": {
+        "operationId": "listPeople",
+        "tags": [
+          "people"
+        ],
+        "description": "Everyone: members first as they joined, then everyone added. A household is small, so it's one page.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "people": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Person"
+                      }
+                    }
+                  },
+                  "required": [
+                    "people"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPerson",
+        "tags": [
+          "people"
+        ],
+        "description": "Owners and adults. Someone without an account; members join by invitation.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "person": {
+                      "$ref": "#/components/schemas/Person"
+                    }
+                  },
+                  "required": [
+                    "person"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/people/{personId}": {
+      "patch": {
+        "operationId": "updatePerson",
+        "tags": [
+          "people"
+        ],
+        "description": "Owners and adults, and only for someone without an account.",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "person": {
+                      "$ref": "#/components/schemas/Person"
+                    }
+                  },
+                  "required": [
+                    "person"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePerson",
+        "tags": [
+          "people"
+        ],
+        "description": "Owners and adults, and only for someone without an account. Their documents stay, belonging to nobody.",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "deleted"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/renewals": {
       "post": {
         "operationId": "createRenewal",
@@ -15808,6 +16061,18 @@
               }
             ]
           },
+          "personId": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "notes": {
             "default": null,
             "anyOf": [
@@ -16239,9 +16504,13 @@
               }
             ]
           },
-          "memberUserIds": {
+          "international": {
+            "default": false,
+            "type": "boolean"
+          },
+          "travellerIds": {
             "default": [],
-            "maxItems": 20,
+            "maxItems": 30,
             "type": "array",
             "items": {
               "type": "string",
@@ -16582,6 +16851,23 @@
               "null"
             ]
           },
+          "personId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "personName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "notes": {
             "type": [
               "string",
@@ -16624,6 +16910,8 @@
           "referenceNumber",
           "assetId",
           "assetName",
+          "personId",
+          "personName",
           "notes",
           "uploadedBy",
           "isSensitive",
@@ -16701,6 +16989,18 @@
               }
             ]
           },
+          "personId": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "notes": {
             "default": null,
             "anyOf": [
@@ -16730,6 +17030,7 @@
           "medical",
           "legal",
           "id",
+          "passport",
           "property",
           "other"
         ]
@@ -20314,6 +20615,58 @@
           "items"
         ]
       },
+      "Person": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/Instant"
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "name",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "PersonBody": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
       "PriceAlert": {
         "type": "object",
         "properties": {
@@ -20664,6 +21017,23 @@
               "null"
             ]
           },
+          "personId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "personName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "notes": {
             "type": [
               "string",
@@ -20700,6 +21070,8 @@
           "assetName",
           "documentId",
           "documentTitle",
+          "personId",
+          "personName",
           "notes",
           "notRenewing",
           "createdAt",
@@ -20813,6 +21185,18 @@
             ]
           },
           "documentId": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "personId": {
             "default": null,
             "anyOf": [
               {
@@ -21179,6 +21563,22 @@
               },
               "data": {
                 "$ref": "#/components/schemas/Member"
+              }
+            },
+            "required": [
+              "entity",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "entity": {
+                "type": "string",
+                "const": "person"
+              },
+              "data": {
+                "$ref": "#/components/schemas/Person"
               }
             },
             "required": [
@@ -21626,6 +22026,7 @@
         "enum": [
           "household",
           "member",
+          "person",
           "invitation",
           "account",
           "category",
@@ -22110,7 +22511,10 @@
               "null"
             ]
           },
-          "memberUserIds": {
+          "international": {
+            "type": "boolean"
+          },
+          "travellerIds": {
             "type": "array",
             "items": {
               "type": "string",
@@ -22134,7 +22538,8 @@
           "coverImageUrl",
           "budgetCents",
           "notes",
-          "memberUserIds",
+          "international",
+          "travellerIds",
           "createdAt",
           "updatedAt"
         ]
@@ -22195,6 +22600,25 @@
               "$ref": "#/components/schemas/HouseholdMember"
             }
           },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Person"
+            }
+          },
+          "documentIssues": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TripDocumentIssue"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "itinerary": {
             "$ref": "#/components/schemas/ItineraryView"
           },
@@ -22222,11 +22646,61 @@
           "timeZone",
           "today",
           "members",
+          "people",
+          "documentIssues",
           "itinerary",
           "bookings",
           "packing",
           "actualCents",
           "committedCents"
+        ]
+      },
+      "TripDocumentIssue": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TripDocumentIssueKind"
+          },
+          "documentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expiresOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "personId",
+          "kind",
+          "documentId",
+          "expiresOn"
+        ]
+      },
+      "TripDocumentIssueKind": {
+        "type": "string",
+        "enum": [
+          "no_passport",
+          "no_expiry_date",
+          "expires_before_return",
+          "under_six_months"
         ]
       },
       "TripIdea": {
@@ -22363,7 +22837,10 @@
               "null"
             ]
           },
-          "memberUserIds": {
+          "international": {
+            "type": "boolean"
+          },
+          "travellerIds": {
             "type": "array",
             "items": {
               "type": "string",
@@ -22412,7 +22889,8 @@
           "coverImageUrl",
           "budgetCents",
           "notes",
-          "memberUserIds",
+          "international",
+          "travellerIds",
           "createdAt",
           "updatedAt",
           "slotCount",
@@ -22795,8 +23273,11 @@
               }
             ]
           },
-          "memberUserIds": {
-            "maxItems": 20,
+          "international": {
+            "type": "boolean"
+          },
+          "travellerIds": {
+            "maxItems": 30,
             "type": "array",
             "items": {
               "type": "string",

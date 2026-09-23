@@ -15,6 +15,7 @@ import { getPageSession } from '@/lib/api/authed'
 import { DOCUMENT_KIND_LABELS, EXPIRY_TONES, fileTypeLabel, formatFileSize } from '@/lib/documents/display'
 import * as documents from '@/lib/documents/service'
 import * as home from '@/lib/home/service'
+import * as people from '@/lib/people/service'
 import * as renewals from '@/lib/renewals/service'
 import { BackLink } from '../../_components/ui/back-link'
 import { PageHeader } from '../../_components/ui/page-header'
@@ -34,12 +35,13 @@ export default async function DocumentPage({ params }: PageProps<'/documents/[do
   const { role } = session.context
   const canManage = can(role, 'documents.manage')
 
-  const [document, assets] = await Promise.all([
+  const [document, assets, personOptions] = await Promise.all([
     documents.getDocument(session, documentId).catch((error: unknown) => {
       if (error instanceof NotFoundError) notFound()
       throw error
     }),
     canManage ? home.listAssets(session) : [],
+    canManage ? people.listPersonOptions(session.context) : [],
   ])
   const expiry = document.expiresOn ? (await renewals.getExpiry(session, { kind: 'document', subjectId: document.id })).expiry : null
   const { timeZone } = session.household
@@ -64,6 +66,7 @@ export default async function DocumentPage({ params }: PageProps<'/documents/[do
           ),
         }
       : { label: 'Expires', value: 'Never' },
+    document.personName ? { label: 'Whose it is', value: document.personName } : null,
     document.issuedOn ? { label: 'Issued', value: formatCalendarDate(document.issuedOn) } : null,
     document.issuer ? { label: 'Issued by', value: document.issuer } : null,
     document.assetId && document.assetName
@@ -100,6 +103,7 @@ export default async function DocumentPage({ params }: PageProps<'/documents/[do
               <DocumentSheet
                 document={document}
                 assets={assets.map(asset => ({ id: asset.id, name: asset.name }))}
+                people={personOptions}
                 canMarkSensitive={can(role, 'documents.viewSensitive')}
               />
             ) : null}

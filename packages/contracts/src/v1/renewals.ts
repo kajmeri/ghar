@@ -50,6 +50,10 @@ export const renewalSchema = z.object({
   /** The paper for the current term. Its title is null when the caller can't see that document. */
   documentId: z.uuid().nullable(),
   documentTitle: z.string().nullable(),
+  /** Whose it is: a licence's holder. */
+  personId: z.uuid().nullable(),
+  /** What to call them, as personLabel says it for the caller. Null when it's nobody's. */
+  personName: z.string().nullable(),
   notes: z.string().nullable(),
   /** Someone said it won't be renewed, for the date it has now. No reminders go out for that date. */
   notRenewing: z.boolean(),
@@ -76,6 +80,7 @@ export const renewalBodySchema = z
     contactId: z.uuid().nullable().default(null),
     assetId: z.uuid().nullable().default(null),
     documentId: z.uuid().nullable().default(null),
+    personId: z.uuid().nullable().default(null),
     notes: longTextSchema.nullable().default(null),
   })
   .refine(body => !body.autoRenews || body.cadenceMonths !== null, {

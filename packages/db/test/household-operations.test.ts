@@ -97,6 +97,7 @@ function documentInput(overrides: Partial<DocumentInput> = {}): DocumentInput {
     issuer: 'State Farm',
     referenceNumber: 'HO-3318',
     assetId: null,
+    personId: null,
     notes: null,
     isSensitive: false,
     ...overrides,

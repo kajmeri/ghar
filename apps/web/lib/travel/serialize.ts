@@ -44,7 +44,8 @@ export function toTrip(row: TripWithCounts): Trip {
     coverImageUrl: row.coverImageUrl,
     budgetCents: row.budgetCents,
     notes: row.notes,
-    memberUserIds: row.memberUserIds,
+    international: row.international,
+    travellerIds: row.travellerIds,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }

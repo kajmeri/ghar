@@ -26,6 +26,8 @@ export const PERMISSIONS = {
   'members.invite': OWNERS_AND_ADULTS,
   'members.changeRole': OWNERS,
   'members.remove': OWNERS,
+  /** The household's people without an account, like children: adding, renaming and removing them. */
+  'people.manage': OWNERS_AND_ADULTS,
 
   'audit.view': OWNERS_AND_ADULTS,
   /**

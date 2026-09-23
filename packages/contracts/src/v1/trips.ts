@@ -3,6 +3,7 @@ import { householdRoleSchema } from '../context'
 import { defineEndpoint } from '../endpoint'
 import { deadlineStateSchema, itineraryResponseSchema, itinerarySlotSchema, itineraryViewSchema } from './itinerary'
 import { packingItemSchema } from './packing'
+import { personSchema, tripDocumentIssueSchema } from './people'
 import {
   calendarDateSchema,
   centsSchema,
@@ -44,7 +45,10 @@ export const tripSchema = z.object({
   coverImageUrl: z.string().nullable(),
   budgetCents: centsSchema.nullable(),
   notes: z.string().nullable(),
-  memberUserIds: z.array(z.uuid()),
+  /** Leaving the country, so the travellers' passports get checked. */
+  international: z.boolean(),
+  /** Who is going, as household people. */
+  travellerIds: z.array(z.uuid()),
   createdAt: instantSchema,
   updatedAt: instantSchema,
 })
@@ -69,8 +73,9 @@ export const createTripBodySchema = z
     coverImageUrl: httpUrlSchema.nullable().default(null),
     budgetCents: centsSchema.nonnegative().nullable().default(null),
     notes: longTextSchema.nullable().default(null),
-    /** Who is going. Whoever creates the trip is added whatever this says. */
-    memberUserIds: z.array(z.uuid()).max(20).default([]),
+    international: z.boolean().default(false),
+    /** Who is going, as household people. Whoever creates the trip is added whatever this says. */
+    travellerIds: z.array(z.uuid()).max(30).default([]),
     startsOn: calendarDateSchema.nullable().default(null),
     endsOn: calendarDateSchema.nullable().default(null),
   })
@@ -86,7 +91,9 @@ export const updateTripBodySchema = z
     coverImageUrl: httpUrlSchema.nullable().optional(),
     budgetCents: centsSchema.nonnegative().nullable().optional(),
     notes: longTextSchema.nullable().optional(),
-    memberUserIds: z.array(z.uuid()).max(20).optional(),
+    international: z.boolean().optional(),
+    /** Who is going. Replaces the list. */
+    travellerIds: z.array(z.uuid()).max(30).optional(),
     startsOn: calendarDateSchema.nullable().optional(),
     endsOn: calendarDateSchema.nullable().optional(),
   })
@@ -110,6 +117,13 @@ export const tripDetailSchema = z.object({
   today: calendarDateSchema,
   /** Everyone in the household, so a packing assignment can be shown as a name. */
   members: z.array(householdMemberSchema),
+  /** Everyone who could be going, so travellers can be shown as names. */
+  people: z.array(personSchema),
+  /**
+   * Passport problems for a trip abroad. Null when the caller can't see sensitive documents, since
+   * passports usually are and they'd be told a traveller has none; empty when there's nothing wrong.
+   */
+  documentIssues: z.array(tripDocumentIssueSchema).nullable(),
   itinerary: itineraryViewSchema,
   bookings: z.array(bookingSchema),
   packing: z.array(packingItemSchema),

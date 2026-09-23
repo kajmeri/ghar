@@ -4,6 +4,7 @@ import type { Metadata } from 'next'
 import { getPageSession } from '@/lib/api/authed'
 import * as documents from '@/lib/documents/service'
 import * as home from '@/lib/home/service'
+import * as people from '@/lib/people/service'
 import { EmptyState } from '../_components/ui/empty-state'
 import { DocumentIllustration } from '../_components/ui/illustrations'
 import { PageHeader } from '../_components/ui/page-header'
@@ -16,9 +17,15 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
   const [session, { q }] = await Promise.all([getPageSession(), searchParams])
   const { role } = session.context
   const canManage = can(role, 'documents.manage')
-  const [list, assetOptions] = await Promise.all([documents.listDocuments(session), canManage ? home.listAssetOptions(session) : []])
+  const [list, assetOptions, personOptions] = await Promise.all([
+    documents.listDocuments(session),
+    canManage ? home.listAssetOptions(session) : [],
+    canManage ? people.listPersonOptions(session.context) : [],
+  ])
 
-  const addButton = canManage ? <DocumentSheet assets={assetOptions} canMarkSensitive={can(role, 'documents.viewSensitive')} /> : undefined
+  const addButton = canManage ? (
+    <DocumentSheet assets={assetOptions} people={personOptions} canMarkSensitive={can(role, 'documents.viewSensitive')} />
+  ) : undefined
 
   return (
     <>

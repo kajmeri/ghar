@@ -196,6 +196,7 @@ describe('not renewing links', () => {
       contactId: null,
       assetId: null,
       documentId: null,
+      personId: null,
       notes: null,
     })
   }

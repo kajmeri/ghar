@@ -104,7 +104,7 @@ describe('keyset pages', () => {
   })
 
   it('pages trips with undated ones last and tied names broken by id', async () => {
-    const base = { destination: null, status: 'planned' as const, coverImageUrl: null, budgetCents: null, notes: null, memberUserIds: [] }
+    const base = { destination: null, status: 'planned' as const, coverImageUrl: null, budgetCents: null, notes: null, travellerIds: [] }
     for (const [index, startsOn] of ['2026-10-01', null, '2026-10-01', null, '2026-11-15', '2026-10-01', null].entries()) {
       await createTrip(owner, db, { ...base, name: index % 2 === 0 ? 'Goa' : 'Pune', startsOn, endsOn: startsOn })
     }

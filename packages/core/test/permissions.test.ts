@@ -23,6 +23,7 @@ const APPROVED = {
   'members.invite': 'oa',
   'members.changeRole': 'o',
   'members.remove': 'o',
+  'people.manage': 'oa',
   'audit.view': 'oa',
   'connections.manage': 'o',
   'finances.view': 'oa',

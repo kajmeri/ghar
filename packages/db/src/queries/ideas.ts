@@ -125,7 +125,7 @@ export async function promoteTripIdea(
       coverImageUrl: idea.imageUrl,
       budgetCents: null,
       notes: idea.notes,
-      memberUserIds: [],
+      travellerIds: [],
     })
     await tx.delete(tripIdeas).where(ideaKey(ctx, ideaId))
     await recordAudit(ctx, tx, {

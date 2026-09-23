@@ -74,7 +74,7 @@ async function ensureChicagoTrip(db: Database, { owner, adult, today, timeZone }
     coverImageUrl: null,
     budgetCents: CHICAGO.budgetCents,
     notes: 'Dinner at Aunt Rosa’s on Thursday. Bring the pie dish back.',
-    memberUserIds: [adult.userId],
+    travellerIds: [await queries.requireOwnPerson(adult, db)],
   })
 
   const flight = await queries.createBooking(owner, db, {
@@ -218,7 +218,7 @@ async function ensurePastTrip(db: Database, { owner, adult, today }: TravelSeedI
     coverImageUrl: null,
     budgetCents: CAPE_COD.budgetCents,
     notes: 'The house on Old King’s Highway. Book again for next July before February.',
-    memberUserIds: [adult.userId],
+    travellerIds: [await queries.requireOwnPerson(adult, db)],
   })
   for (const [daysIn, name, merchantName, amountCents] of CAPE_COD_SPENDING) {
     await queries.createManualTransaction(owner, db, { date: addCalendarDays(startsOn, daysIn), name, merchantName, amountCents, tripId: trip.id })
@@ -246,7 +246,7 @@ async function ensureIdeaTrip(db: Database, { owner, today }: TravelSeedInput): 
     coverImageUrl: null,
     budgetCents: null,
     notes: 'Spring break? Check whether the train between the two is worth it over driving.',
-    memberUserIds: [],
+    travellerIds: [],
   })
   return `Trip ${LISBON.name}: still an idea`
 }

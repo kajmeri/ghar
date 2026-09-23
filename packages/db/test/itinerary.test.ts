@@ -28,6 +28,7 @@ import {
   type SlotInput,
 } from '../src/queries/itinerary'
 import { createTripIdea, requireTripIdea } from '../src/queries/ideas'
+import { requireOwnPerson } from '../src/queries/people'
 import { acceptInvitation, createHousehold } from '../src/queries/session'
 import { createBooking } from '../src/queries/travel'
 import { generateItineraryFromBookings, linkBookingToTrip, unlinkBookingFromTrip } from '../src/queries/trip-bookings'
@@ -55,7 +56,7 @@ const trip = (overrides: Partial<CreateTripInput> = {}): CreateTripInput => ({
   coverImageUrl: null,
   budgetCents: null,
   notes: null,
-  memberUserIds: [],
+  travellerIds: [],
   ...overrides,
 })
 
@@ -128,6 +129,7 @@ beforeAll(async () => {
 })
 
 describe('migrating itinerary items to slots', () => {
+  // It migrates two databases, one of them twice, so it gets the time a hook gets.
   it('turns every item into a decided slot with one chosen option, losing nothing', async () => {
     const before = mkdtempSync(joinPath(tmpdir(), 'ghar-migrations-'))
     try {
@@ -205,12 +207,12 @@ describe('migrating itinerary items to slots', () => {
     } finally {
       rmSync(before, { recursive: true, force: true })
     }
-  })
+  }, 60_000)
 })
 
 describe('slots and options', () => {
   it('weighs three dinners, takes votes, chooses one and changes its mind', async () => {
-    const lisbon = await createTrip(a, db, trip({ memberUserIds: [users.memberA] }))
+    const lisbon = await createTrip(a, db, trip({ travellerIds: [await requireOwnPerson(member, db)] }))
     const dinner = await createSlot(member, db, lisbon.id, slot())
     expect(dinner).toMatchObject({ status: 'open', chosenOptionId: null, sortOrder: 1000, options: [] })
 

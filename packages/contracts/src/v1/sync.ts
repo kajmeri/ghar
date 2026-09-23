@@ -14,6 +14,7 @@ import { mailBookingDraftSchema } from './mail'
 import { memberSchema } from './members'
 import { manualAccountSchema, manualValueSchema } from './networth'
 import { packingItemSchema, packingTemplateSchema } from './packing'
+import { personSchema } from './people'
 import { renewalSchema } from './renewals'
 import { calendarDateSchema, centsSchema, instantSchema } from './shared'
 import { bookingSchema } from './travel'
@@ -31,6 +32,7 @@ import { tripSchema } from './trips'
 export const syncEntitySchema = z.enum([
   'household',
   'member',
+  'person',
   'invitation',
   'account',
   'category',
@@ -116,6 +118,7 @@ export type SyncDigestPreferences = z.infer<typeof syncDigestPreferencesSchema>
 export const syncChangeSchema = z.discriminatedUnion('entity', [
   z.object({ entity: z.literal('household'), data: householdSchema }),
   z.object({ entity: z.literal('member'), data: memberSchema }),
+  z.object({ entity: z.literal('person'), data: personSchema }),
   z.object({ entity: z.literal('invitation'), data: invitationSchema }),
   z.object({ entity: z.literal('account'), data: syncAccountSchema }),
   z.object({ entity: z.literal('category'), data: syncCategorySchema }),

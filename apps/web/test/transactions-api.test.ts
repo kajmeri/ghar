@@ -332,7 +332,7 @@ describe('changing a charge', () => {
       coverImageUrl: null,
       budgetCents: 400_000,
       notes: null,
-      memberUserIds: [],
+      travellerIds: [],
     })
 
     const tagged = await patch(ids['c-2'] ?? '', { tripId: trip.id })

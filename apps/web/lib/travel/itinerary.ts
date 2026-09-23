@@ -28,8 +28,8 @@ import { toDate, toItinerarySlot } from './serialize'
  */
 
 /** Per-person costs multiply by this. A trip with nobody on it still has somebody going. */
-export function travelersOn(trip: { readonly memberUserIds: readonly string[] }): number {
-  return Math.max(1, trip.memberUserIds.length)
+export function travelersOn(trip: { readonly travellerIds: readonly string[] }): number {
+  return Math.max(1, trip.travellerIds.length)
 }
 
 export async function itineraryView(itinerary: Itinerary, travelers: number, timeZone: string, now = new Date()): Promise<ItineraryView> {

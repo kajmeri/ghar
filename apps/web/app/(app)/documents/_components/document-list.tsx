@@ -24,7 +24,7 @@ export function DocumentList({ documents, query, today }: { documents: Household
         leading={document => <IconAvatar icon={document.isSensitive ? Lock : FileText} />}
         primary={{ header: 'Document', cell: document => document.title }}
         secondary={document =>
-          [document.isSensitive ? 'Private' : null, DOCUMENT_KIND_LABELS[document.kind], document.referenceNumber, document.assetName]
+          [document.isSensitive ? 'Private' : null, DOCUMENT_KIND_LABELS[document.kind], document.personName, document.referenceNumber, document.assetName]
             .filter(Boolean)
             .join(' · ')
         }

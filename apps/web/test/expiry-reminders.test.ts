@@ -54,6 +54,7 @@ function addDocument(
     issuer: null,
     referenceNumber: 'X1234567',
     assetId: null,
+    personId: null,
     notes: null,
     isSensitive: input.isSensitive ?? false,
     storagePath: documentStoragePath(ctx.householdId, crypto.randomUUID(), 'application/pdf'),
@@ -86,6 +87,7 @@ describe('expiry reminders', () => {
       contactId: null,
       assetId: null,
       documentId: null,
+      personId: null,
       notes: null,
     })
     const inbox = createMemoryProvider()
@@ -167,6 +169,7 @@ describe('expiry reminders', () => {
       contactId: null,
       assetId: null,
       documentId: null,
+      personId: null,
       notes: null,
     }
     const gym = await createRenewal(ctx, db, input)

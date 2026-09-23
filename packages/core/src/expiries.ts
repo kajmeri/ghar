@@ -67,7 +67,8 @@ export type ReminderLeadSubject =
 
 /** The lead time a thing gets when nobody picked one. */
 export function defaultReminderLeadDays(subject: ReminderLeadSubject): number {
-  return subject.kind === 'document' && subject.documentKind === 'id' ? ID_REMINDER_LEAD_DAYS : DEFAULT_REMINDER_LEAD_DAYS
+  const isId = subject.kind === 'document' && (subject.documentKind === 'id' || subject.documentKind === 'passport')
+  return isId ? ID_REMINDER_LEAD_DAYS : DEFAULT_REMINDER_LEAD_DAYS
 }
 
 /** How many days before it runs out the reminders start: the one picked for it, or its default. */

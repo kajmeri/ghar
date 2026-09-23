@@ -9,6 +9,7 @@ import { createInvitation } from '../src/queries/invitations'
 import { addManualValue, createManualAccount, deleteManualAccount, deleteManualValue } from '../src/queries/manual-accounts'
 import { createOption, createSlot, voteOnOption } from '../src/queries/itinerary'
 import { removeMember } from '../src/queries/members'
+import { requireOwnPerson } from '../src/queries/people'
 import { acceptInvitation, createHousehold, updateProfile } from '../src/queries/session'
 import { createTrip, deleteTrip } from '../src/queries/trips'
 import type { Db, RequestContext } from '../src/queries/types'
@@ -50,7 +51,7 @@ const trip = {
   coverImageUrl: null,
   budgetCents: null,
   notes: null,
-  memberUserIds: [],
+  travellerIds: [],
 } as const
 
 const slot = {
@@ -302,7 +303,7 @@ describe('tombstones', () => {
   it('deletes a whole household without tripping over its own tombstones', async () => {
     const neighbor = await join(next, 'neighbor@example.com', 'member')
     await createContact(next, db, contact())
-    const cabin = await createTrip(next, db, { ...trip, name: 'Cabin', memberUserIds: [neighbor.userId] })
+    const cabin = await createTrip(next, db, { ...trip, name: 'Cabin', travellerIds: [await requireOwnPerson(neighbor, db)] })
     await createSlot(next, db, cabin.id, slot)
     await setDigestPreferences(neighbor, db, { enabled: true, sections: ['bills'], sendHour: 7 })
 

@@ -19,6 +19,7 @@ import {
   eventAttendees,
   events,
   householdMembers,
+  householdPeople,
   households,
   invitations,
   itineraryOptions,
@@ -37,14 +38,14 @@ import {
   syncTombstones,
   transactions,
   tripIdeas,
-  tripMembers,
+  tripTravellers,
   trips,
 } from '../schema'
 import type { AccountRow } from './banking'
 import type { BillWithAccountRow } from './bills'
 import type { CalendarLinkRow, EventDetail } from './calendar'
 import type { ContactRow } from './contacts'
-import type { DocumentWithAssetRow } from './documents'
+import { selectDocuments, type DocumentWithAssetRow } from './documents'
 import type { CategoryRow } from './finances'
 import type { AssetRow, MaintenanceLogEntryRow, MaintenanceTaskRow } from './home'
 import type { HouseholdRow } from './households'
@@ -54,6 +55,7 @@ import type { ItineraryOptionWithVotes, ItinerarySlotWithOptions, OptionVoteReco
 import type { BookingDraftRow } from './mail'
 import { manualAccountColumns, type ManualAccountRow, type ManualValueRow } from './manual-accounts'
 import type { MemberRow } from './members'
+import type { PersonRow } from './people'
 import { selectRenewalsWithLinks, type RenewalWithLinksRow } from './renewals'
 import type { PackingItemRow, PackingTemplateItemRow, PackingTemplateWithItems } from './packing'
 import type { TripRow } from './scope'
@@ -142,6 +144,7 @@ export async function getSyncClock(ctx: RequestContext, db: Db): Promise<string>
 const SYNC_PERMISSIONS = {
   household: 'household.view',
   member: 'members.view',
+  person: 'members.view',
   invitation: 'members.invite',
   account: 'finances.view',
   category: 'finances.view',
@@ -185,7 +188,7 @@ function requireSyncEntity(ctx: RequestContext, entity: SyncEntity): void {
 export type SyncAccountRow = Omit<AccountRow, 'plaidItemId'> & { createdAt: Date; updatedAt: Date }
 export type SyncCategoryRow = CategoryRow & { createdAt: Date; updatedAt: Date }
 export type SyncBillPaymentRow = typeof billPayments.$inferSelect
-export type SyncTripRow = TripRow & { memberUserIds: string[] }
+export type SyncTripRow = TripRow & { travellerIds: string[] }
 export interface SyncDigestPreferencesRow {
   userId: string
   enabled: boolean
@@ -197,6 +200,7 @@ export interface SyncDigestPreferencesRow {
 export interface SyncRows {
   household: HouseholdRow
   member: MemberRow
+  person: PersonRow
   invitation: InvitationRow
   account: SyncAccountRow
   category: SyncCategoryRow
@@ -266,6 +270,25 @@ const readMembers: SyncReader<MemberRow> = async (ctx, db, window) => {
     .orderBy(...syncOrder(householdMembers.updatedAt, householdMembers.userId))
     .limit(window.limit)
   return rows.map(({ syncAt, ...row }) => change(syncAt, row.userId, row))
+}
+
+const readPeople: SyncReader<PersonRow> = async (ctx, db, window) => {
+  requireSyncEntity(ctx, 'person')
+  const rows = await db
+    .select({
+      id: householdPeople.id,
+      userId: householdPeople.userId,
+      name: sql<string | null>`coalesce(${householdPeople.name}, ${profiles.fullName})`,
+      createdAt: householdPeople.createdAt,
+      updatedAt: householdPeople.updatedAt,
+      syncAt: syncStamp(householdPeople.updatedAt),
+    })
+    .from(householdPeople)
+    .leftJoin(profiles, eq(profiles.id, householdPeople.userId))
+    .where(and(eq(householdPeople.householdId, ctx.householdId), inWindow(householdPeople.updatedAt, householdPeople.id, window)))
+    .orderBy(...syncOrder(householdPeople.updatedAt, householdPeople.id))
+    .limit(window.limit)
+  return rows.map(({ syncAt, ...row }) => change(syncAt, row.id, row))
 }
 
 /** Pending invitations, expired ones included, as the list shows. An accepted one is dropped. */
@@ -427,18 +450,19 @@ const readTrips: SyncReader<SyncTripRow> = async (ctx, db, window) => {
     .limit(window.limit)
   if (rows.length === 0) return []
 
-  const members = await db
-    .select({ tripId: tripMembers.tripId, userId: tripMembers.userId })
-    .from(tripMembers)
+  const travellers = await db
+    .select({ tripId: tripTravellers.tripId, personId: tripTravellers.personId })
+    .from(tripTravellers)
     .where(
       inArray(
-        tripMembers.tripId,
+        tripTravellers.tripId,
         rows.map(row => row.id)
       )
     )
-  const byTrip = groupBy(members, member => member.tripId)
+    .orderBy(tripTravellers.createdAt, tripTravellers.personId)
+  const byTrip = groupBy(travellers, traveller => traveller.tripId)
   return rows.map(({ syncAt, ...row }) =>
-    change(syncAt, row.id, { ...row, memberUserIds: (byTrip.get(row.id) ?? []).map(member => member.userId) })
+    change(syncAt, row.id, { ...row, travellerIds: (byTrip.get(row.id) ?? []).map(traveller => traveller.personId) })
   )
 }
 
@@ -645,10 +669,7 @@ const readAssets: SyncReader<AssetRow> = async (ctx, db, window) => {
 const readDocuments: SyncReader<DocumentWithAssetRow> = async (ctx, db, window) => {
   requireSyncEntity(ctx, 'document')
   const seesSensitive = can(ctx.role, 'documents.viewSensitive')
-  const rows = await db
-    .select({ ...getTableColumns(documents), assetName: assets.name, syncAt: syncStamp(documents.updatedAt) })
-    .from(documents)
-    .leftJoin(assets, eq(assets.id, documents.assetId))
+  const rows = await selectDocuments(db, { syncAt: syncStamp(documents.updatedAt) })
     .where(
       and(
         eq(documents.householdId, ctx.householdId),
@@ -775,6 +796,7 @@ const readDigestPreferences: SyncReader<SyncDigestPreferencesRow> = async (ctx, 
 const SYNC_READERS: { [E in SyncEntity]: SyncReader<SyncRows[E]> } = {
   household: readHouseholds,
   member: readMembers,
+  person: readPeople,
   invitation: readInvitations,
   account: readAccounts,
   category: readCategories,

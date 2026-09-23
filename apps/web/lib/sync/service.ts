@@ -32,6 +32,7 @@ import { listBillsWithStatus } from '@/lib/bills/service'
 import { toContact } from '@/lib/contacts/service'
 import { getDb } from '@/lib/db'
 import { toDocument } from '@/lib/documents/service'
+import { toPerson } from '@/lib/people/service'
 import { toRenewal } from '@/lib/renewals/service'
 import { toAsset, toLogEntry, toMaintenanceTask } from '@/lib/home/service'
 import { toManualAccount, toManualValue } from '@/lib/networth/serialize'
@@ -295,6 +296,8 @@ async function readEntityPage(ctx: RequestContext, db: Db, entity: SyncEntity, w
       return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toHousehold(row) }))
     case 'member':
       return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toMember(row) }))
+    case 'person':
+      return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toPerson(row) }))
     case 'invitation':
       return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toInvitation(row) }))
     case 'account':
@@ -349,9 +352,9 @@ async function readEntityPage(ctx: RequestContext, db: Db, entity: SyncEntity, w
     case 'asset':
       return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toAsset(row, env.today) }))
     case 'document':
-      return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toDocument(row, env.today) }))
+      return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toDocument(row, env.today, ctx.userId) }))
     case 'renewal':
-      return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toRenewal(row, env.today) }))
+      return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toRenewal(row, env.today, ctx.userId) }))
     case 'maintenance':
       return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({
         entity,

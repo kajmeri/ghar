@@ -4,6 +4,7 @@ import { validateHouseholdSettings, type HouseholdSettings } from '@ghar/core/ho
 import { assertInvitationAcceptable, normalizeEmail } from '@ghar/core/invitations'
 import { eq } from 'drizzle-orm'
 import { householdMembers, households, invitations, profiles } from '../schema'
+import { addMemberPerson } from './people'
 import { recordAudit } from './audit'
 import { ensureDefaultCategories } from './finances'
 import type { HouseholdRow } from './households'
@@ -47,6 +48,7 @@ export async function createHousehold(ctx: SessionContext, db: Db, input: Househ
       const [household] = await tx.insert(households).values(settings).returning()
       if (!household) throw new Error('Household insert returned no row')
       await tx.insert(householdMembers).values({ householdId: household.id, userId: ctx.userId, role: 'owner' })
+      await addMemberPerson(tx, { householdId: household.id, userId: ctx.userId })
 
       const membership = { householdId: household.id, role: 'owner' } as const
       const owner = { userId: ctx.userId, ...membership }
@@ -113,6 +115,7 @@ export async function acceptInvitation(ctx: SessionContext, db: Db, input: { tok
         userId: ctx.userId,
         role: invitation.role,
       })
+      await addMemberPerson(tx, { householdId: invitation.householdId, userId: ctx.userId })
       await tx.update(invitations).set({ acceptedAt: input.now }).where(eq(invitations.id, invitation.id))
 
       const membership = { householdId: invitation.householdId, role: invitation.role }

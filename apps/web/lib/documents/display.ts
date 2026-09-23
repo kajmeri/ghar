@@ -7,6 +7,7 @@ export const DOCUMENT_KIND_LABELS: Record<DocumentKindValue, string> = {
   medical: 'Medical',
   legal: 'Legal',
   id: 'ID',
+  passport: 'Passport',
   property: 'Property',
   other: 'Other',
 }

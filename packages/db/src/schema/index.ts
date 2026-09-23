@@ -94,6 +94,7 @@ import { REMINDER_LEAD_DAYS_MAX, REMINDER_LEAD_DAYS_MIN } from '@ghar/core/expir
 import { TRIP_STATUSES } from '@ghar/core/trips'
 import { DIGEST_SECTIONS, ONE_TAP_ACTIONS, oneTapActionHasDate, type DigestSection } from '@ghar/core/digest'
 import { BOOKING_DRAFT_STATUSES, MAIL_LINK_STATUSES, MAIL_MESSAGE_OUTCOMES, MAIL_SUBJECT_MAX_LENGTH } from '@ghar/core/mail'
+import { PERSON_NAME_MAX_LENGTH } from '@ghar/core/people'
 import { SYNC_ENTITIES, type SyncEntity } from '@ghar/core/sync'
 import { sql, type SQL } from 'drizzle-orm'
 import {
@@ -226,6 +227,35 @@ export const householdMembers = pgTable(
     primaryKey({ columns: [table.householdId, table.userId] }),
     // One household per person, so a session resolves to exactly one household.
     unique('household_members_user_id_unique').on(table.userId),
+  ]
+).enableRLS()
+
+/**
+ * The household's people: every member, and anyone without an account who things belong to, like
+ * a child with a passport. A member's row points at their account and takes its name from there;
+ * anyone else has a name of their own. When a member leaves, their row keeps the name they had and
+ * lets go of the account, so their documents and trips still say whose they were.
+ */
+export const householdPeople = pgTable(
+  'household_people',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    /** Null for someone without an account. Deleting the account deletes the person with it. */
+    userId: uuid().references(() => profiles.id, { onDelete: 'cascade' }),
+    /** Only for someone without an account. A member's name comes from their profile. */
+    name: text(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('household_people_household_idx').on(table.householdId),
+    // A member is one person, and belongs to one household anyway.
+    unique('household_people_user_id_unique').on(table.userId),
+    check('household_people_account_or_name', sql`(${table.userId} is null) = (${table.name} is not null)`),
+    check('household_people_name_length', sql`char_length(${table.name}) between 1 and ${sql.raw(String(PERSON_NAME_MAX_LENGTH))}`),
   ]
 ).enableRLS()
 
@@ -972,6 +1002,8 @@ export const trips = pgTable(
     coverImageUrl: text(),
     /** What the household means to spend. Actual comes from tagged transactions. */
     budgetCents: cents(),
+    /** Leaving the country, so passports get checked. */
+    international: boolean().notNull().default(false),
     notes: text(),
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
@@ -988,19 +1020,19 @@ export const trips = pgTable(
   ]
 ).enableRLS()
 
-/** Who is going. A household member not on this list still sees the trip. */
-export const tripMembers = pgTable(
-  'trip_members',
+/** Who is going: household people, with or without accounts. Anyone not on this list still sees the trip. */
+export const tripTravellers = pgTable(
+  'trip_travellers',
   {
     tripId: uuid()
       .notNull()
       .references(() => trips.id, { onDelete: 'cascade' }),
-    userId: uuid()
+    personId: uuid()
       .notNull()
-      .references(() => profiles.id, { onDelete: 'cascade' }),
+      .references(() => householdPeople.id, { onDelete: 'cascade' }),
     createdAt: timestamptz().notNull().defaultNow(),
   },
-  table => [primaryKey({ columns: [table.tripId, table.userId] }), index('trip_members_user_idx').on(table.userId)]
+  table => [primaryKey({ columns: [table.tripId, table.personId] }), index('trip_travellers_person_idx').on(table.personId)]
 ).enableRLS()
 
 /**
@@ -1541,6 +1573,8 @@ export const documents = pgTable(
     referenceNumber: text(),
     /** The thing it's about. Removing the asset keeps the paperwork. */
     assetId: uuid().references(() => assets.id, { onDelete: 'set null' }),
+    /** Whose it is: a passport's holder. Removing the person keeps the document. */
+    personId: uuid().references(() => householdPeople.id, { onDelete: 'set null' }),
     notes: text(),
     uploadedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
     isSensitive: boolean().notNull().default(false),
@@ -1556,6 +1590,9 @@ export const documents = pgTable(
     index('documents_asset_idx')
       .on(table.assetId)
       .where(sql`${table.assetId} is not null`),
+    index('documents_person_idx')
+      .on(table.personId)
+      .where(sql`${table.personId} is not null`),
     index('documents_uploaded_by_idx')
       .on(table.uploadedBy)
       .where(sql`${table.uploadedBy} is not null`),
@@ -1738,6 +1775,8 @@ export const renewals = pgTable(
     assetId: uuid().references(() => assets.id, { onDelete: 'set null' }),
     /** The paper for the current term. */
     documentId: uuid().references(() => documents.id, { onDelete: 'set null' }),
+    /** Whose it is: a driving licence's holder. */
+    personId: uuid().references(() => householdPeople.id, { onDelete: 'set null' }),
     notes: text(),
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
@@ -1753,6 +1792,9 @@ export const renewals = pgTable(
     index('renewals_document_idx')
       .on(table.documentId)
       .where(sql`${table.documentId} is not null`),
+    index('renewals_person_idx')
+      .on(table.personId)
+      .where(sql`${table.personId} is not null`),
     check('renewals_title_length', sql`char_length(${table.title}) between 1 and ${sql.raw(String(RENEWAL_TITLE_MAX_LENGTH))}`),
     check(
       'renewals_text_lengths',

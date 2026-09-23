@@ -18,6 +18,7 @@ import { ASSET_KIND_LABELS, makeAndModel } from '@/lib/home/display'
 import * as home from '@/lib/home/service'
 import { memberName } from '@/lib/households/names'
 import * as households from '@/lib/households/service'
+import * as people from '@/lib/people/service'
 import * as renewals from '@/lib/renewals/service'
 import { BackLink } from '../../../_components/ui/back-link'
 import { ROW_LINK } from '../../../_components/ui/row-link'
@@ -44,7 +45,7 @@ export default async function AssetPage({ params }: PageProps<'/home/assets/[ass
   const canManage = can(ctx.role, 'home.manage')
   const canAddDocuments = can(ctx.role, 'documents.manage')
 
-  const [{ asset, tasks, documents, history }, assetOptions, members, contactList] = await Promise.all([
+  const [{ asset, tasks, documents, history }, assetOptions, members, contactList, personOptions] = await Promise.all([
     home.getAssetDetail(session, assetId).catch((error: unknown) => {
       if (error instanceof NotFoundError) notFound()
       throw error
@@ -52,6 +53,7 @@ export default async function AssetPage({ params }: PageProps<'/home/assets/[ass
     canManage || canAddDocuments ? home.listAssetOptions(session) : [],
     households.listMembers(ctx),
     canManage ? contacts.listContacts(session) : [],
+    canAddDocuments ? people.listPersonOptions(ctx) : [],
   ])
   const expiry = asset.warrantyExpiresOn ? (await renewals.getExpiry(session, { kind: 'warranty', subjectId: asset.id })).expiry : null
   const today = todayInTimeZone(household.timeZone)
@@ -154,6 +156,7 @@ export default async function AssetPage({ params }: PageProps<'/home/assets/[ass
                   variant='outline'
                   assetId={asset.id}
                   assets={assetOptions}
+                  people={personOptions}
                   canMarkSensitive={can(ctx.role, 'documents.viewSensitive')}
                 />
               ) : undefined

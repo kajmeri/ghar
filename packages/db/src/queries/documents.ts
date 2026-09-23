@@ -2,10 +2,11 @@ import { can, requirePermission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
 import { storagePathHousehold, type DocumentKind, type DocumentMimeType } from '@ghar/core/documents'
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@ghar/core/errors'
-import { and, count, desc, eq, getTableColumns, gte, isNotNull, lte, sql } from 'drizzle-orm'
-import { assets, documents } from '../schema'
+import { and, count, desc, eq, getTableColumns, gte, inArray, isNotNull, lte, sql, type SQL } from 'drizzle-orm'
+import { assets, documents, householdPeople, profiles } from '../schema'
 import { recordAudit } from './audit'
 import { notRenewingSql } from './expiries'
+import { personRefColumns, requireHouseholdPeople } from './people'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { isUniqueViolation } from './pg-errors'
 import type { Db, RequestContext } from './types'
@@ -15,7 +16,13 @@ import type { Db, RequestContext } from './types'
 // The file itself lives in a private bucket; only its path is stored, and it never leaves the server.
 
 export type DocumentRow = typeof documents.$inferSelect
-export type DocumentWithAssetRow = DocumentRow & { assetName: string | null }
+export type DocumentWithAssetRow = DocumentRow & {
+  assetName: string | null
+  /** Whose it is, by their own name or their profile's. */
+  personName: string | null
+  /** Their account, so "You" can be said. Null for someone without one. */
+  personUserId: string | null
+}
 
 export interface DocumentInput {
   title: string
@@ -27,6 +34,8 @@ export interface DocumentInput {
   issuer: string | null
   referenceNumber: string | null
   assetId: string | null
+  /** Whose it is. */
+  personId: string | null
   notes: string | null
   isSensitive: boolean
 }
@@ -61,7 +70,17 @@ async function requireAssetInHousehold(ctx: RequestContext, db: Db, assetId: str
   if (!asset) throw new ValidationError('That asset is not in the household.')
 }
 
-const documentWithAssetColumns = { ...getTableColumns(documents), assetName: assets.name }
+const documentWithAssetColumns = { ...getTableColumns(documents), assetName: assets.name, ...personRefColumns }
+
+/** A document with the names of its asset and person, plus any extra columns the caller asks for. */
+export function selectDocuments<Extra extends Record<string, SQL>>(db: Db, extra?: Extra) {
+  return db
+    .select({ ...documentWithAssetColumns, ...(extra ?? ({} as Extra)) })
+    .from(documents)
+    .leftJoin(assets, eq(assets.id, documents.assetId))
+    .leftJoin(householdPeople, eq(householdPeople.id, documents.personId))
+    .leftJoin(profiles, eq(profiles.id, householdPeople.userId))
+}
 
 /** Newest first. */
 export async function listDocuments(
@@ -70,10 +89,7 @@ export async function listDocuments(
   filter: { kind?: DocumentKind; assetId?: string } = {}
 ): Promise<DocumentWithAssetRow[]> {
   requirePermission(ctx, 'documents.view')
-  return db
-    .select(documentWithAssetColumns)
-    .from(documents)
-    .leftJoin(assets, eq(assets.id, documents.assetId))
+  return selectDocuments(db)
     .where(
       and(
         visibleTo(ctx),
@@ -94,10 +110,7 @@ export async function listDocumentsPage(
   page: PageRequest
 ): Promise<Page<DocumentWithAssetRow>> {
   requirePermission(ctx, 'documents.view')
-  const rows = await db
-    .select({ ...documentWithAssetColumns, pageKeys: pageKeys(documentOrder) })
-    .from(documents)
-    .leftJoin(assets, eq(assets.id, documents.assetId))
+  const rows = await selectDocuments(db, { pageKeys: pageKeys(documentOrder) })
     .where(
       and(
         visibleTo(ctx),
@@ -113,10 +126,7 @@ export async function listDocumentsPage(
 
 export async function getDocument(ctx: RequestContext, db: Db, documentId: string): Promise<DocumentWithAssetRow> {
   requirePermission(ctx, 'documents.view')
-  const [document] = await db
-    .select(documentWithAssetColumns)
-    .from(documents)
-    .leftJoin(assets, eq(assets.id, documents.assetId))
+  const [document] = await selectDocuments(db)
     .where(and(eq(documents.id, documentId), visibleTo(ctx)))
     .limit(1)
   if (!document) throw new NotFoundError(DOCUMENT_NOT_FOUND)
@@ -134,6 +144,7 @@ export async function createDocument(ctx: RequestContext, db: Db, input: Documen
     throw new ValidationError("That upload isn't one of this household's. Upload the file again.")
   }
   if (input.assetId !== null) await requireAssetInHousehold(ctx, db, input.assetId)
+  if (input.personId !== null) await requireHouseholdPeople(ctx, db, [input.personId])
 
   try {
     const [document] = await db
@@ -160,6 +171,7 @@ export async function updateDocument(
   requirePermission(ctx, 'documents.manage')
   assertCanMarkSensitive(ctx, input.isSensitive)
   if (input.assetId !== null) await requireAssetInHousehold(ctx, db, input.assetId)
+  if (input.personId !== null) await requireHouseholdPeople(ctx, db, [input.personId])
 
   return db.transaction(async tx => {
     const [updated] = await tx
@@ -239,4 +251,22 @@ export async function listDocumentExpiries(
     .where(and(visibleTo(ctx), gte(documents.expiresOn, range.from), lte(documents.expiresOn, range.to)))
     .orderBy(documents.expiresOn, documents.title)
   return rows.flatMap(row => (row.expiresOn === null ? [] : [{ ...row, expiresOn: row.expiresOn }]))
+}
+
+/**
+ * The passports of these people, for checking a trip abroad. Only for someone who can see sensitive
+ * documents: a passport usually is one, so anyone else would be told a traveller has none.
+ */
+export async function listPassports(
+  ctx: RequestContext,
+  db: Db,
+  personIds: readonly string[]
+): Promise<{ id: string; personId: string; expiresOn: CalendarDate | null }[]> {
+  requirePermission(ctx, 'documents.viewSensitive')
+  if (personIds.length === 0) return []
+  const rows = await db
+    .select({ id: documents.id, personId: documents.personId, expiresOn: documents.expiresOn })
+    .from(documents)
+    .where(and(eq(documents.householdId, ctx.householdId), eq(documents.kind, 'passport'), inArray(documents.personId, [...personIds])))
+  return rows.flatMap(row => (row.personId === null ? [] : [{ ...row, personId: row.personId }]))
 }

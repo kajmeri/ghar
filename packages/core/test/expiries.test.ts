@@ -73,6 +73,7 @@ describe('reminder lead time', () => {
 
   it('starts months ahead for an ID and two months for anything else, unless someone picked', () => {
     expect(reminderLeadDays({ kind: 'document', documentKind: 'id' }, null)).toBe(180)
+    expect(reminderLeadDays({ kind: 'document', documentKind: 'passport' }, null)).toBe(180)
     expect(reminderLeadDays({ kind: 'document', documentKind: 'insurance' }, null)).toBe(60)
     expect(reminderLeadDays({ kind: 'warranty' }, null)).toBe(60)
     expect(reminderLeadDays({ kind: 'renewal', renewalKind: 'registration' }, null)).toBe(60)

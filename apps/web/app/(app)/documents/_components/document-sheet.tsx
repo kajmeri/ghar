@@ -7,6 +7,7 @@ import { Camera, FileText, FileUp, Pencil, Plus } from 'lucide-react'
 import { useId, useRef, useState, type ChangeEvent, type SyntheticEvent } from 'react'
 import { CheckboxField } from '@/app/(app)/_components/ui/checkbox-field'
 import { DateField } from '@/app/(app)/_components/ui/date-field'
+import { PersonField, type PersonOption } from '@/app/(app)/_components/ui/person-field'
 import { ReminderLeadField, remindFromDaysOf } from '@/app/(app)/_components/ui/reminder-lead-field'
 import { Sheet, SheetClose } from '@/app/(app)/_components/ui/sheet'
 import { Button } from '@/components/ui/button'
@@ -43,6 +44,7 @@ const PREVIEWABLE = new Set<string>(['image/jpeg', 'image/png', 'image/webp'])
 export function DocumentSheet({
   document,
   assets,
+  people,
   canMarkSensitive,
   assetId,
   variant = 'default',
@@ -50,6 +52,8 @@ export function DocumentSheet({
   /** Edits this document. Leave it out to add one. */
   document?: HouseholdDocument
   assets: AssetOption[]
+  /** Everyone a document can belong to, as the picker shows them. */
+  people: PersonOption[]
   /** Owners and adults. Anyone else can't see a private document, so can't make one. */
   canMarkSensitive: boolean
   /** Links a new document to this asset to start with. */
@@ -143,6 +147,7 @@ export function DocumentSheet({
         issuer: formText(data, 'issuer') || null,
         referenceNumber: formText(data, 'referenceNumber') || null,
         assetId: formText(data, 'assetId') || null,
+        personId: formText(data, 'personId') || null,
         notes: formText(data, 'notes') || null,
         isSensitive: canMarkSensitive ? data.get('isSensitive') === 'on' : (document?.isSensitive ?? false),
       },
@@ -259,6 +264,8 @@ export function DocumentSheet({
             ))}
           </NativeSelect>
         </Field>
+
+        <PersonField people={people} defaultValue={document?.personId ?? null} hint='A passport or licence belongs to someone.' />
 
         <div className='grid grid-cols-2 gap-3'>
           <DateField id={`${formId}-issued`} name='issuedOn' label='Issued' defaultValue={document?.issuedOn ?? undefined} />

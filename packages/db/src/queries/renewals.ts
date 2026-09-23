@@ -4,10 +4,11 @@ import type { DocumentKind } from '@ghar/core/documents'
 import { NotFoundError, ValidationError } from '@ghar/core/errors'
 import { currentTermEnd, type RenewalKind } from '@ghar/core/renewals'
 import { and, eq, getTableColumns, gte, isNotNull, lt, lte, not, sql, type SQL } from 'drizzle-orm'
-import { assets, contacts, documents, renewals } from '../schema'
+import { assets, contacts, documents, householdPeople, profiles, renewals } from '../schema'
 import { recordAudit } from './audit'
 import { authorize } from './authorize'
 import { notRenewingSql } from './expiries'
+import { personRefColumns, requireHouseholdPeople } from './people'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import type { Actor, Db, RequestContext } from './types'
 
@@ -21,6 +22,10 @@ export type RenewalWithLinksRow = RenewalRow & {
   assetName: string | null
   /** Null when the document is gone, or the caller can't see it. */
   documentTitle: string | null
+  /** Whose it is, by their own name or their profile's. */
+  personName: string | null
+  /** Their account, so "You" can be said. Null for someone without one. */
+  personUserId: string | null
   /** Someone said it won't be renewed, for the date it has now. */
   notRenewing: boolean
 }
@@ -40,6 +45,8 @@ export interface RenewalInput {
   contactId: string | null
   assetId: string | null
   documentId: string | null
+  /** Whose it is: a licence's holder. */
+  personId: string | null
   notes: string | null
 }
 
@@ -62,6 +69,7 @@ export function selectRenewalsWithLinks<Extra extends Record<string, SQL>>(ctx: 
       contactName: contacts.name,
       assetName: assets.name,
       documentTitle: documents.title,
+      ...personRefColumns,
       notRenewing: notRenewingSql('renewal', renewals.id, renewals.expiresOn),
       ...(extra ?? ({} as Extra)),
     })
@@ -69,6 +77,8 @@ export function selectRenewalsWithLinks<Extra extends Record<string, SQL>>(ctx: 
     .leftJoin(contacts, eq(contacts.id, renewals.contactId))
     .leftJoin(assets, eq(assets.id, renewals.assetId))
     .leftJoin(documents, and(eq(documents.id, renewals.documentId), visibleDocuments(ctx)))
+    .leftJoin(householdPeople, eq(householdPeople.id, renewals.personId))
+    .leftJoin(profiles, eq(profiles.id, householdPeople.userId))
 }
 
 async function requireLinksInHousehold(ctx: RequestContext, db: Db, input: RenewalInput): Promise<void> {
@@ -112,6 +122,7 @@ async function requireLinksInHousehold(ctx: RequestContext, db: Db, input: Renew
         })
     )
   }
+  if (input.personId !== null) checks.push(requireHouseholdPeople(ctx, db, [input.personId]))
   await Promise.all(checks)
 }
 

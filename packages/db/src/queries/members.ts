@@ -4,6 +4,7 @@ import { and, asc, eq } from 'drizzle-orm'
 import { authUsers } from 'drizzle-orm/supabase'
 import { householdMembers, profiles } from '../schema'
 import { recordAudit } from './audit'
+import { freezeMemberPerson } from './people'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import type { Db, RequestContext } from './types'
 
@@ -85,6 +86,7 @@ export async function removeMember(ctx: RequestContext, db: Db, input: { userId:
     const { actor, members } = await lockMembers(ctx, tx)
     const target = assertCanRemoveMember({ actor, members, targetUserId: input.userId })
 
+    await freezeMemberPerson(ctx, tx, input.userId)
     await tx.delete(householdMembers).where(memberKey(ctx, input.userId))
     await recordAudit(ctx, tx, {
       action: 'member.removed',

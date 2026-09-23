@@ -13,11 +13,12 @@ import * as contacts from '@/lib/contacts/service'
 import { getDb } from '@/lib/db'
 import * as documents from '@/lib/documents/service'
 import * as home from '@/lib/home/service'
+import { listPersonOptions, personNameFor } from '@/lib/people/service'
 
 // What the /api/v1/renewals and /api/v1/expiries routes and the renewals pages call. The queries
 // decide who sees what; this file turns rows into the contract.
 
-export function toRenewal(row: RenewalWithLinksRow, today: CalendarDate): Renewal {
+export function toRenewal(row: RenewalWithLinksRow, today: CalendarDate, currentUserId: string): Renewal {
   const leadDays = reminderLeadDays({ kind: 'renewal', renewalKind: row.kind }, row.remindFromDays)
   return {
     id: row.id,
@@ -39,6 +40,8 @@ export function toRenewal(row: RenewalWithLinksRow, today: CalendarDate): Renewa
     assetName: row.assetName,
     documentId: row.documentId,
     documentTitle: row.documentTitle,
+    personId: row.personId,
+    personName: personNameFor(row, currentUserId),
     notes: row.notes,
     notRenewing: row.notRenewing,
     createdAt: row.createdAt.toISOString(),
@@ -94,15 +97,15 @@ export function toExpiry(row: ExpiryRow, today: CalendarDate): Expiry {
 const householdToday = (session: Session) => todayInTimeZone(session.household.timeZone)
 
 export async function getRenewal(session: Session, renewalId: string): Promise<Renewal> {
-  return toRenewal(await queries.getRenewal(session.context, getDb(), renewalId), householdToday(session))
+  return toRenewal(await queries.getRenewal(session.context, getDb(), renewalId), householdToday(session), session.context.userId)
 }
 
 export async function createRenewal(session: Session, body: RenewalBody): Promise<Renewal> {
-  return toRenewal(await queries.createRenewal(session.context, getDb(), body), householdToday(session))
+  return toRenewal(await queries.createRenewal(session.context, getDb(), body), householdToday(session), session.context.userId)
 }
 
 export async function updateRenewal(session: Session, renewalId: string, body: RenewalBody): Promise<Renewal> {
-  return toRenewal(await queries.updateRenewal(session.context, getDb(), renewalId, body), householdToday(session))
+  return toRenewal(await queries.updateRenewal(session.context, getDb(), renewalId, body), householdToday(session), session.context.userId)
 }
 
 export async function deleteRenewal(session: Session, renewalId: string): Promise<{ renewalId: string }> {
@@ -184,19 +187,23 @@ export interface RenewalFormOptions {
   contacts: { id: string; name: string }[]
   /** Only the documents the editor can see. */
   documents: { id: string; title: string }[]
+  /** Everyone a renewal can belong to, as the picker shows them. */
+  people: { id: string; label: string }[]
 }
 
 /** What the renewal form offers to link to. */
 export async function listRenewalFormOptions(session: Session): Promise<RenewalFormOptions> {
   const { role } = session.context
-  const [assets, people, papers] = await Promise.all([
+  const [assets, people, papers, household] = await Promise.all([
     can(role, 'home.view') ? home.listAssetOptions(session) : [],
     can(role, 'contacts.view') ? contacts.listContacts(session) : [],
     documents.listDocuments(session),
+    listPersonOptions(session.context),
   ])
   return {
     assets,
     contacts: people.map(contact => ({ id: contact.id, name: contact.name })),
     documents: papers.map(document => ({ id: document.id, title: document.title })),
+    people: household,
   }
 }

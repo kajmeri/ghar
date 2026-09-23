@@ -131,7 +131,8 @@ describe('createTripBodySchema', () => {
       status: 'idea',
       startsOn: null,
       endsOn: null,
-      memberUserIds: [],
+      international: false,
+      travellerIds: [],
     })
   })
 

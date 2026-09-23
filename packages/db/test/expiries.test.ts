@@ -52,6 +52,7 @@ function renewal(overrides: Partial<RenewalInput> = {}): RenewalInput {
     contactId: null,
     assetId: null,
     documentId: null,
+    personId: null,
     notes: null,
     ...overrides,
   }
@@ -66,6 +67,7 @@ async function passport(ctx: RequestContext, input: { expiresOn: string; issuedO
     issuer: null,
     referenceNumber: null,
     assetId: null,
+    personId: null,
     notes: null,
     isSensitive: input.isSensitive ?? false,
     storagePath: documentStoragePath(ctx.householdId, randomUUID(), 'image/jpeg'),
