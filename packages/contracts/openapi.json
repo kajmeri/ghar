@@ -3945,6 +3945,308 @@
         }
       }
     },
+    "/api/v1/expiries/{kind}/{subjectId}": {
+      "get": {
+        "operationId": "getExpiry",
+        "tags": [
+          "renewals"
+        ],
+        "description": "Not found when it's gone, has no date it runs out, or is a sensitive document the caller can't see.",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ExpiryKind"
+            }
+          },
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "expiry": {
+                      "$ref": "#/components/schemas/AttentionExpiry"
+                    }
+                  },
+                  "required": [
+                    "expiry"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/expiries/{kind}/{subjectId}/not-renewing": {
+      "put": {
+        "operationId": "markNotRenewing",
+        "tags": [
+          "renewals"
+        ],
+        "description": "Says it won't be renewed, for this date. Saying it again changes nothing.",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ExpiryKind"
+            }
+          },
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotRenewingBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "expiry": {
+                      "$ref": "#/components/schemas/AttentionExpiry"
+                    }
+                  },
+                  "required": [
+                    "expiry"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "clearNotRenewing",
+        "tags": [
+          "renewals"
+        ],
+        "description": "Takes \"not renewing\" back, so reminders for its date go out again. Fine when it wasn't set.",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ExpiryKind"
+            }
+          },
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "expiry": {
+                      "$ref": "#/components/schemas/AttentionExpiry"
+                    }
+                  },
+                  "required": [
+                    "expiry"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/expiries/{kind}/{subjectId}/renew": {
+      "post": {
+        "operationId": "renewExpiry",
+        "tags": [
+          "renewals"
+        ],
+        "description": "Moves the date on to the new term. Reminders start over for the new date, and \"not renewing\"\nno longer applies. 422 when the date isn't later, when storagePath or issuedOn is for anything but\na document, or when nothing was uploaded to storagePath.",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ExpiryKind"
+            }
+          },
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenewExpiryBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "expiry": {
+                      "$ref": "#/components/schemas/AttentionExpiry"
+                    }
+                  },
+                  "required": [
+                    "expiry"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/finances/budget": {
       "get": {
         "operationId": "getBudget",
@@ -7634,7 +7936,7 @@
         "tags": [
           "one-tap"
         ],
-        "description": "Does what the link says and uses it up, in one transaction. 409 when it was already used. 400 when\nit's invalid, expired or no longer allowed, or the category isn't one of the household's (the\nlink keeps working then). 404 when the transaction or bill was deleted.",
+        "description": "Does what the link says and uses it up, in one transaction. 409 when it was already used, or the\ndate it names has changed. 400 when it's invalid, expired or no longer allowed, or the category\nisn't one of the household's (the link keeps working then). 404 when the thing it names was deleted.",
         "security": [],
         "parameters": [
           {
@@ -12974,6 +13276,19 @@
               "state": {
                 "$ref": "#/components/schemas/ExpiryState"
               },
+              "notRenewing": {
+                "type": "boolean"
+              },
+              "suggestedRenewalOn": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "documentKind": {
                 "$ref": "#/components/schemas/DocumentKind"
               }
@@ -12984,6 +13299,8 @@
               "title",
               "expiresOn",
               "state",
+              "notRenewing",
+              "suggestedRenewalOn",
               "documentKind"
             ]
           },
@@ -13006,6 +13323,19 @@
               },
               "state": {
                 "$ref": "#/components/schemas/ExpiryState"
+              },
+              "notRenewing": {
+                "type": "boolean"
+              },
+              "suggestedRenewalOn": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
@@ -13013,7 +13343,9 @@
               "assetId",
               "title",
               "expiresOn",
-              "state"
+              "state",
+              "notRenewing",
+              "suggestedRenewalOn"
             ]
           },
           {
@@ -13035,6 +13367,19 @@
               },
               "state": {
                 "$ref": "#/components/schemas/ExpiryState"
+              },
+              "notRenewing": {
+                "type": "boolean"
+              },
+              "suggestedRenewalOn": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "renewalKind": {
                 "$ref": "#/components/schemas/RenewalKind"
@@ -13059,6 +13404,8 @@
               "title",
               "expiresOn",
               "state",
+              "notRenewing",
+              "suggestedRenewalOn",
               "renewalKind",
               "autoRenews",
               "costCents"
@@ -16922,6 +17269,14 @@
           "negative"
         ]
       },
+      "ExpiryKind": {
+        "type": "string",
+        "enum": [
+          "document",
+          "warranty",
+          "renewal"
+        ]
+      },
       "ExpiryState": {
         "type": "string",
         "enum": [
@@ -19481,6 +19836,17 @@
           "staleAccountCount"
         ]
       },
+      "NotRenewingBody": {
+        "type": "object",
+        "properties": {
+          "expiresOn": {
+            "$ref": "#/components/schemas/CalendarDate"
+          }
+        },
+        "required": [
+          "expiresOn"
+        ]
+      },
       "OneTap": {
         "oneOf": [
           {
@@ -19602,6 +19968,43 @@
             "type": "object",
             "properties": {
               "state": {
+                "type": "string",
+                "const": "not_renewing"
+              },
+              "usable": {
+                "type": "boolean",
+                "const": true
+              },
+              "subject": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/components/schemas/ExpiryKind"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "expiresOn": {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "title",
+                  "expiresOn"
+                ]
+              }
+            },
+            "required": [
+              "state",
+              "usable",
+              "subject"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
                 "$ref": "#/components/schemas/OneTapUnusableState"
               },
               "usable": {
@@ -19639,7 +20042,8 @@
           "used",
           "expired",
           "not_allowed",
-          "gone"
+          "gone",
+          "changed"
         ]
       },
       "OptionFacts": {
@@ -20050,6 +20454,32 @@
           "refundable"
         ]
       },
+      "RenewExpiryBody": {
+        "type": "object",
+        "properties": {
+          "expiresOn": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "storagePath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "issuedOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "expiresOn"
+        ]
+      },
       "Renewal": {
         "type": "object",
         "properties": {
@@ -20169,6 +20599,9 @@
               "null"
             ]
           },
+          "notRenewing": {
+            "type": "boolean"
+          },
           "createdAt": {
             "$ref": "#/components/schemas/Instant"
           },
@@ -20195,6 +20628,7 @@
           "documentId",
           "documentTitle",
           "notes",
+          "notRenewing",
           "createdAt",
           "updatedAt"
         ]

@@ -14,7 +14,7 @@ import {
 } from '@ghar/core/documents'
 import { ValidationError } from '@ghar/core/errors'
 import * as queries from '@ghar/db/queries'
-import type { DocumentWithAssetRow, PageRequest } from '@ghar/db/queries'
+import type { DocumentFile, DocumentWithAssetRow, PageRequest } from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
 import { collectPage, pageRequest, pageResponse, type PageResult } from '@/lib/api/cursor'
 import { getDb } from '@/lib/db'
@@ -99,9 +99,19 @@ export async function createDocument(session: Session, body: CreateDocumentBody)
   const { context } = session
   requirePermission(context, 'documents.manage')
   const { storagePath, ...fields } = body
+  const file = await verifyUploadedFile(session, storagePath)
+  const row = await queries.createDocument(context, getDb(), { ...fields, ...file })
+  return toDocument(row, householdToday(session))
+}
 
+/**
+ * Checks a file an upload link put in the bucket: that the path is one Ghar made for this household,
+ * that something arrived, and that it's a photo or PDF within the size limit. A file that breaks the
+ * rules is removed. The type and size come from storage, not from what the phone said.
+ */
+export async function verifyUploadedFile(session: Session, storagePath: string): Promise<DocumentFile> {
   // Before storage is asked anything, so another household's path is never even looked up.
-  if (storagePathHousehold(storagePath) !== context.householdId.toLowerCase()) {
+  if (storagePathHousehold(storagePath) !== session.context.householdId.toLowerCase()) {
     throw new ValidationError('That upload is not one Ghar made for this household.')
   }
 
@@ -109,16 +119,14 @@ export async function createDocument(session: Session, body: CreateDocumentBody)
   if (file === null) throw new ValidationError('The file did not finish uploading. Try adding it again.')
   const { mimeType, sizeBytes } = file
   if (!isDocumentMimeType(mimeType)) {
-    await removeFile(storagePath)
+    await removeDocumentFile(storagePath)
     throw new ValidationError('Only photos and PDFs can be stored.')
   }
   if (sizeBytes < 1 || sizeBytes > MAX_DOCUMENT_BYTES) {
-    await removeFile(storagePath)
+    await removeDocumentFile(storagePath)
     throw new ValidationError('Files can be up to 20 MB.')
   }
-
-  const row = await queries.createDocument(context, getDb(), { ...fields, storagePath, mimeType, sizeBytes })
-  return toDocument(row, householdToday(session))
+  return { storagePath, mimeType, sizeBytes }
 }
 
 export async function updateDocument(session: Session, documentId: string, body: DocumentBody): Promise<HouseholdDocument> {
@@ -127,7 +135,7 @@ export async function updateDocument(session: Session, documentId: string, body:
 
 export async function deleteDocument(session: Session, documentId: string): Promise<{ documentId: string }> {
   const row = await queries.deleteDocument(session.context, getDb(), documentId)
-  await removeFile(row.storagePath)
+  await removeDocumentFile(row.storagePath)
   return { documentId }
 }
 
@@ -138,7 +146,8 @@ export async function getDocumentFileUrl(session: Session, documentId: string): 
   return { url: link.url, expiresAt: link.expiresAt.toISOString() }
 }
 
-async function removeFile(path: string): Promise<void> {
+/** Once nothing points at it. Never throws: a stray object in a private bucket is untidy, not exposed. */
+export async function removeDocumentFile(path: string): Promise<void> {
   try {
     await getStorageProvider().remove(path)
   } catch (error) {

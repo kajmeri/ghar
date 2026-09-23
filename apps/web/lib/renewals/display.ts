@@ -37,8 +37,12 @@ export function renewsItself(expiry: { autoRenews: boolean; state: Expiry['state
   return expiry.autoRenews && expiry.state !== 'expired'
 }
 
-/** "Renews in 12 days" with no colour for an automatic renewal; otherwise the expiry wording and tone. */
+/**
+ * "Renews in 12 days" with no colour for an automatic renewal; otherwise the expiry wording and tone.
+ * Something nobody is renewing keeps its wording but loses its colour: there's nothing to do.
+ */
 export function expiryStatus(expiry: Expiry, today: CalendarDate): { phrase: string; tone: (typeof EXPIRY_TONES)[Expiry['state']] } {
+  if (expiry.notRenewing) return { phrase: expiryPhrase(expiry.expiresOn, today), tone: 'neutral' }
   if (expiry.kind === 'renewal' && renewsItself(expiry)) return { phrase: renewsPhrase(expiry.expiresOn, today), tone: 'neutral' }
   return { phrase: expiryPhrase(expiry.expiresOn, today), tone: EXPIRY_TONES[expiry.state] }
 }

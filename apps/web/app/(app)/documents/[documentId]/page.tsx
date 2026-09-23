@@ -14,10 +14,12 @@ import { getPageSession } from '@/lib/api/authed'
 import { DOCUMENT_KIND_LABELS, EXPIRY_TONES, fileTypeLabel, formatFileSize } from '@/lib/documents/display'
 import * as documents from '@/lib/documents/service'
 import * as home from '@/lib/home/service'
+import * as renewals from '@/lib/renewals/service'
 import { BackLink } from '../../_components/ui/back-link'
 import { PageHeader } from '../../_components/ui/page-header'
 import { SectionHeader } from '../../_components/ui/section-header'
 import { DeleteDocument } from '../_components/delete-document'
+import { ExpiryActions } from '../../renewals/_components/expiry-actions'
 import { DocumentSheet } from '../_components/document-sheet'
 
 export const metadata: Metadata = { title: 'Document' }
@@ -38,6 +40,7 @@ export default async function DocumentPage({ params }: PageProps<'/documents/[do
     }),
     canManage ? home.listAssets(session) : [],
   ])
+  const expiry = document.expiresOn ? (await renewals.getExpiry(session, { kind: 'document', subjectId: document.id })).expiry : null
   const { timeZone } = session.household
   const today = todayInTimeZone(timeZone)
 
@@ -51,7 +54,9 @@ export default async function DocumentPage({ params }: PageProps<'/documents/[do
           value: (
             <span className='flex flex-wrap items-center justify-end gap-2'>
               {formatCalendarDate(document.expiresOn)}
-              {document.expiryState && document.expiryState !== 'current' ? (
+              {expiry?.notRenewing ? (
+                <Pill tone='neutral'>Not renewing</Pill>
+              ) : document.expiryState && document.expiryState !== 'current' ? (
                 <Pill tone={EXPIRY_TONES[document.expiryState]}>{expiryPhrase(document.expiresOn, today)}</Pill>
               ) : null}
             </span>
@@ -111,9 +116,12 @@ export default async function DocumentPage({ params }: PageProps<'/documents/[do
               </div>
             ))}
           </dl>
-          {document.expiresOn && document.expiryState !== 'expired' ? (
+          {expiry?.notRenewing ? (
+            <p className='text-sm text-ink-muted'>Marked not renewing, so no reminders go out for this date.</p>
+          ) : expiry && expiry.state !== 'expired' ? (
             <p className='text-sm text-ink-muted'>A reminder email goes out 60, 30 and 7 days before it expires.</p>
           ) : null}
+          {expiry && canManage ? <ExpiryActions expiry={expiry} /> : null}
         </section>
 
         {document.notes ? (

@@ -8,6 +8,7 @@ import {
   createHousehold,
   createManualAccount,
   createInvitation,
+  createRenewal,
   ensureDefaultCategories,
   listCategories,
   setDigestPreferences,
@@ -230,6 +231,45 @@ describe('the daily digest', () => {
     expect(email.sent.map(message => message.to)).toEqual([adult.email])
     expect(email.sent[0]?.text).toMatch(LINK)
     expect(oneTapKey).toHaveBeenCalled()
+  })
+
+  it('offers a not renewing link on what runs out, to people who can change it', async () => {
+    const { owner, ownerEmail, join } = await household()
+    const viewer = await join('viewer')
+    const expiresOn = addCalendarDays(TODAY, 10)
+    await createRenewal(owner, db, {
+      title: 'Costco membership',
+      kind: 'membership',
+      expiresOn,
+      cadenceMonths: 12,
+      autoRenews: false,
+      costCents: null,
+      provider: null,
+      referenceNumber: null,
+      url: null,
+      contactId: null,
+      assetId: null,
+      documentId: null,
+      notes: null,
+    })
+    await prefer(owner, { sections: ['upkeep'] })
+    await prefer(viewer.ctx, { sections: ['upkeep'] })
+    const email = createMemoryProvider()
+
+    await runDigest(depsWith(email), { householdId: owner.householdId })
+
+    const byRecipient = new Map(email.sent.map(message => [message.to, message.text]))
+    const ownerText = byRecipient.get(ownerEmail) ?? ''
+    expect(ownerText).toContain('Costco membership')
+    const tokens = [...new Set([...ownerText.matchAll(LINK)].map(match => match[1] ?? ''))]
+    expect(tokens).toHaveLength(1)
+    expect(await viewOneTap(tokens[0] ?? '', { db, key: KEY, now: NOW })).toMatchObject({
+      state: 'not_renewing',
+      subject: { kind: 'renewal', title: 'Costco membership', expiresOn },
+    })
+    // A viewer hears about it, but can't say it won't be renewed.
+    expect(byRecipient.get(viewer.email)).toContain('Costco membership')
+    expect(byRecipient.get(viewer.email)).not.toMatch(LINK)
   })
 
   it('carries on past one person’s failure and tries them again next run', async () => {

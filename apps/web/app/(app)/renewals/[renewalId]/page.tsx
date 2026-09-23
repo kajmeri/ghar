@@ -20,6 +20,7 @@ import { BackLink } from '../../_components/ui/back-link'
 import { PageHeader } from '../../_components/ui/page-header'
 import { SectionHeader } from '../../_components/ui/section-header'
 import { DeleteRenewal } from '../_components/delete-renewal'
+import { ExpiryActions } from '../_components/expiry-actions'
 import { RenewalSheet } from '../_components/renewal-sheet'
 
 export const metadata: Metadata = { title: 'Renewal' }
@@ -34,21 +35,30 @@ export default async function RenewalPage({ params }: PageProps<'/renewals/[rene
   const canManage = can(session.context.role, 'documents.manage')
   const { currency } = session.household
 
-  const [renewal, options] = await Promise.all([
+  const [renewal, { expiry }, options] = await Promise.all([
     renewals.getRenewal(session, renewalId).catch((error: unknown) => {
+      if (error instanceof NotFoundError) notFound()
+      throw error
+    }),
+    renewals.getExpiry(session, { kind: 'renewal', subjectId: renewalId }).catch((error: unknown) => {
       if (error instanceof NotFoundError) notFound()
       throw error
     }),
     canManage ? renewals.listRenewalFormOptions(session) : null,
   ])
   const today = todayInTimeZone(session.household.timeZone)
-  const renews = renewsItself({ autoRenews: renewal.autoRenews, state: renewal.expiryState })
-  const next = renewal.autoRenews ? null : nextTermEnd(renewal)
+  const renews = !renewal.notRenewing && renewsItself({ autoRenews: renewal.autoRenews, state: renewal.expiryState })
+  const next = renewal.autoRenews || renewal.notRenewing ? null : nextTermEnd(renewal)
 
   const rows: { label: string; value: ReactNode }[] = [
     {
       label: 'Status',
-      value: renews ? (
+      value: renewal.notRenewing ? (
+        <span className='flex flex-wrap items-center justify-end gap-2'>
+          <Pill tone='neutral'>Not renewing</Pill>
+          <Pill tone='neutral'>{expiryPhrase(renewal.expiresOn, today)}</Pill>
+        </span>
+      ) : renews ? (
         <Pill tone='neutral'>{renewsPhrase(renewal.expiresOn, today)}</Pill>
       ) : (
         <Pill tone={EXPIRY_TONES[renewal.expiryState]}>{expiryPhrase(renewal.expiresOn, today)}</Pill>
@@ -130,10 +140,15 @@ export default async function RenewalPage({ params }: PageProps<'/renewals/[rene
             ))}
           </dl>
           <p className='text-sm text-ink-muted'>
-            {renewal.autoRenews
-              ? 'It renews on its own. Ghar moves the date on a term once it passes, and emails owners and adults 60, 30 and 7 days before, in case you want to cancel.'
-              : 'Ghar emails owners and adults 60, 30 and 7 days before it runs out. Once it’s renewed, edit the date and the reminders start over.'}
+            {renewal.notRenewing
+              ? renewal.autoRenews
+                ? 'Marked not renewing, so no reminders go out and Ghar won’t move the date on when it passes.'
+                : 'Marked not renewing, so no reminders go out for this date.'
+              : renewal.autoRenews
+                ? 'It renews on its own. Ghar moves the date on a term once it passes, and emails owners and adults 60, 30 and 7 days before, in case you want to cancel.'
+                : 'Ghar emails owners and adults 60, 30 and 7 days before it runs out. Once it’s renewed, tap Renew and the reminders start over.'}
           </p>
+          {canManage ? <ExpiryActions expiry={expiry} /> : null}
         </div>
 
         {renewal.notes ? (

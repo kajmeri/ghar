@@ -1,8 +1,9 @@
 import type { CalendarDate } from '@ghar/core/dates'
-import { and, eq, gte, inArray, lte } from 'drizzle-orm'
+import { and, eq, gte, inArray, lte, not } from 'drizzle-orm'
 import { authUsers } from 'drizzle-orm/supabase'
 import { assets, documents, expiryReminders, householdMembers, households, profiles, renewals } from '../schema'
 import { authorize } from './authorize'
+import { notRenewingSql } from './expiries'
 import type { Actor, Db } from './types'
 
 // Reminder emails for things that run out, sent by the daily job across every household. Each
@@ -30,7 +31,10 @@ export interface ExpirySubject {
   autoRenews?: boolean
 }
 
-/** Documents, sensitive ones included, warranties and renewals that run out from `from` through `to`. */
+/**
+ * Documents, sensitive ones included, warranties and renewals that run out from `from` through `to`.
+ * Anything marked not renewing for its date is left out: nobody needs reminding about it.
+ */
 export async function listExpiriesForReminders(
   actor: Actor,
   db: Db,
@@ -45,7 +49,8 @@ export async function listExpiriesForReminders(
         and(
           eq(documents.householdId, actor.householdId),
           gte(documents.expiresOn, range.from),
-          lte(documents.expiresOn, range.to)
+          lte(documents.expiresOn, range.to),
+          not(notRenewingSql('document', documents.id, documents.expiresOn))
         )
       ),
     db
@@ -55,14 +60,20 @@ export async function listExpiriesForReminders(
         and(
           eq(assets.householdId, actor.householdId),
           gte(assets.warrantyExpiresOn, range.from),
-          lte(assets.warrantyExpiresOn, range.to)
+          lte(assets.warrantyExpiresOn, range.to),
+          not(notRenewingSql('warranty', assets.id, assets.warrantyExpiresOn))
         )
       ),
     db
       .select({ id: renewals.id, title: renewals.title, expiresOn: renewals.expiresOn, autoRenews: renewals.autoRenews })
       .from(renewals)
       .where(
-        and(eq(renewals.householdId, actor.householdId), gte(renewals.expiresOn, range.from), lte(renewals.expiresOn, range.to))
+        and(
+          eq(renewals.householdId, actor.householdId),
+          gte(renewals.expiresOn, range.from),
+          lte(renewals.expiresOn, range.to),
+          not(notRenewingSql('renewal', renewals.id, renewals.expiresOn))
+        )
       ),
   ])
   const subjects: ExpirySubject[] = []

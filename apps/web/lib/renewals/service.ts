@@ -1,10 +1,12 @@
 import 'server-only'
-import type { Expiry, PageQuery, Renewal, RenewalBody } from '@ghar/contracts'
+import type { Expiry, PageQuery, Renewal, RenewalBody, RenewExpiryBody } from '@ghar/contracts'
 import { todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
 import { expiryState } from '@ghar/core/documents'
+import { suggestedRenewalDate, type ExpirySubjectKind } from '@ghar/core/expiries'
 import * as queries from '@ghar/db/queries'
 import type { ExpiryRow, PageRequest, RenewalWithLinksRow } from '@ghar/db/queries'
 import { can } from '@ghar/core/auth'
+import { ValidationError } from '@ghar/core/errors'
 import type { Session } from '@/lib/api/authed'
 import { pageRequest, pageResponse, type PageResult } from '@/lib/api/cursor'
 import * as contacts from '@/lib/contacts/service'
@@ -35,25 +37,36 @@ export function toRenewal(row: RenewalWithLinksRow, today: CalendarDate): Renewa
     documentId: row.documentId,
     documentTitle: row.documentTitle,
     notes: row.notes,
+    notRenewing: row.notRenewing,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
 }
 
 export function toExpiry(row: ExpiryRow, today: CalendarDate): Expiry {
-  const state = expiryState(row.expiresOn, today)
+  const common = {
+    title: row.title,
+    expiresOn: row.expiresOn,
+    state: expiryState(row.expiresOn, today),
+    notRenewing: row.notRenewing,
+  }
   switch (row.kind) {
     case 'document':
-      return { kind: 'document', documentId: row.id, title: row.title, expiresOn: row.expiresOn, state, documentKind: row.documentKind }
+      return {
+        kind: 'document',
+        documentId: row.id,
+        ...common,
+        suggestedRenewalOn: suggestedRenewalDate({ expiresOn: row.expiresOn, issuedOn: row.issuedOn }),
+        documentKind: row.documentKind,
+      }
     case 'warranty':
-      return { kind: 'warranty', assetId: row.id, title: row.title, expiresOn: row.expiresOn, state }
+      return { kind: 'warranty', assetId: row.id, ...common, suggestedRenewalOn: null }
     case 'renewal':
       return {
         kind: 'renewal',
         renewalId: row.id,
-        title: row.title,
-        expiresOn: row.expiresOn,
-        state,
+        ...common,
+        suggestedRenewalOn: suggestedRenewalDate({ expiresOn: row.expiresOn, cadenceMonths: row.cadenceMonths }),
         renewalKind: row.renewalKind,
         autoRenews: row.autoRenews,
         costCents: row.costCents,
@@ -78,6 +91,51 @@ export async function updateRenewal(session: Session, renewalId: string, body: R
 export async function deleteRenewal(session: Session, renewalId: string): Promise<{ renewalId: string }> {
   await queries.deleteRenewal(session.context, getDb(), renewalId)
   return { renewalId }
+}
+
+// Renewing, and saying something won't be
+
+interface ExpiryParams {
+  kind: ExpirySubjectKind
+  subjectId: string
+}
+
+const subjectOf = (params: ExpiryParams) => ({ kind: params.kind, id: params.subjectId })
+
+export async function getExpiry(session: Session, params: ExpiryParams): Promise<{ expiry: Expiry }> {
+  const row = await queries.getExpiry(session.context, getDb(), subjectOf(params))
+  return { expiry: toExpiry(row, householdToday(session)) }
+}
+
+/**
+ * Moves the date on. A document can bring the scan of the new one, checked the way a new document's
+ * file is; the old file goes once the change is saved, and the new one goes if it isn't.
+ */
+export async function renewExpiry(session: Session, params: ExpiryParams, body: RenewExpiryBody): Promise<{ expiry: Expiry }> {
+  const subject = subjectOf(params)
+  if (body.storagePath !== undefined && subject.kind !== 'document') {
+    throw new ValidationError('Only a document can have a new scan.')
+  }
+  const file = body.storagePath === undefined ? undefined : await documents.verifyUploadedFile(session, body.storagePath)
+  let result: Awaited<ReturnType<typeof queries.renewExpiry>>
+  try {
+    result = await queries.renewExpiry(session.context, getDb(), { subject, expiresOn: body.expiresOn, issuedOn: body.issuedOn, file })
+  } catch (error) {
+    if (file) await documents.removeDocumentFile(file.storagePath)
+    throw error
+  }
+  if (result.replacedStoragePath !== null) await documents.removeDocumentFile(result.replacedStoragePath)
+  return { expiry: toExpiry(result.expiry, householdToday(session)) }
+}
+
+export async function markNotRenewing(session: Session, params: ExpiryParams, body: { expiresOn: CalendarDate }): Promise<{ expiry: Expiry }> {
+  const row = await queries.markNotRenewing(session.context, getDb(), { subject: subjectOf(params), expiresOn: body.expiresOn })
+  return { expiry: toExpiry(row, householdToday(session)) }
+}
+
+export async function clearNotRenewing(session: Session, params: ExpiryParams): Promise<{ expiry: Expiry }> {
+  const row = await queries.clearNotRenewing(session.context, getDb(), subjectOf(params))
+  return { expiry: toExpiry(row, householdToday(session)) }
 }
 
 /** Documents with an expiry date, warranties and renewals, soonest first, a page at a time. */

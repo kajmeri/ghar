@@ -8,7 +8,14 @@ import { applyOneTap, viewOneTap } from '@/lib/digest/one-tap-actions'
 
 export const GET = route(getOneTap, async ({ params }) => {
   const view = await viewOneTap(params.token)
-  return view.state === 'categorize' || view.state === 'mark_paid' ? { ...view, usable: true } : { state: view.state, usable: false }
+  switch (view.state) {
+    case 'categorize':
+    case 'mark_paid':
+    case 'not_renewing':
+      return { ...view, usable: true }
+    default:
+      return { state: view.state, usable: false }
+  }
 })
 
 export const POST = route(completeOneTap, async ({ params, body }) => ({

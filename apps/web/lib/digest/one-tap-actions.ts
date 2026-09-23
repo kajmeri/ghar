@@ -1,6 +1,8 @@
 import 'server-only'
 import { can } from '@ghar/core/auth'
 import { todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
+import { notRenewingKind, oneTapActionHasDate, ONE_TAP_PERMISSIONS } from '@ghar/core/digest'
+import type { ExpirySubjectKind } from '@ghar/core/expiries'
 import { ConflictError, NotFoundError, ValidationError } from '@ghar/core/errors'
 import * as queries from '@ghar/db/queries'
 import type { ActionTokenRow, Db, RequestContext } from '@ghar/db/queries'
@@ -26,10 +28,12 @@ export type OneTapView =
   | { state: 'invalid' }
   | { state: 'used' }
   | { state: 'expired' }
-  /** Their role no longer lets them change money. */
+  /** Their role no longer lets them make this change. */
   | { state: 'not_allowed' }
-  /** The transaction or bill was deleted. */
+  /** The thing it names was deleted. */
   | { state: 'gone' }
+  /** Its date moved since the email, so the link no longer applies. */
+  | { state: 'changed' }
   | {
       state: 'categorize'
       currency: string
@@ -37,6 +41,7 @@ export type OneTapView =
       categories: { id: string; label: string }[]
     }
   | { state: 'mark_paid'; currency: string; bill: { name: string; dueOn: CalendarDate; amountCents: number | null } }
+  | { state: 'not_renewing'; subject: { kind: ExpirySubjectKind; title: string; expiresOn: CalendarDate } }
 
 type Resolved = { token: ActionTokenRow; ctx: RequestContext; dueOn: CalendarDate | null }
 
@@ -50,9 +55,9 @@ async function resolve(deps: OneTapDeps, value: string): Promise<Resolved | OneT
   if (!verifyOneTapLink(deps.key, link, grant)) return { state: 'invalid' }
   if (token.usedAt !== null) return { state: 'used' }
   if (token.expiresAt.getTime() <= deps.now.getTime()) return { state: 'expired' }
-  if (token.action === 'mark_bill_paid' && token.dueOn === null) return { state: 'invalid' }
+  if (oneTapActionHasDate(token.action) && token.dueOn === null) return { state: 'invalid' }
   const ctx: RequestContext = { userId: token.userId, householdId: token.householdId, role: token.role }
-  if (!can(ctx.role, 'finances.manage')) return { state: 'not_allowed' }
+  if (!can(ctx.role, ONE_TAP_PERMISSIONS[token.action])) return { state: 'not_allowed' }
   return { token, ctx, dueOn: token.dueOn }
 }
 
@@ -85,6 +90,12 @@ export async function viewOneTap(value: string, deps: OneTapDeps = defaultDeps()
         },
         categories: categoryOptions(categories),
       }
+    }
+    const subjectKind = notRenewingKind(token.action)
+    if (subjectKind !== null) {
+      const expiry = await queries.getExpiry(ctx, deps.db, { kind: subjectKind, id: token.entityId })
+      if (expiry.expiresOn !== dueOn) return { state: 'changed' }
+      return { state: 'not_renewing', subject: { kind: subjectKind, title: expiry.title, expiresOn: expiry.expiresOn } }
     }
     const [{ currency }, bill] = await Promise.all([queries.getHousehold(ctx, deps.db), queries.getBill(ctx, deps.db, token.entityId)])
     return { state: 'mark_paid', currency, bill: { name: bill.name, dueOn: dueOn ?? '', amountCents: bill.amountCents } }
@@ -139,6 +150,13 @@ export async function applyOneTap(value: string, input: { categoryId?: string },
     }
 
     if (dueOn === null) throw new ValidationError('This link isn’t valid.')
+    const subjectKind = notRenewingKind(token.action)
+    if (subjectKind !== null) {
+      await queries.markNotRenewing(ctx, tx, { subject: { kind: subjectKind, id: token.entityId }, expiresOn: dueOn }).catch((error: unknown) => {
+        throw error instanceof ConflictError ? refusal({ state: 'changed' }) : error
+      })
+      return 'Marked not renewing.'
+    }
     const { timezone } = await queries.getHousehold(ctx, tx)
     await queries.markBillPaid(ctx, tx, { billId: token.entityId, dueOn, paidOn: todayInTimeZone(timezone, deps.now) })
     return 'Marked paid.'
@@ -153,6 +171,10 @@ function refusal(view: OneTapView): Error {
       return new ValidationError('This link has expired. Open Ghar to make the change.')
     case 'not_allowed':
       return new ValidationError('Your role in the household no longer lets you change this.')
+    case 'changed':
+      return new ConflictError('Its date has changed since this email. Open Ghar to see the new one.')
+    case 'gone':
+      return new NotFoundError('That no longer exists.')
     default:
       return new ValidationError('This link isn’t valid.')
   }

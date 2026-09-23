@@ -31,15 +31,22 @@ export default async function RenewalsPage({ searchParams }: PageProps<'/renewal
   ])
   const addButton = options ? <RenewalSheet options={options} currency={session.household.currency} /> : undefined
 
+  const live = expiries.filter(expiry => !expiry.notRenewing)
   const groups: { id: string; title: string; description?: string; rows: Expiry[] }[] = [
     {
       id: 'expired',
       title: 'Expired',
       description: showOlder ? undefined : 'In the past year',
-      rows: expiries.filter(expiry => expiry.state === 'expired').toReversed(),
+      rows: live.filter(expiry => expiry.state === 'expired').toReversed(),
     },
-    { id: 'soon', title: 'Coming up', description: 'In the next 60 days', rows: expiries.filter(expiry => expiry.state === 'expiring') },
-    { id: 'later', title: 'Later', rows: expiries.filter(expiry => expiry.state === 'current') },
+    { id: 'soon', title: 'Coming up', description: 'In the next 60 days', rows: live.filter(expiry => expiry.state === 'expiring') },
+    { id: 'later', title: 'Later', rows: live.filter(expiry => expiry.state === 'current') },
+    {
+      id: 'not-renewing',
+      title: 'Not renewing',
+      description: 'No reminders for these. A new date brings one back.',
+      rows: expiries.filter(expiry => expiry.notRenewing),
+    },
   ].filter(group => group.rows.length > 0)
 
   return (

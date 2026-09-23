@@ -92,7 +92,7 @@ import {
   RENEWAL_TITLE_MAX_LENGTH,
 } from '@ghar/core/renewals'
 import { TRIP_STATUSES } from '@ghar/core/trips'
-import { DIGEST_SECTIONS, ONE_TAP_ACTIONS, type DigestSection } from '@ghar/core/digest'
+import { DIGEST_SECTIONS, ONE_TAP_ACTIONS, oneTapActionHasDate, type DigestSection } from '@ghar/core/digest'
 import { BOOKING_DRAFT_STATUSES, MAIL_LINK_STATUSES, MAIL_MESSAGE_OUTCOMES, MAIL_SUBJECT_MAX_LENGTH } from '@ghar/core/mail'
 import { SYNC_ENTITIES, type SyncEntity } from '@ghar/core/sync'
 import { sql, type SQL } from 'drizzle-orm'
@@ -1798,6 +1798,44 @@ export const expiryReminders = pgTable(
 ).enableRLS()
 
 /**
+ * Someone said a thing that runs out won't be renewed. It holds for the one date: its reminders stop,
+ * and it leaves the attention list and the digest. Renewing it, or editing the date, gives it a new
+ * date this row doesn't cover, so it comes back.
+ */
+export const expiryDismissals = pgTable(
+  'expiry_dismissals',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    documentId: uuid().references(() => documents.id, { onDelete: 'cascade' }),
+    /** For a warranty. */
+    assetId: uuid().references(() => assets.id, { onDelete: 'cascade' }),
+    renewalId: uuid().references(() => renewals.id, { onDelete: 'cascade' }),
+    expiresOn: date({ mode: 'string' }).notNull(),
+    dismissedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('expiry_dismissals_household_idx').on(table.householdId),
+    uniqueIndex('expiry_dismissals_document_unique')
+      .on(table.documentId, table.expiresOn)
+      .where(sql`${table.documentId} is not null`),
+    uniqueIndex('expiry_dismissals_asset_unique')
+      .on(table.assetId, table.expiresOn)
+      .where(sql`${table.assetId} is not null`),
+    uniqueIndex('expiry_dismissals_renewal_unique')
+      .on(table.renewalId, table.expiresOn)
+      .where(sql`${table.renewalId} is not null`),
+    index('expiry_dismissals_dismissed_by_idx')
+      .on(table.dismissedBy)
+      .where(sql`${table.dismissedBy} is not null`),
+    check('expiry_dismissals_one_subject', sql`num_nonnulls(${table.documentId}, ${table.assetId}, ${table.renewalId}) = 1`),
+  ]
+).enableRLS()
+
+/**
  * A due date someone marked paid by hand, for a bill paid in a way no transaction shows: from an
  * account nobody linked, or from the digest's one-tap link. The matcher counts that due date paid.
  */
@@ -2048,9 +2086,9 @@ export const actionTokens = pgTable(
       .notNull()
       .references(() => profiles.id, { onDelete: 'cascade' }),
     action: oneTapAction().notNull(),
-    /** The transaction or bill. Not a foreign key: once it's deleted, the link finds nothing. */
+    /** The transaction, bill, document, asset or renewal. Not a foreign key: once it's deleted, the link finds nothing. */
     entityId: uuid().notNull(),
-    /** For `mark_bill_paid`: the due date it marks paid. */
+    /** For `mark_bill_paid`, the due date it marks paid; for a "not renewing" link, the expiry date. */
     dueOn: date({ mode: 'string' }),
     expiresAt: timestamptz().notNull(),
     usedAt: timestamptz(),
@@ -2066,7 +2104,11 @@ export const actionTokens = pgTable(
       foreignColumns: [householdMembers.householdId, householdMembers.userId],
     }).onDelete('cascade'),
     check('action_tokens_expiry', sql`${table.expiresAt} > ${table.createdAt}`),
-    check('action_tokens_due_on', sql`(${table.action} = 'mark_bill_paid') = (${table.dueOn} is not null)`),
+    // Compared as text: a value added to the enum can't be named as one in the migration that adds it.
+    check(
+      'action_tokens_due_on',
+      sql`(${table.action}::text in (${sql.raw(ONE_TAP_ACTIONS.filter(oneTapActionHasDate).map(action => `'${action}'`).join(', '))})) = (${table.dueOn} is not null)`
+    ),
   ]
 ).enableRLS()
 

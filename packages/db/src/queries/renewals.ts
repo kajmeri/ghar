@@ -3,10 +3,11 @@ import type { CalendarDate } from '@ghar/core/dates'
 import type { DocumentKind } from '@ghar/core/documents'
 import { NotFoundError, ValidationError } from '@ghar/core/errors'
 import { currentTermEnd, type RenewalKind } from '@ghar/core/renewals'
-import { and, eq, getTableColumns, gte, isNotNull, lt, lte, sql, type SQL } from 'drizzle-orm'
+import { and, eq, getTableColumns, gte, isNotNull, lt, lte, not, sql, type SQL } from 'drizzle-orm'
 import { assets, contacts, documents, renewals } from '../schema'
 import { recordAudit } from './audit'
 import { authorize } from './authorize'
+import { notRenewingSql } from './expiries'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import type { Actor, Db, RequestContext } from './types'
 
@@ -20,6 +21,8 @@ export type RenewalWithLinksRow = RenewalRow & {
   assetName: string | null
   /** Null when the document is gone, or the caller can't see it. */
   documentTitle: string | null
+  /** Someone said it won't be renewed, for the date it has now. */
+  notRenewing: boolean
 }
 
 export interface RenewalInput {
@@ -57,6 +60,7 @@ export function selectRenewalsWithLinks<Extra extends Record<string, SQL>>(ctx: 
       contactName: contacts.name,
       assetName: assets.name,
       documentTitle: documents.title,
+      notRenewing: notRenewingSql('renewal', renewals.id, renewals.expiresOn),
       ...(extra ?? ({} as Extra)),
     })
     .from(renewals)
@@ -164,6 +168,9 @@ export interface RenewalExpiryRow {
   expiresOn: CalendarDate
   autoRenews: boolean
   costCents: number | null
+  cadenceMonths: number | null
+  /** Someone said it won't be renewed, for this date. */
+  notRenewing: boolean
 }
 
 /** Renewals whose term ends from `from` through `to`, soonest first. */
@@ -181,6 +188,8 @@ export async function listRenewalExpiries(
       expiresOn: renewals.expiresOn,
       autoRenews: renewals.autoRenews,
       costCents: renewals.costCents,
+      cadenceMonths: renewals.cadenceMonths,
+      notRenewing: notRenewingSql('renewal', renewals.id, renewals.expiresOn),
     })
     .from(renewals)
     .where(and(eq(renewals.householdId, ctx.householdId), gte(renewals.expiresOn, range.from), lte(renewals.expiresOn, range.to)))
@@ -189,9 +198,18 @@ export async function listRenewalExpiries(
 
 // The one list of everything that runs out.
 
+/** `notRenewing`: someone said it won't be renewed, for the date it has now. */
 export type ExpiryRow =
-  | { kind: 'document'; id: string; title: string; expiresOn: CalendarDate; documentKind: DocumentKind }
-  | { kind: 'warranty'; id: string; title: string; expiresOn: CalendarDate }
+  | {
+      kind: 'document'
+      id: string
+      title: string
+      expiresOn: CalendarDate
+      issuedOn: CalendarDate | null
+      documentKind: DocumentKind
+      notRenewing: boolean
+    }
+  | { kind: 'warranty'; id: string; title: string; expiresOn: CalendarDate; notRenewing: boolean }
   | {
       kind: 'renewal'
       id: string
@@ -200,6 +218,8 @@ export type ExpiryRow =
       renewalKind: RenewalKind
       autoRenews: boolean
       costCents: number | null
+      cadenceMonths: number | null
+      notRenewing: boolean
     }
 
 interface Keyed {
@@ -244,7 +264,9 @@ export async function listExpiriesPage(
         id: documents.id,
         title: documents.title,
         expiresOn: documents.expiresOn,
+        issuedOn: documents.issuedOn,
         documentKind: documents.kind,
+        notRenewing: notRenewingSql('document', documents.id, documents.expiresOn),
         pageKeys: pageKeys(documentExpiryOrder),
       })
       .from(documents)
@@ -261,7 +283,13 @@ export async function listExpiriesPage(
       .limit(take),
     can(ctx.role, 'home.view')
       ? db
-          .select({ id: assets.id, title: assets.name, expiresOn: assets.warrantyExpiresOn, pageKeys: pageKeys(warrantyExpiryOrder) })
+          .select({
+            id: assets.id,
+            title: assets.name,
+            expiresOn: assets.warrantyExpiresOn,
+            notRenewing: notRenewingSql('warranty', assets.id, assets.warrantyExpiresOn),
+            pageKeys: pageKeys(warrantyExpiryOrder),
+          })
           .from(assets)
           .where(
             and(
@@ -282,6 +310,8 @@ export async function listExpiriesPage(
         renewalKind: renewals.kind,
         autoRenews: renewals.autoRenews,
         costCents: renewals.costCents,
+        cadenceMonths: renewals.cadenceMonths,
+        notRenewing: notRenewingSql('renewal', renewals.id, renewals.expiresOn),
         pageKeys: pageKeys(renewalExpiryOrder),
       })
       .from(renewals)
@@ -312,14 +342,21 @@ export async function listExpiriesPage(
 /**
  * Moves every automatic renewal whose date has passed on to the end of its current term. Safe to
  * run again: a moved date is today or later, and each update only applies to the date it read.
- * Returns how many moved.
+ * One marked not renewing stays where it is: it lapsed on purpose. Returns how many moved.
  */
 export async function rollForwardRenewals(actor: Actor, db: Db, today: CalendarDate): Promise<number> {
   authorize(actor, 'documents.manage')
   const lapsed = await db
     .select({ id: renewals.id, expiresOn: renewals.expiresOn, cadenceMonths: renewals.cadenceMonths })
     .from(renewals)
-    .where(and(eq(renewals.householdId, actor.householdId), eq(renewals.autoRenews, true), lt(renewals.expiresOn, today)))
+    .where(
+      and(
+        eq(renewals.householdId, actor.householdId),
+        eq(renewals.autoRenews, true),
+        lt(renewals.expiresOn, today),
+        not(notRenewingSql('renewal', renewals.id, renewals.expiresOn))
+      )
+    )
 
   let moved = 0
   for (const row of lapsed) {

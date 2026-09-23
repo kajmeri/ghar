@@ -17,11 +17,13 @@ import { ASSET_KIND_LABELS, makeAndModel } from '@/lib/home/display'
 import * as home from '@/lib/home/service'
 import { memberName } from '@/lib/households/names'
 import * as households from '@/lib/households/service'
+import * as renewals from '@/lib/renewals/service'
 import { BackLink } from '../../../_components/ui/back-link'
 import { ROW_LINK } from '../../../_components/ui/row-link'
 import { PageHeader } from '../../../_components/ui/page-header'
 import { SectionHeader } from '../../../_components/ui/section-header'
 import { DocumentSheet } from '../../../documents/_components/document-sheet'
+import { ExpiryActions } from '../../../renewals/_components/expiry-actions'
 import { AssetSheet } from '../../_components/asset-sheet'
 import { DeleteAsset } from '../../_components/delete-buttons'
 import { HistoryList } from '../../_components/history-list'
@@ -50,6 +52,7 @@ export default async function AssetPage({ params }: PageProps<'/home/assets/[ass
     households.listMembers(ctx),
     canManage ? contacts.listContacts(session) : [],
   ])
+  const expiry = asset.warrantyExpiresOn ? (await renewals.getExpiry(session, { kind: 'warranty', subjectId: asset.id })).expiry : null
   const today = todayInTimeZone(household.timeZone)
   const muted = (text: string) => <span className='text-ink-muted'>{text}</span>
 
@@ -70,7 +73,9 @@ export default async function AssetPage({ params }: PageProps<'/home/assets/[ass
           value: (
             <span className='flex flex-wrap items-center justify-end gap-2'>
               {formatCalendarDate(asset.warrantyExpiresOn)}
-              {asset.warrantyState && asset.warrantyState !== 'current' ? (
+              {expiry?.notRenewing ? (
+                <Pill tone='neutral'>Not extending</Pill>
+              ) : asset.warrantyState && asset.warrantyState !== 'current' ? (
                 <Pill tone={EXPIRY_TONES[asset.warrantyState]}>{expiryPhrase(asset.warrantyExpiresOn, today)}</Pill>
               ) : null}
             </span>
@@ -96,14 +101,20 @@ export default async function AssetPage({ params }: PageProps<'/home/assets/[ass
       />
 
       <div className='flex flex-col gap-8'>
-        <dl aria-label='Details' className='divide-y divide-line rounded-card border border-line bg-surface'>
-          {rows.map(row => (
-            <div key={row.label} className='flex items-start justify-between gap-4 px-4 py-3'>
-              <dt className='shrink-0 text-ink-muted'>{row.label}</dt>
-              <dd className='min-w-0 text-right break-words'>{row.value}</dd>
-            </div>
-          ))}
-        </dl>
+        <div className='flex flex-col gap-2'>
+          <dl aria-label='Details' className='divide-y divide-line rounded-card border border-line bg-surface'>
+            {rows.map(row => (
+              <div key={row.label} className='flex items-start justify-between gap-4 px-4 py-3'>
+                <dt className='shrink-0 text-ink-muted'>{row.label}</dt>
+                <dd className='min-w-0 text-right break-words'>{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+          {expiry?.notRenewing ? (
+            <p className='text-sm text-ink-muted'>Marked not extending, so no reminders go out before the warranty ends.</p>
+          ) : null}
+          {expiry && canManage ? <ExpiryActions expiry={expiry} /> : null}
+        </div>
 
         <section aria-labelledby='jobs-heading'>
           <SectionHeader

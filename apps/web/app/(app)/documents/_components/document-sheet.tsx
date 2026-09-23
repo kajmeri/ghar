@@ -2,12 +2,12 @@
 
 import { createDocument, documentKindSchema, updateDocument, type HouseholdDocument } from '@ghar/contracts'
 import { DOCUMENT_KINDS } from '@ghar/core/documents'
-import { Camera, FileText, FileUp, Pencil, Plus, type LucideIcon } from 'lucide-react'
+import { Camera, FileText, FileUp, Pencil, Plus } from 'lucide-react'
 import { useId, useRef, useState, type ChangeEvent, type SyntheticEvent } from 'react'
 import { CheckboxField } from '@/app/(app)/_components/ui/checkbox-field'
 import { DateField } from '@/app/(app)/_components/ui/date-field'
 import { Sheet, SheetClose } from '@/app/(app)/_components/ui/sheet'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/field'
 import { FormError } from '@/components/ui/form-error'
 import { NativeSelect } from '@/components/ui/native-select'
@@ -17,6 +17,7 @@ import { DOCUMENT_KIND_LABELS, fileTypeLabel, formatFileSize } from '@/lib/docum
 import { prepareDocumentFile, uploadDocumentFile, UploadError, type PreparedFile } from '@/lib/documents/upload'
 import { formText } from '@/lib/form'
 import { cn } from '@/lib/utils'
+import { FilePicker } from './file-picker'
 
 export interface AssetOption {
   id: string
@@ -293,36 +294,5 @@ export function DocumentSheet({
         <FormError>{save.error}</FormError>
       </form>
     </Sheet>
-  )
-}
-
-/** A button that opens the file picker, or the camera on a phone. The input inside keeps it keyboard reachable. */
-function FilePicker({
-  icon: Icon,
-  label,
-  accept,
-  capture,
-  disabled,
-  onChange,
-}: {
-  icon: LucideIcon
-  label: string
-  accept: string
-  capture?: 'environment'
-  disabled: boolean
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void
-}) {
-  return (
-    <label
-      className={cn(
-        buttonVariants({ variant: 'outline' }),
-        'px-3 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
-        disabled && 'pointer-events-none opacity-40'
-      )}
-    >
-      <Icon aria-hidden />
-      {label}
-      <input type='file' accept={accept} capture={capture} disabled={disabled} onChange={onChange} className='sr-only' />
-    </label>
   )
 }

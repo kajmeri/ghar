@@ -16,7 +16,7 @@ import { formatCents, type Cents } from '@ghar/core/money'
 import { colors } from '@ghar/tokens'
 import { Body, Column, Container, Head, Hr, Html, Link, Preview, Row, Section, Text } from '@react-email/components'
 import { render } from '@react-email/render'
-import type { CSSProperties, ReactNode } from 'react'
+import { Fragment, type CSSProperties, type ReactNode } from 'react'
 import { manualAccountHref, NET_WORTH_PATH } from '@/lib/networth/display'
 import type { EmailMessage } from '@/lib/providers/email'
 
@@ -30,6 +30,13 @@ export interface DigestLinks {
   categorize: ReadonlyMap<string, string>
   /** One-tap "mark paid" links by bill id. */
   markPaid: ReadonlyMap<string, string>
+  /** One-tap "not renewing" links by `notRenewingLinkKey`. */
+  notRenewing: ReadonlyMap<string, string>
+}
+
+/** Where a "not renewing" link sits in DigestLinks: a document, a warranty and a renewal can share an id. */
+export function notRenewingLinkKey(item: { kind: string; id: string }): string {
+  return `${item.kind}:${item.id}`
 }
 
 export interface DigestEmailInput {
@@ -63,7 +70,8 @@ interface Line {
   secondary?: string
   /** Late or cheaper: gets its meaning's color. */
   tone?: 'negative' | 'positive'
-  action?: { label: string; url: string }
+  /** Links under the line, in order. */
+  actions?: { label: string; url: string }[]
 }
 
 interface SectionView {
@@ -93,7 +101,7 @@ function buildView(input: DigestEmailInput): View {
     heading: firstName ? `Here’s your day, ${firstName}.` : 'Here’s your day.',
     dateLine: `${input.householdName} · ${formatCalendarDate(input.digest.date, 'EEEE, MMMM d')}`,
     preview: input.preview,
-    hasOneTap: input.links.categorize.size > 0 || input.links.markPaid.size > 0,
+    hasOneTap: input.links.categorize.size > 0 || input.links.markPaid.size > 0 || input.links.notRenewing.size > 0,
     sections,
     settingsUrl: `${input.appUrl}/settings/digest`,
     appUrl: input.appUrl,
@@ -162,7 +170,7 @@ function sectionView(block: DigestBlock, input: DigestEmailInput, money: (cents:
             lines: block.accounts.map(account => ({
               primary: `Your ${account.name} value is ${plural(account.ageMonths, 'month', 'months')} old`,
               secondary: `Last updated ${formatCalendarDate(account.latestValueOn, 'MMM d, yyyy')}`,
-              action: { label: 'Add a new value', url: `${appUrl}${manualAccountHref(account.accountId)}` },
+              actions: [{ label: 'Add a new value', url: `${appUrl}${manualAccountHref(account.accountId)}` }],
             })),
           },
         ],
@@ -187,7 +195,7 @@ function sectionView(block: DigestBlock, input: DigestEmailInput, money: (cents:
                 figure: price(drop.priceCents),
                 secondary: `${price(-drop.deltaCents)} less than you paid`,
                 tone: 'positive' as const,
-                action: { label: 'See what to do', url: `${appUrl}/travel/bookings/${drop.bookingId}` },
+                actions: [{ label: 'See what to do', url: `${appUrl}/travel/bookings/${drop.bookingId}` }],
               }
             }),
           },
@@ -213,7 +221,7 @@ function transactionLine(transaction: DigestTransaction, money: (cents: Cents) =
     figure: money(transaction.amountCents),
     secondary: transaction.categoryName ? `${transaction.categoryName} · ${date}` : `No category · ${date}`,
     tone: transaction.amountCents > 0 ? 'positive' : undefined,
-    action: link ? { label: `${verb} category`, url: link } : undefined,
+    actions: link ? [{ label: `${verb} category`, url: link }] : undefined,
   }
 }
 
@@ -227,30 +235,36 @@ function billLine(bill: DigestBill, input: DigestEmailInput, money: (cents: Cent
       .filter(Boolean)
       .join(' · '),
     tone: bill.overdue ? 'negative' : undefined,
-    action: link ? { label: 'Mark paid', url: link } : { label: 'Open bill', url: `${input.appUrl}/bills/${bill.id}` },
+    actions: [link ? { label: 'Mark paid', url: link } : { label: 'Open bill', url: `${input.appUrl}/bills/${bill.id}` }],
   }
 }
 
 function upkeepLine(item: DigestUpkeepItem, input: DigestEmailInput): Line {
   const when = dueWords(item.dueOn, input.digest.date)
   const { appUrl } = input
+  const notRenewing = input.links.notRenewing.get(notRenewingLinkKey(item))
+  const withNotRenewing = (open: { label: string; url: string }) => (notRenewing ? [open, { label: 'Not renewing', url: notRenewing }] : [open])
   switch (item.kind) {
     case 'maintenance':
       return {
         primary: item.title,
         secondary: item.overdue ? `Overdue since ${formatCalendarDate(item.dueOn, 'MMM d')}` : `Due ${when}`,
         tone: item.overdue ? 'negative' : undefined,
-        action: { label: 'Open task', url: `${appUrl}/home/maintenance/${item.id}` },
+        actions: [{ label: 'Open task', url: `${appUrl}/home/maintenance/${item.id}` }],
       }
     case 'document':
-      return { primary: item.title, secondary: `Expires ${when}`, action: { label: 'Open document', url: `${appUrl}/documents/${item.id}` } }
+      return {
+        primary: item.title,
+        secondary: `Expires ${when}`,
+        actions: withNotRenewing({ label: 'Open document', url: `${appUrl}/documents/${item.id}` }),
+      }
     case 'warranty':
-      return { primary: item.title, secondary: `Ends ${when}`, action: { label: 'Open item', url: `${appUrl}/home/assets/${item.id}` } }
+      return { primary: item.title, secondary: `Ends ${when}`, actions: withNotRenewing({ label: 'Open item', url: `${appUrl}/home/assets/${item.id}` }) }
     case 'renewal':
       return {
         primary: item.title,
         secondary: item.autoRenews ? `Renews ${when}` : `Expires ${when}`,
-        action: { label: 'Open renewal', url: `${appUrl}/renewals/${item.id}` },
+        actions: withNotRenewing({ label: 'Open renewal', url: `${appUrl}/renewals/${item.id}` }),
       }
   }
 }
@@ -300,7 +314,7 @@ function plainText(view: View): string {
       for (const line of group.lines) {
         out.push(`- ${line.primary}${line.figure ? `: ${line.figure}` : ''}`)
         if (line.secondary) out.push(`  ${line.secondary}`)
-        if (line.action) out.push(`  ${line.action.label}: ${line.action.url}`)
+        for (const action of line.actions ?? []) out.push(`  ${action.label}: ${action.url}`)
       }
     }
     if (section.footer) out.push(`${section.footer.label}: ${section.footer.url}`)
@@ -422,9 +436,14 @@ function LineRow({ line }: { line: Line }) {
             {line.secondary}
           </Text>
         ) : null}
-        {line.action ? (
+        {line.actions?.length ? (
           <Text className='g-text' style={{ margin: 0, color: colors.ink, ...small }}>
-            <TextLink href={line.action.url}>{line.action.label}</TextLink>
+            {line.actions.map((action, index) => (
+              <Fragment key={action.url}>
+                {index > 0 ? ' · ' : null}
+                <TextLink href={action.url}>{action.label}</TextLink>
+              </Fragment>
+            ))}
           </Text>
         ) : null}
       </Column>

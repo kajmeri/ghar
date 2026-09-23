@@ -5,6 +5,7 @@ import { initialNextDueOn, scheduleAfterCompletion, scheduleAfterRemoval, type A
 import { and, asc, desc, eq, getTableColumns, gte, lte, sql } from 'drizzle-orm'
 import { assets, contacts, documents, maintenance, maintenanceLog } from '../schema'
 import { recordAudit } from './audit'
+import { notRenewingSql } from './expiries'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { requireHouseholdMembers } from './scope'
 import type { Db, RequestContext } from './types'
@@ -110,6 +111,8 @@ export interface WarrantyExpiryRow {
   id: string
   name: string
   warrantyExpiresOn: CalendarDate
+  /** Someone said it won't be renewed, for this date. */
+  notRenewing: boolean
 }
 
 /** Assets whose warranty runs out from `from` through `to`, soonest first. */
@@ -120,7 +123,12 @@ export async function listWarrantyExpiries(
 ): Promise<WarrantyExpiryRow[]> {
   requirePermission(ctx, 'home.view')
   const rows = await db
-    .select({ id: assets.id, name: assets.name, warrantyExpiresOn: assets.warrantyExpiresOn })
+    .select({
+      id: assets.id,
+      name: assets.name,
+      warrantyExpiresOn: assets.warrantyExpiresOn,
+      notRenewing: notRenewingSql('warranty', assets.id, assets.warrantyExpiresOn),
+    })
     .from(assets)
     .where(
       and(

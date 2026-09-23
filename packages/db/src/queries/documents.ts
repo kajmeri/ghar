@@ -5,6 +5,7 @@ import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@
 import { and, count, desc, eq, getTableColumns, gte, isNotNull, lte, sql } from 'drizzle-orm'
 import { assets, documents } from '../schema'
 import { recordAudit } from './audit'
+import { notRenewingSql } from './expiries'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { isUniqueViolation } from './pg-errors'
 import type { Db, RequestContext } from './types'
@@ -207,7 +208,10 @@ export interface DocumentExpiryRow {
   title: string
   kind: DocumentKind
   expiresOn: CalendarDate
+  issuedOn: CalendarDate | null
   assetId: string | null
+  /** Someone said it won't be renewed, for this date. */
+  notRenewing: boolean
 }
 
 /** Documents the caller can see that expire from `from` through `to`, soonest first. */
@@ -223,7 +227,9 @@ export async function listDocumentExpiries(
       title: documents.title,
       kind: documents.kind,
       expiresOn: documents.expiresOn,
+      issuedOn: documents.issuedOn,
       assetId: documents.assetId,
+      notRenewing: notRenewingSql('document', documents.id, documents.expiresOn),
     })
     .from(documents)
     .where(and(visibleTo(ctx), gte(documents.expiresOn, range.from), lte(documents.expiresOn, range.to)))

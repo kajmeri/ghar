@@ -18,6 +18,7 @@
     "./digest": "./src/digest.ts",
     "./documents": "./src/documents.ts",
     "./errors": "./src/errors.ts",
+    "./expiries": "./src/expiries.ts",
     "./finances": "./src/finances/index.ts",
     "./home": "./src/home.ts",
     "./household": "./src/household.ts",

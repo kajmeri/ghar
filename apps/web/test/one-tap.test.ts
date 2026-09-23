@@ -6,13 +6,17 @@ import { invitationExpiresAt } from '@ghar/core/invitations'
 import {
   acceptInvitation,
   createActionToken,
+  createAsset,
   createBill,
+  createRenewal,
   createHousehold,
   createInvitation,
   ensureDefaultCategories,
+  getExpiry,
   getTransaction,
   listBillPayments,
   listCategories,
+  renewExpiry,
   type Db,
   type RequestContext,
 } from '@ghar/db/queries'
@@ -174,6 +178,69 @@ describe('mark paid links', () => {
     await expect(applyOneTap(token, {}, deps)).resolves.toBe('Marked paid.')
     expect(await listBillPayments(owner, db)).toEqual([{ billId: bill.id, dueOn, paidOn: TODAY }])
     await expect(applyOneTap(token, {}, deps)).rejects.toBeInstanceOf(ConflictError)
+  })
+})
+
+describe('not renewing links', () => {
+  function renewal(expiresOn: string) {
+    return createRenewal(owner, db, {
+      title: 'Costco membership',
+      kind: 'membership',
+      expiresOn,
+      cadenceMonths: 12,
+      autoRenews: false,
+      costCents: 6_500,
+      provider: null,
+      referenceNumber: null,
+      url: null,
+      contactId: null,
+      assetId: null,
+      documentId: null,
+      notes: null,
+    })
+  }
+
+  it('shows what runs out, then stops the reminders for that date, once', async () => {
+    const expiresOn = addCalendarDays(TODAY, 20)
+    const costco = await renewal(expiresOn)
+    const subject = { kind: 'renewal' as const, id: costco.id }
+    const token = await link(owner, { action: 'not_renewing_renewal', entityId: costco.id, dueOn: expiresOn })
+
+    expect(await viewOneTap(token, deps)).toEqual({ state: 'not_renewing', subject: { kind: 'renewal', title: 'Costco membership', expiresOn } })
+    expect((await getExpiry(owner, db, subject)).notRenewing).toBe(false)
+
+    await expect(applyOneTap(token, {}, deps)).resolves.toBe('Marked not renewing.')
+    expect((await getExpiry(owner, db, subject)).notRenewing).toBe(true)
+    await expect(applyOneTap(token, {}, deps)).rejects.toBeInstanceOf(ConflictError)
+  })
+
+  it('does nothing once the thing has been renewed', async () => {
+    const asset = await createAsset(owner, db, {
+      name: 'Dishwasher',
+      kind: 'appliance',
+      make: null,
+      model: null,
+      serialNumber: null,
+      purchasedOn: null,
+      purchasePriceCents: null,
+      warrantyExpiresOn: addCalendarDays(TODAY, 30),
+      location: null,
+      notes: null,
+    })
+    const subject = { kind: 'warranty' as const, id: asset.id }
+    const token = await link(adult, { action: 'not_renewing_warranty', entityId: asset.id, dueOn: addCalendarDays(TODAY, 30) })
+    await renewExpiry(owner, db, { subject, expiresOn: addCalendarDays(TODAY, 400) })
+
+    expect(await viewOneTap(token, deps)).toEqual({ state: 'changed' })
+    await expect(applyOneTap(token, {}, deps)).rejects.toBeInstanceOf(ConflictError)
+    expect((await getExpiry(owner, db, subject)).notRenewing).toBe(false)
+  })
+
+  it('needs a date to make one', async () => {
+    const costco = await renewal(addCalendarDays(TODAY, 20))
+    await expect(
+      createActionToken(owner, db, { userId: owner.userId, action: 'not_renewing_renewal', entityId: costco.id, dueOn: null, expiresAt: LATER })
+    ).rejects.toBeInstanceOf(ValidationError)
   })
 })
 

@@ -2,6 +2,7 @@ import { can, type HouseholdRole, type Permission } from './auth/permissions'
 import { addCalendarDays, formatCalendarDate, wallClockTimeInTimeZone, type CalendarDate, type TimeZone } from './dates'
 import type { BudgetPace } from './finances/budget'
 import type { ManualValueReminder } from './finances/networth'
+import { EXPIRY_SUBJECT_KINDS, type ExpirySubjectKind } from './expiries'
 import type { Cents } from './money'
 
 // The daily email, one per person: what the money did yesterday and what's coming up. Pure: the web
@@ -291,10 +292,47 @@ export function budgetPaceSentence(pace: BudgetPace): string {
 
 /**
  * What a link in the digest can do without signing in. Each link does one of these to one thing,
- * once, before it expires.
+ * once, before it expires. Saying something won't be renewed is one action per kind of thing, so the
+ * signed link names the kind as well as the id.
  */
-export const ONE_TAP_ACTIONS = ['categorize_transaction', 'mark_bill_paid'] as const
+export const ONE_TAP_ACTIONS = [
+  'categorize_transaction',
+  'mark_bill_paid',
+  'not_renewing_document',
+  'not_renewing_warranty',
+  'not_renewing_renewal',
+] as const
 export type OneTapAction = (typeof ONE_TAP_ACTIONS)[number]
+
+/** "Not renewing" for each kind of thing that runs out. */
+export const NOT_RENEWING_ACTIONS = {
+  document: 'not_renewing_document',
+  warranty: 'not_renewing_warranty',
+  renewal: 'not_renewing_renewal',
+} as const satisfies Record<ExpirySubjectKind, OneTapAction>
+
+/** The kind of thing a "not renewing" link is about. Null for any other action. */
+export function notRenewingKind(action: OneTapAction): ExpirySubjectKind | null {
+  for (const kind of EXPIRY_SUBJECT_KINDS) if (NOT_RENEWING_ACTIONS[kind] === action) return kind
+  return null
+}
+
+/**
+ * Actions that act on one date: the due date a bill is marked paid for, or the expiry date someone
+ * isn't renewing. A link for one of these carries the date, and does nothing once it has moved on.
+ */
+export function oneTapActionHasDate(action: OneTapAction): boolean {
+  return action === 'mark_bill_paid' || notRenewingKind(action) !== null
+}
+
+/** What the person a link was sent to still has to be allowed to do when they use it. */
+export const ONE_TAP_PERMISSIONS: Record<OneTapAction, Permission> = {
+  categorize_transaction: 'finances.manage',
+  mark_bill_paid: 'finances.manage',
+  not_renewing_document: 'documents.manage',
+  not_renewing_warranty: 'home.manage',
+  not_renewing_renewal: 'documents.manage',
+}
 
 /** Long enough to cover a weekend away from email. */
 export const ONE_TAP_LINK_TTL_HOURS = 72

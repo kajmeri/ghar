@@ -2,13 +2,15 @@ import 'server-only'
 import type { Attention, AttentionExpiry } from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
 import { addCalendarDays, todayInTimeZone } from '@ghar/core/dates'
-import { EXPIRED_VISIBLE_DAYS, EXPIRY_SOON_DAYS, expiryState } from '@ghar/core/documents'
+import { EXPIRED_VISIBLE_DAYS, EXPIRY_SOON_DAYS } from '@ghar/core/documents'
 import { MAINTENANCE_DUE_SOON_DAYS } from '@ghar/core/home'
 import * as queries from '@ghar/db/queries'
+import type { ExpiryRow } from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
 import { listBillsWithStatus } from '@/lib/bills/service'
 import { getDb } from '@/lib/db'
 import { toMaintenanceTask } from '@/lib/home/service'
+import { toExpiry } from '@/lib/renewals/service'
 
 /** What needs someone today: jobs coming due, bills late or nearly due, and things running out. */
 export async function getAttention(session: Session): Promise<Attention> {
@@ -26,33 +28,23 @@ export async function getAttention(session: Session): Promise<Attention> {
     queries.listRenewalExpiries(context, db, range),
   ])
 
-  const expiries: AttentionExpiry[] = [
-    ...documents.map(document => ({
-      kind: 'document' as const,
-      documentId: document.id,
-      title: document.title,
-      expiresOn: document.expiresOn,
-      state: expiryState(document.expiresOn, today),
-      documentKind: document.kind,
-    })),
+  // Something nobody is renewing needs no attention.
+  const rows: ExpiryRow[] = [
+    ...documents.map(document => ({ ...document, kind: 'document' as const, documentKind: document.kind })),
     ...warranties.map(asset => ({
       kind: 'warranty' as const,
-      assetId: asset.id,
+      id: asset.id,
       title: asset.name,
       expiresOn: asset.warrantyExpiresOn,
-      state: expiryState(asset.warrantyExpiresOn, today),
+      notRenewing: asset.notRenewing,
     })),
-    ...renewals.map(renewal => ({
-      kind: 'renewal' as const,
-      renewalId: renewal.id,
-      title: renewal.title,
-      expiresOn: renewal.expiresOn,
-      state: expiryState(renewal.expiresOn, today),
-      renewalKind: renewal.kind,
-      autoRenews: renewal.autoRenews,
-      costCents: renewal.costCents,
-    })),
-  ].toSorted((a, b) => a.expiresOn.localeCompare(b.expiresOn) || a.title.localeCompare(b.title))
+    ...renewals.map(renewal => ({ ...renewal, kind: 'renewal' as const, renewalKind: renewal.kind })),
+  ]
+  const expiries: AttentionExpiry[] = rows
+    .filter(row => !row.notRenewing)
+    .map(row => toExpiry(row, today))
+    .toSorted((a, b) => a.expiresOn.localeCompare(b.expiresOn) || a.title.localeCompare(b.title))
+
 
   return {
     today,

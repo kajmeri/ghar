@@ -1,8 +1,9 @@
 import type { CalendarDate } from '@ghar/core/dates'
-import type { OneTapAction } from '@ghar/core/digest'
-import { NotFoundError } from '@ghar/core/errors'
+import { can } from '@ghar/core/auth'
+import { notRenewingKind, oneTapActionHasDate, ONE_TAP_PERMISSIONS, type OneTapAction } from '@ghar/core/digest'
+import { NotFoundError, ValidationError } from '@ghar/core/errors'
 import { and, eq, gt, isNull, lt } from 'drizzle-orm'
-import { actionTokens, bills, householdMembers, transactions } from '../schema'
+import { actionTokens, assets, bills, documents, householdMembers, renewals, transactions } from '../schema'
 import { authorize } from './authorize'
 import type { Actor, Db, RequestContext } from './types'
 
@@ -16,32 +17,67 @@ export interface ActionTokenGrant {
   /** Who the link was sent to. It acts as them, with the role they hold when it's used. */
   userId: string
   action: OneTapAction
-  /** The transaction or bill. */
+  /** The transaction, bill, document, asset (for a warranty) or renewal. */
   entityId: string
-  /** For `mark_bill_paid`: the due date it marks paid. Null otherwise. */
+  /**
+   * For `mark_bill_paid`, the due date it marks paid; for a "not renewing" action, the date it runs
+   * out on that the link dismisses. Null for the others.
+   */
   dueOn: CalendarDate | null
   expiresAt: Date
 }
 
-/** Makes the row behind a one-tap link, for a transaction or bill in the actor's household. */
-export async function createActionToken(actor: Actor, db: Db, input: ActionTokenGrant): Promise<{ id: string }> {
-  authorize(actor, 'finances.manage')
-  const [entity] =
-    input.action === 'categorize_transaction'
+/** Whether the thing a link acts on is in the actor's household, and one they can see. */
+async function entityExists(actor: Actor, db: Db, action: OneTapAction, entityId: string): Promise<boolean> {
+  const subjectKind = notRenewingKind(action)
+  const rows =
+    action === 'categorize_transaction'
       ? await db
           .select({ id: transactions.id })
           .from(transactions)
-          .where(and(eq(transactions.id, input.entityId), eq(transactions.householdId, actor.householdId)))
+          .where(and(eq(transactions.id, entityId), eq(transactions.householdId, actor.householdId)))
           .limit(1)
-      : await db
-          .select({ id: bills.id })
-          .from(bills)
-          .where(and(eq(bills.id, input.entityId), eq(bills.householdId, actor.householdId)))
-          .limit(1)
-  if (!entity) throw new NotFoundError('That no longer exists.')
+      : action === 'mark_bill_paid'
+        ? await db
+            .select({ id: bills.id })
+            .from(bills)
+            .where(and(eq(bills.id, entityId), eq(bills.householdId, actor.householdId)))
+            .limit(1)
+        : subjectKind === 'document'
+          ? await db
+              .select({ id: documents.id })
+              .from(documents)
+              .where(
+                and(
+                  eq(documents.id, entityId),
+                  eq(documents.householdId, actor.householdId),
+                  actor.userId === null || can(actor.role, 'documents.viewSensitive') ? undefined : eq(documents.isSensitive, false)
+                )
+              )
+              .limit(1)
+          : subjectKind === 'warranty'
+            ? await db
+                .select({ id: assets.id })
+                .from(assets)
+                .where(and(eq(assets.id, entityId), eq(assets.householdId, actor.householdId)))
+                .limit(1)
+            : await db
+                .select({ id: renewals.id })
+                .from(renewals)
+                .where(and(eq(renewals.id, entityId), eq(renewals.householdId, actor.householdId)))
+                .limit(1)
+  return rows.length > 0
+}
+
+/** Makes the row behind a one-tap link, for something in the actor's household they're allowed to change. */
+export async function createActionToken(actor: Actor, db: Db, input: ActionTokenGrant): Promise<{ id: string }> {
+  authorize(actor, ONE_TAP_PERMISSIONS[input.action])
+  const hasDate = oneTapActionHasDate(input.action)
+  if (hasDate && input.dueOn === null) throw new ValidationError('That link needs a date.')
+  if (!(await entityExists(actor, db, input.action, input.entityId))) throw new NotFoundError('That no longer exists.')
   const [token] = await db
     .insert(actionTokens)
-    .values({ householdId: actor.householdId, ...input, dueOn: input.action === 'mark_bill_paid' ? input.dueOn : null })
+    .values({ householdId: actor.householdId, ...input, dueOn: hasDate ? input.dueOn : null })
     .returning({ id: actionTokens.id })
   if (!token) throw new Error('Action token insert returned no row')
   return token

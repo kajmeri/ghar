@@ -1,6 +1,7 @@
 import { BILL_CADENCES } from '@ghar/core/bills'
 import { DOCUMENT_KINDS, DOCUMENT_MIME_TYPES, MAX_DOCUMENT_BYTES } from '@ghar/core/documents'
 import { ASSET_KINDS } from '@ghar/core/home'
+import { EXPIRY_SUBJECT_KINDS } from '@ghar/core/expiries'
 import { MAX_RENEWAL_CADENCE_MONTHS, MAX_RENEWAL_CENTS, RENEWAL_KINDS } from '@ghar/core/renewals'
 import { describe, expect, it } from 'vitest'
 import { billBodySchema, billCadenceSchema } from '../src/v1/bills'
@@ -13,7 +14,7 @@ import {
   documentUploadBodySchema,
 } from '../src/v1/documents'
 import { assetKindSchema, completeMaintenanceBodySchema } from '../src/v1/home'
-import { RENEWAL_MAX_CADENCE_MONTHS, RENEWAL_MAX_CENTS, renewalBodySchema, renewalKindSchema } from '../src/v1/renewals'
+import { expiryKindSchema, RENEWAL_MAX_CADENCE_MONTHS, RENEWAL_MAX_CENTS, renewalBodySchema, renewalKindSchema } from '../src/v1/renewals'
 
 describe('household operations lists', () => {
   it('match @ghar/core, in order', () => {
@@ -23,6 +24,7 @@ describe('household operations lists', () => {
     expect(assetKindSchema.options).toEqual([...ASSET_KINDS])
     expect(billCadenceSchema.options).toEqual([...BILL_CADENCES])
     expect(renewalKindSchema.options).toEqual([...RENEWAL_KINDS])
+    expect(expiryKindSchema.options).toEqual([...EXPIRY_SUBJECT_KINDS])
     expect(RENEWAL_MAX_CADENCE_MONTHS).toBe(MAX_RENEWAL_CADENCE_MONTHS)
     expect(RENEWAL_MAX_CENTS).toBe(MAX_RENEWAL_CENTS)
   })

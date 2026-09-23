@@ -10,7 +10,9 @@ import {
   DIGEST_MAINTENANCE_DAYS,
   digestSectionsFor,
   isDigestDue,
+  NOT_RENEWING_ACTIONS,
   ONE_TAP_LINK_TTL_HOURS,
+  ONE_TAP_PERMISSIONS,
   type Digest,
   type DigestBill,
   type DigestBudget,
@@ -20,6 +22,7 @@ import {
   type DigestSection,
   type DigestTransaction,
   type DigestUpkeepItem,
+  type OneTapAction,
 } from '@ghar/core/digest'
 import { manualValueReminders, monthStart, type ManualValueReminder } from '@ghar/core/finances'
 import { alertStepCents, bookingTitle, isActionable, isWatchable, summarizePriceHistory } from '@ghar/core/travel'
@@ -27,7 +30,7 @@ import * as queries from '@ghar/db/queries'
 import type { Db, DigestRecipient, RequestContext, SystemContext } from '@ghar/db/queries'
 import { listBillsWithStatus } from '@/lib/bills/service'
 import { getDb } from '@/lib/db'
-import { digestEmail, type DigestLinks } from '@/lib/email/digest'
+import { digestEmail, notRenewingLinkKey, type DigestLinks } from '@/lib/email/digest'
 import { env } from '@/lib/env'
 import { getEmailProvider, type EmailMessage, type EmailProvider } from '@/lib/providers/email'
 import { getOneTapKey, oneTapPath } from '@/lib/one-tap'
@@ -166,34 +169,45 @@ export async function sendMyDigestPreview(ctx: RequestContext): Promise<{ sent: 
 // ---------------------------------------------------------------------------------------------
 // One-tap links
 
-/** A link per transaction and bill the email shows, for people who can change them. */
+/**
+ * A link per transaction and bill the email shows, and a "not renewing" link per thing that runs out,
+ * each only for people who can make that change.
+ */
 async function oneTapLinks(deps: Omit<DigestDeps, 'email'>, ctx: RequestContext, digest: Digest): Promise<DigestLinks> {
   const categorize = new Map<string, string>()
   const markPaid = new Map<string, string>()
-  if (!can(ctx.role, 'finances.manage')) return { categorize, markPaid }
+  const notRenewing = new Map<string, string>()
 
   const expiresAt = new Date(deps.now.getTime() + ONE_TAP_LINK_TTL_HOURS * 3_600_000)
   let key: Buffer | undefined
-  const link = async (action: 'categorize_transaction' | 'mark_bill_paid', entityId: string, dueOn: CalendarDate | null) => {
+  const link = async (action: OneTapAction, entityId: string, dueOn: CalendarDate | null) => {
     const { id } = await queries.createActionToken(ctx, deps.db, { userId: ctx.userId, action, entityId, dueOn, expiresAt })
     key ??= deps.oneTapKey()
     return `${deps.appUrl}${oneTapPath(key, { tokenId: id, action, entityId, dueOn })}`
   }
+  const allowed = (action: OneTapAction) => can(ctx.role, ONE_TAP_PERMISSIONS[action])
 
   for (const block of digest.blocks) {
-    if (block.section === 'auto_categorized' || block.section === 'needs_review') {
+    if ((block.section === 'auto_categorized' || block.section === 'needs_review') && allowed('categorize_transaction')) {
       for (const transaction of block.transactions) {
         if (!categorize.has(transaction.id)) categorize.set(transaction.id, await link('categorize_transaction', transaction.id, null))
       }
     }
-    if (block.section === 'bills') {
+    if (block.section === 'bills' && allowed('mark_bill_paid')) {
       for (const bill of block.bills) {
         // Autopay pays on its own. A late autopay bill might still need marking.
         if (!bill.autopay || bill.overdue) markPaid.set(bill.id, await link('mark_bill_paid', bill.id, bill.dueOn))
       }
     }
+    if (block.section === 'upkeep') {
+      for (const item of block.items) {
+        if (item.kind === 'maintenance') continue
+        const action = NOT_RENEWING_ACTIONS[item.kind]
+        if (allowed(action)) notRenewing.set(notRenewingLinkKey(item), await link(action, item.id, item.dueOn))
+      }
+    }
   }
-  return { categorize, markPaid }
+  return { categorize, markPaid, notRenewing }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -311,15 +325,16 @@ async function readUpkeep(db: Db, { ctx }: DigestReader, today: CalendarDate): P
           ]
         : []
     ),
-    ...documents.map(document => ({ kind: 'document' as const, id: document.id, title: document.title, dueOn: document.expiresOn, overdue: false })),
-    ...warranties.map(asset => ({
+    // Anything someone said won't be renewed has nothing left to do.
+    ...documents.filter(document => !document.notRenewing).map(document => ({ kind: 'document' as const, id: document.id, title: document.title, dueOn: document.expiresOn, overdue: false })),
+    ...warranties.filter(asset => !asset.notRenewing).map(asset => ({
       kind: 'warranty' as const,
       id: asset.id,
       title: `${asset.name} warranty`,
       dueOn: asset.warrantyExpiresOn,
       overdue: false,
     })),
-    ...renewals.map(renewal => ({
+    ...renewals.filter(renewal => !renewal.notRenewing).map(renewal => ({
       kind: 'renewal' as const,
       id: renewal.id,
       title: renewal.title,
