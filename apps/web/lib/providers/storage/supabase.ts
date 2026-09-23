@@ -50,6 +50,15 @@ export function createSupabaseStorageProvider(config: { url: string; secretKey: 
       return { mimeType, sizeBytes }
     },
 
+    async read(path) {
+      const { data, error } = await bucket.download(path)
+      if (error) {
+        if (isNotFound(error)) return null
+        throw new StorageRequestError('Could not read the file.', error)
+      }
+      return { bytes: new Uint8Array(await data.arrayBuffer()), mimeType: data.type }
+    },
+
     async remove(path) {
       const { error } = await bucket.remove([path])
       if (error) throw new StorageRequestError('Could not delete the file.', error)

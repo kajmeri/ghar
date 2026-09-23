@@ -3594,6 +3594,123 @@
         }
       }
     },
+    "/api/v1/documents/uploads/discard": {
+      "post": {
+        "operationId": "discardDocumentUpload",
+        "tags": [
+          "documents"
+        ],
+        "description": "Deletes an uploaded file that never became a document, when someone scans it and then cancels.\nA file a document or renewal already uses stays.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentUploadPath"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "discarded": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "discarded"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/documents/uploads/scan": {
+      "post": {
+        "operationId": "scanDocumentUpload",
+        "tags": [
+          "documents"
+        ],
+        "description": "Sends a file from createDocumentUpload to Claude to read its dates, before the document is\nsaved. Owners, adults and members. Photos in HEIC format can't be read; send a JPEG.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentUploadPath"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentScanResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/documents/{documentId}": {
       "get": {
         "operationId": "getDocument",
@@ -3830,6 +3947,61 @@
                     "url",
                     "expiresAt"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{documentId}/scan": {
+      "post": {
+        "operationId": "scanDocument",
+        "tags": [
+          "documents"
+        ],
+        "description": "The same, for a document's saved file.",
+        "parameters": [
+          {
+            "name": "documentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentScanResponse"
                 }
               }
             }
@@ -17046,6 +17218,78 @@
           "application/pdf"
         ]
       },
+      "DocumentScanResponse": {
+        "type": "object",
+        "properties": {
+          "suggestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentSuggestion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "suggestion"
+        ]
+      },
+      "DocumentSuggestion": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issuer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issuedOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expiresOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "issuer",
+          "issuedOn",
+          "expiresOn"
+        ]
+      },
       "DocumentUpload": {
         "type": "object",
         "properties": {
@@ -17080,6 +17324,19 @@
         "required": [
           "mimeType",
           "sizeBytes"
+        ]
+      },
+      "DocumentUploadPath": {
+        "type": "object",
+        "properties": {
+          "storagePath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "storagePath"
         ]
       },
       "DraftBooking": {

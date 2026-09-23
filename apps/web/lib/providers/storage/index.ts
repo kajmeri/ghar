@@ -4,7 +4,7 @@ import { createFakeStorageProvider } from './fake'
 import { createSupabaseStorageProvider } from './supabase'
 import type { StorageProvider } from './types'
 
-export { StorageRequestError, type SignedUrl, type StorageProvider, type StoredFile } from './types'
+export { StorageRequestError, type SignedUrl, type StorageProvider, type StoredBytes, type StoredFile } from './types'
 
 export function getStorageProvider(): StorageProvider {
   const { STORAGE_PROVIDER, SUPABASE_URL, SUPABASE_SECRET_KEY } = env()

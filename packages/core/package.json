@@ -16,6 +16,7 @@
     "./contacts": "./src/contacts.ts",
     "./dates": "./src/dates.ts",
     "./digest": "./src/digest.ts",
+    "./document-scan": "./src/document-scan.ts",
     "./documents": "./src/documents.ts",
     "./errors": "./src/errors.ts",
     "./expiries": "./src/expiries.ts",

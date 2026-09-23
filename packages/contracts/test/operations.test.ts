@@ -1,4 +1,5 @@
 import { BILL_CADENCES } from '@ghar/core/bills'
+import { suggestionFromScan } from '@ghar/core/document-scan'
 import { DOCUMENT_KINDS, DOCUMENT_MIME_TYPES, MAX_DOCUMENT_BYTES } from '@ghar/core/documents'
 import { ASSET_KINDS } from '@ghar/core/home'
 import { EXPIRY_SUBJECT_KINDS, REMINDER_LEAD_DAYS_MAX, REMINDER_LEAD_DAYS_MIN } from '@ghar/core/expiries'
@@ -12,6 +13,7 @@ import {
   DOCUMENT_MAX_BYTES,
   documentKindSchema,
   documentMimeTypeSchema,
+  documentSuggestionSchema,
   documentUploadBodySchema,
   REMINDER_LEAD_MAX_DAYS,
   REMINDER_LEAD_MIN_DAYS,
@@ -38,6 +40,21 @@ describe('household operations lists', () => {
       expect(tripDocumentIssuePhrase({ kind, expiresOn: '2027-01-01' }, '2026-09-23')).not.toBe('')
       expect(['negative', 'caution']).toContain(tripDocumentIssueTone(kind))
     }
+  })
+})
+
+describe('document suggestions', () => {
+  it('carry what core suggests, and never a reference number', () => {
+    const suggestion = suggestionFromScan({
+      isDocument: true,
+      kind: 'passport',
+      title: 'Passport',
+      issuer: 'United States of America',
+      issuedOn: '2021-03-04',
+      expiresOn: '2031-03-03',
+    })
+    expect(documentSuggestionSchema.parse(suggestion)).toEqual(suggestion)
+    expect(Object.keys(documentSuggestionSchema.shape)).not.toContain('referenceNumber')
   })
 })
 

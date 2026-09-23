@@ -1,17 +1,28 @@
 'use client'
 
-import { clearNotRenewing, markNotRenewing, renewExpiry, type Expiry } from '@ghar/contracts'
+import {
+  clearNotRenewing,
+  discardDocumentUpload,
+  markNotRenewing,
+  renewExpiry,
+  scanDocumentUpload,
+  type DocumentSuggestionValue,
+  type Expiry,
+} from '@ghar/contracts'
 import { addCalendarDays, formatCalendarDate } from '@ghar/core/dates'
+import { isScannableMimeType } from '@ghar/core/document-scan'
 import { BellOff, BellRing, FileText, FileUp, RotateCw } from 'lucide-react'
 import { useId, useRef, useState, type ChangeEvent, type SyntheticEvent } from 'react'
 import { DateField } from '@/app/(app)/_components/ui/date-field'
 import { Sheet, SheetClose } from '@/app/(app)/_components/ui/sheet'
 import { FilePicker } from '@/app/(app)/documents/_components/file-picker'
+import { ScanDates } from '@/app/(app)/documents/_components/scan-dates'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/ui/form-error'
 import { useMutation } from '@/hooks/use-mutation'
 import { api } from '@/lib/api/client'
 import { fileTypeLabel, formatFileSize } from '@/lib/documents/display'
+import { fillFromScan, NOTHING_FILLED, type ScanField, type ScanOutcome } from '@/lib/documents/scan-form'
 import { prepareDocumentFile, uploadDocumentFile, UploadError, type PreparedFile } from '@/lib/documents/upload'
 import { formText } from '@/lib/form'
 import { expiryLabel } from '@/lib/renewals/display'
@@ -65,32 +76,48 @@ export function ExpiryActions({ expiry }: { expiry: Expiry }) {
 /** Only a document has an issue date and a file to replace. */
 function RenewSheet({ expiry }: { expiry: Expiry }) {
   const formId = useId()
+  const formRef = useRef<HTMLFormElement>(null)
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<PreparedFile | null>(null)
+  // A new one for each file picked, so a scan of the last one doesn't linger.
+  const [pickCount, setPickCount] = useState(0)
   const [preparing, setPreparing] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
-  // A retry after the date failed to save reuses the file that already uploaded.
+  // A retry after the date failed to save, or a save after a scan, reuses the file that already uploaded.
   const uploaded = useRef<{ file: PreparedFile; storagePath: string } | null>(null)
+  // What the last scan put in the form, which the next scan may replace.
+  const scanned = useRef<Partial<Record<ScanField, string>>>({})
   const params = paramsOf(expiry)
+
+  async function uploadOnce(file: PreparedFile): Promise<string> {
+    if (uploaded.current?.file === file) return uploaded.current.storagePath
+    const storagePath = await uploadDocumentFile(file)
+    uploaded.current = { file, storagePath }
+    return storagePath
+  }
+
+  /** An upload that won't be the new file, because the sheet closed or another file was picked. */
+  function discardUploaded() {
+    const stray = uploaded.current
+    uploaded.current = null
+    // Best effort: a stray file in the private bucket is untidy, not exposed.
+    if (stray) api.request(discardDocumentUpload, { body: { storagePath: stray.storagePath } }).catch(() => undefined)
+  }
 
   const save = useMutation<[{ expiresOn: string; issuedOn?: string | null }, PreparedFile | null]>(async (dates, file) => {
     let storagePath: string | undefined
     if (file !== null) {
-      if (uploaded.current?.file === file) {
-        storagePath = uploaded.current.storagePath
-      } else {
-        try {
-          storagePath = await uploadDocumentFile(file)
-        } catch (cause) {
-          if (!(cause instanceof UploadError)) throw cause
-          setFileError(cause.message)
-          return
-        }
-        uploaded.current = { file, storagePath }
+      try {
+        storagePath = await uploadOnce(file)
+      } catch (cause) {
+        if (!(cause instanceof UploadError)) throw cause
+        setFileError(cause.message)
+        return
       }
     }
     await api.request(renewExpiry, { params, body: { ...dates, storagePath } })
     uploaded.current = null
+    scanned.current = {}
     setOpen(false)
   })
 
@@ -99,8 +126,35 @@ function RenewSheet({ expiry }: { expiry: Expiry }) {
     if (!next) {
       save.clearError()
       setPicked(null)
+      discardUploaded()
+      scanned.current = {}
       setFileError(null)
     }
+  }
+
+  const readScan = async (): Promise<DocumentSuggestionValue | null> => {
+    if (picked === null) return null
+    const storagePath = await uploadOnce(picked)
+    return (await api.request(scanDocumentUpload, { body: { storagePath } })).suggestion
+  }
+
+  const onScanned = (suggestion: DocumentSuggestionValue): ScanOutcome => {
+    const form = formRef.current
+    if (form === null) return NOTHING_FILLED
+    // A scan of the one being replaced has nothing new to say.
+    if (suggestion.expiresOn !== null && suggestion.expiresOn <= expiry.expiresOn) {
+      return {
+        ...NOTHING_FILLED,
+        notes: [`That one runs out ${formatCalendarDate(suggestion.expiresOn)}, which isn’t after the date Ghar has now. Is it the old one?`],
+      }
+    }
+    // The date one term on is Ghar's guess, which the paper beats.
+    const outcome = fillFromScan(form, suggestion, {
+      fields: ['expiresOn', 'issuedOn'],
+      replaceable: { expiresOn: expiry.suggestedRenewalOn ?? undefined, ...scanned.current },
+    })
+    scanned.current = { ...scanned.current, ...outcome.values }
+    return outcome
   }
 
   const onPick = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -110,7 +164,10 @@ function RenewSheet({ expiry }: { expiry: Expiry }) {
     setFileError(null)
     setPreparing(true)
     try {
-      setPicked(await prepareDocumentFile(chosen))
+      const file = await prepareDocumentFile(chosen)
+      discardUploaded()
+      setPicked(file)
+      setPickCount(count => count + 1)
     } catch (cause) {
       setFileError(cause instanceof UploadError ? cause.message : 'That file couldn’t be read. Try another one.')
     } finally {
@@ -154,7 +211,7 @@ function RenewSheet({ expiry }: { expiry: Expiry }) {
         </>
       }
     >
-      <form id={formId} onSubmit={onSubmit} className='flex flex-col gap-4'>
+      <form ref={formRef} id={formId} onSubmit={onSubmit} className='flex flex-col gap-4'>
         <DateField
           id={`${formId}-expires`}
           name='expiresOn'
@@ -192,6 +249,9 @@ function RenewSheet({ expiry }: { expiry: Expiry }) {
                   </p>
                 </div>
               </div>
+            ) : null}
+            {picked && isScannableMimeType(picked.mimeType) ? (
+              <ScanDates key={pickCount} read={readScan} onRead={onScanned} disabled={busy} />
             ) : null}
             <FilePicker
               icon={FileUp}

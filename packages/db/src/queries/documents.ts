@@ -204,6 +204,20 @@ export async function deleteDocument(ctx: RequestContext, db: Db, documentId: st
   })
 }
 
+/**
+ * Whether any of the household's documents keeps its file at this path, private ones included, so
+ * an upload that never became a document can be deleted without touching one that did.
+ */
+export async function isDocumentFileInUse(ctx: RequestContext, db: Db, storagePath: string): Promise<boolean> {
+  requirePermission(ctx, 'documents.manage')
+  const [row] = await db
+    .select({ id: documents.id })
+    .from(documents)
+    .where(and(eq(documents.householdId, ctx.householdId), eq(documents.storagePath, storagePath)))
+    .limit(1)
+  return row !== undefined
+}
+
 /** How many documents the caller can see on each asset. Assets with none are left out. */
 export async function countDocumentsByAsset(ctx: RequestContext, db: Db): Promise<Map<string, number>> {
   requirePermission(ctx, 'documents.view')

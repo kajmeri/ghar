@@ -1,6 +1,16 @@
 'use client'
 
-import { createDocument, documentKindSchema, updateDocument, type HouseholdDocument } from '@ghar/contracts'
+import {
+  createDocument,
+  discardDocumentUpload,
+  documentKindSchema,
+  scanDocument,
+  scanDocumentUpload,
+  updateDocument,
+  type DocumentSuggestionValue,
+  type HouseholdDocument,
+} from '@ghar/contracts'
+import { isScannableMimeType } from '@ghar/core/document-scan'
 import { DOCUMENT_KINDS, type DocumentKind } from '@ghar/core/documents'
 import { defaultReminderLeadDays } from '@ghar/core/expiries'
 import { Camera, FileText, FileUp, Pencil, Plus } from 'lucide-react'
@@ -18,9 +28,11 @@ import { useMutation } from '@/hooks/use-mutation'
 import { api, type BodyOf } from '@/lib/api/client'
 import { DOCUMENT_KIND_LABELS, fileTypeLabel, formatFileSize } from '@/lib/documents/display'
 import { prepareDocumentFile, uploadDocumentFile, UploadError, type PreparedFile } from '@/lib/documents/upload'
+import { fillFromScan, NOTHING_FILLED, type ScanField, type ScanOutcome } from '@/lib/documents/scan-form'
 import { formText } from '@/lib/form'
 import { cn } from '@/lib/utils'
 import { FilePicker } from './file-picker'
+import { ScanDates } from './scan-dates'
 
 export interface AssetOption {
   id: string
@@ -30,12 +42,16 @@ export interface AssetOption {
 type Fields = NonNullable<BodyOf<typeof updateDocument>>
 
 interface Picked {
+  /** New for each file picked, so a scan of the last one doesn't linger. */
+  id: string
   file: PreparedFile
   previewUrl: string | null
 }
 
 /** Types every browser can draw in an img. HEIC outside Safari shows its name instead. */
 const PREVIEWABLE = new Set<string>(['image/jpeg', 'image/png', 'image/webp'])
+
+const SCAN_FIELDS: readonly ScanField[] = ['expiresOn', 'issuedOn', 'kind', 'title', 'issuer']
 
 /**
  * Adds a document, or edits one's details. Adding starts with the camera, because the paper is
@@ -62,18 +78,36 @@ export function DocumentSheet({
   variant?: 'default' | 'outline'
 }) {
   const formId = useId()
+  const formRef = useRef<HTMLFormElement>(null)
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<Picked | null>(null)
   const [preparing, setPreparing] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
   // The default reminder lead time depends on the kind: an ID needs months to renew.
   const [kind, setKind] = useState<DocumentKind>(document?.kind ?? 'other')
-  // A retry after the details failed to save reuses the file that already uploaded.
+  // A retry after the details failed to save, or a save after a scan, reuses the file that already uploaded.
   const uploaded = useRef<{ file: PreparedFile; storagePath: string } | null>(null)
+  // What the last scan put in the form, which the next scan may replace.
+  const scanned = useRef<Partial<Record<ScanField, string>>>({})
 
   const replacePicked = (next: Picked | null) => {
     if (picked?.previewUrl) URL.revokeObjectURL(picked.previewUrl)
     setPicked(next)
+  }
+
+  async function uploadOnce(file: PreparedFile): Promise<string> {
+    if (uploaded.current?.file === file) return uploaded.current.storagePath
+    const storagePath = await uploadDocumentFile(file)
+    uploaded.current = { file, storagePath }
+    return storagePath
+  }
+
+  /** An upload that won't become a document, because the sheet closed or another file was picked. */
+  function discardUploaded() {
+    const stray = uploaded.current
+    uploaded.current = null
+    // Best effort: a stray file in the private bucket is untidy, not exposed.
+    if (stray) api.request(discardDocumentUpload, { body: { storagePath: stray.storagePath } }).catch(() => undefined)
   }
 
   const save = useMutation<[Fields, Picked | null]>(async (fields, file) => {
@@ -82,19 +116,16 @@ export function DocumentSheet({
     } else {
       if (file === null) return
       let storagePath: string
-      if (uploaded.current?.file === file.file) {
-        storagePath = uploaded.current.storagePath
-      } else {
-        try {
-          storagePath = await uploadDocumentFile(file.file)
-        } catch (cause) {
-          if (!(cause instanceof UploadError)) throw cause
-          setFileError(cause.message)
-          return
-        }
-        uploaded.current = { file: file.file, storagePath }
+      try {
+        storagePath = await uploadOnce(file.file)
+      } catch (cause) {
+        if (!(cause instanceof UploadError)) throw cause
+        setFileError(cause.message)
+        return
       }
       await api.request(createDocument, { body: { ...fields, storagePath } })
+      // The document's file now, not a stray one.
+      uploaded.current = null
     }
     onOpenChange(false)
   })
@@ -104,10 +135,28 @@ export function DocumentSheet({
     setKind(document?.kind ?? 'other')
     if (!next) {
       replacePicked(null)
-      uploaded.current = null
+      discardUploaded()
+      scanned.current = {}
       setFileError(null)
       save.clearError()
     }
+  }
+
+  const readScan = async (): Promise<DocumentSuggestionValue | null> => {
+    if (document) return (await api.request(scanDocument, { params: { documentId: document.id } })).suggestion
+    if (picked === null) return null
+    const storagePath = await uploadOnce(picked.file)
+    return (await api.request(scanDocumentUpload, { body: { storagePath } })).suggestion
+  }
+
+  const onScanned = (suggestion: DocumentSuggestionValue): ScanOutcome => {
+    const form = formRef.current
+    if (form === null) return NOTHING_FILLED
+    // A kind of Other is the form's default, not a choice.
+    const outcome = fillFromScan(form, suggestion, { fields: SCAN_FIELDS, replaceable: { kind: 'other', ...scanned.current } })
+    scanned.current = { ...scanned.current, ...outcome.values }
+    if (outcome.filled.includes('kind') && suggestion.kind !== null) setKind(suggestion.kind)
+    return outcome
   }
 
   const onPick = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -120,7 +169,8 @@ export function DocumentSheet({
     setPreparing(true)
     try {
       const file = await prepareDocumentFile(chosen)
-      replacePicked({ file, previewUrl: PREVIEWABLE.has(file.mimeType) ? URL.createObjectURL(file.blob) : null })
+      discardUploaded()
+      replacePicked({ id: crypto.randomUUID(), file, previewUrl: PREVIEWABLE.has(file.mimeType) ? URL.createObjectURL(file.blob) : null })
     } catch (cause) {
       setFileError(cause instanceof UploadError ? cause.message : 'That file couldn’t be read. Try another one.')
     } finally {
@@ -189,7 +239,9 @@ export function DocumentSheet({
         </>
       }
     >
-      <form id={formId} onSubmit={onSubmit} className='flex flex-col gap-4'>
+      <form ref={formRef} id={formId} onSubmit={onSubmit} className='flex flex-col gap-4'>
+        {document && isScannableMimeType(document.mimeType) ? <ScanDates read={readScan} onRead={onScanned} disabled={busy} /> : null}
+
         {document ? null : (
           <div className='flex flex-col gap-3'>
             {picked ? (
@@ -215,6 +267,9 @@ export function DocumentSheet({
                   </p>
                 </div>
               </div>
+            ) : null}
+            {picked && isScannableMimeType(picked.file.mimeType) ? (
+              <ScanDates key={picked.id} read={readScan} onRead={onScanned} disabled={busy} />
             ) : null}
             <div className='grid grid-cols-2 gap-3'>
               <FilePicker

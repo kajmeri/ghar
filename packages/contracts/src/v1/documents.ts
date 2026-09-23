@@ -164,3 +164,53 @@ export const getDocumentFileUrl = defineEndpoint({
   params: documentParamsSchema,
   response: z.object({ url: z.string(), expiresAt: instantSchema }),
 })
+
+// Reading the dates off a scan
+
+/**
+ * What a scan suggests for the form, for a person to check. Anything it couldn't read is null. A
+ * scan never reads ID numbers, so there's no reference number here.
+ */
+export const documentSuggestionSchema = z.object({
+  kind: documentKindSchema.nullable(),
+  title: z.string().nullable(),
+  issuer: z.string().nullable(),
+  issuedOn: calendarDateSchema.nullable(),
+  expiresOn: calendarDateSchema.nullable(),
+})
+export type DocumentSuggestionValue = z.infer<typeof documentSuggestionSchema>
+
+/** Null when Ghar couldn't read the file, or it isn't a document. Nothing is saved either way. */
+export const documentScanResponseSchema = z.object({ suggestion: documentSuggestionSchema.nullable() })
+
+export const documentUploadPathSchema = z.object({ storagePath: z.string().min(1).max(200) })
+
+/**
+ * Sends a file from createDocumentUpload to Claude to read its dates, before the document is
+ * saved. Owners, adults and members. Photos in HEIC format can't be read; send a JPEG.
+ */
+export const scanDocumentUpload = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/documents/uploads/scan',
+  body: documentUploadPathSchema,
+  response: documentScanResponseSchema,
+})
+
+/** The same, for a document's saved file. */
+export const scanDocument = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/documents/:documentId/scan',
+  params: documentParamsSchema,
+  response: documentScanResponseSchema,
+})
+
+/**
+ * Deletes an uploaded file that never became a document, when someone scans it and then cancels.
+ * A file a document or renewal already uses stays.
+ */
+export const discardDocumentUpload = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/documents/uploads/discard',
+  body: documentUploadPathSchema,
+  response: z.object({ discarded: z.literal(true) }),
+})

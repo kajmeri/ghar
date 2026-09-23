@@ -12,6 +12,7 @@ import {
   createDocument,
   deleteDocument,
   getDocument,
+  isDocumentFileInUse,
   listDocumentExpiries,
   listDocuments,
   updateDocument,
@@ -269,6 +270,15 @@ describe('documents', () => {
     const upload = file(owner)
     await createDocument(owner, db, { ...documentInput({ title: 'Receipt', expiresOn: null }), ...upload })
     await expect(createDocument(owner, db, { ...documentInput({ title: 'Again' }), ...upload })).rejects.toBeInstanceOf(ConflictError)
+  })
+
+  it('knows a file is in use, even by a document the caller can’t see', async () => {
+    const upload = file(owner)
+    await createDocument(owner, db, { ...documentInput({ title: 'Private scan', expiresOn: null, isSensitive: true }), ...upload })
+    expect(await isDocumentFileInUse(member, db, upload.storagePath)).toBe(true)
+    expect(await isDocumentFileInUse(member, db, file(owner).storagePath)).toBe(false)
+    expect(await isDocumentFileInUse(other, db, upload.storagePath)).toBe(false)
+    await expect(isDocumentFileInUse(viewer, db, upload.storagePath)).rejects.toBeInstanceOf(ForbiddenError)
   })
 
   it('counts documents per asset and hands back the path of a deleted one', async () => {

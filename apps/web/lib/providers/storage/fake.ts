@@ -83,6 +83,10 @@ export function createFakeStorageProvider(
       const stored = state.objects.get(path)
       return stored ? { mimeType: stored.mimeType, sizeBytes: stored.bytes.byteLength } : null
     },
+    async read(path) {
+      const stored = state.objects.get(path)
+      return stored ? { bytes: new Uint8Array(stored.bytes.slice(0)), mimeType: stored.mimeType } : null
+    },
     async remove(path) {
       state.objects.delete(path)
     },

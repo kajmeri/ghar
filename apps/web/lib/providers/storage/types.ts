@@ -10,6 +10,11 @@ export interface StoredFile {
   sizeBytes: number
 }
 
+export interface StoredBytes {
+  bytes: Uint8Array
+  mimeType: string
+}
+
 /**
  * The private documents bucket. Paths come from documentStoragePath and are checked against the
  * caller's household before they get here, so nothing in a provider knows about households.
@@ -21,6 +26,8 @@ export interface StorageProvider {
   createFileUrl(path: string): Promise<SignedUrl>
   /** Null when nothing is at the path. */
   stat(path: string): Promise<StoredFile | null>
+  /** The file itself, for the server to read. Null when nothing is at the path. */
+  read(path: string): Promise<StoredBytes | null>
   /** Succeeds when nothing is at the path. */
   remove(path: string): Promise<void>
 }
