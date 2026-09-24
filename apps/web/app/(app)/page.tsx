@@ -9,6 +9,7 @@ import { getAttention } from '@/lib/attention/service'
 import { billAmountText, billTone, occurrenceText } from '@/lib/bills/display'
 import * as households from '@/lib/households/service'
 import { expiryHref, expiryLabel, expiryStatus } from '@/lib/renewals/display'
+import { MoneyGlance } from './_components/money-glance'
 import { EmptyState } from './_components/ui/empty-state'
 import { ChecklistIllustration, PeopleIllustration } from './_components/ui/illustrations'
 import { PageHeader } from './_components/ui/page-header'
@@ -28,14 +29,16 @@ export default async function HomePage() {
   // The member count only matters to someone who can invite.
   const [members, attention] = await Promise.all([canInvite ? households.listMembers(ctx) : [], getAttention(session)])
   const inviteFirst = canInvite && members.length < 2
-  const { today, currency, maintenance, expiries } = attention
+  const { today, currency, maintenance, expiries, money } = attention
   const bills = attention.bills ?? []
   const header = <PageHeader title={household.name} description={formatInstant(new Date(), household.timeZone, { dateStyle: 'full' })} />
+  const moneyGlance = money === null ? null : <MoneyGlance money={money} currency={currency} />
 
   if (maintenance.length === 0 && bills.length === 0 && expiries.length === 0) {
     return (
       <>
         {header}
+        {moneyGlance === null ? null : <div className='mb-8'>{moneyGlance}</div>}
         {inviteFirst ? (
           <EmptyState
             illustration={<PeopleIllustration />}
@@ -151,6 +154,9 @@ export default async function HomePage() {
             </ul>
           </section>
         ) : null}
+
+        {/* What needs someone comes first; the month's money is a look, not a job. */}
+        {moneyGlance}
 
         {inviteFirst ? (
           <p className='rounded-card border border-line bg-surface p-4 text-ink-muted'>

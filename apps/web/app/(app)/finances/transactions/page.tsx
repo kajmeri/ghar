@@ -1,15 +1,17 @@
 import { can } from '@ghar/core/auth'
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import { getPageSession } from '@/lib/api/authed'
 import { rangeLabel, transactionFilters, transactionsHref } from '@/lib/finances/display'
 import { listAccountOptions, listCategoryOptions } from '@/lib/finances/service'
-import { loadTransactionsPage } from '@/lib/finances/transactions'
+import { loadTransactionSummary, loadTransactionsPage } from '@/lib/finances/transactions'
 import { BackLink } from '../../_components/ui/back-link'
 import { EmptyState } from '../../_components/ui/empty-state'
 import { LockIllustration, WalletIllustration } from '../../_components/ui/illustrations'
 import { PageHeader } from '../../_components/ui/page-header'
 import { TransactionFilters } from './_components/transaction-filters'
 import { TransactionList } from './_components/transaction-list'
+import { TransactionSummary, TransactionSummarySkeleton } from './_components/transaction-summary'
 
 export const metadata: Metadata = { title: 'Transactions' }
 
@@ -33,22 +35,21 @@ export default async function TransactionsPage({ searchParams }: PageProps<'/fin
   }
 
   const filters = transactionFilters(params)
+  const range = rangeLabel(filters)
+  const filtered = filters.q !== '' || filters.account !== '' || filters.category !== '' || filters.review || range !== null
+  const query = {
+    q: filters.q === '' ? undefined : filters.q,
+    accountId: filters.account === '' ? undefined : filters.account,
+    categoryId: filters.category === '' ? undefined : filters.category,
+    review: filters.review ? true : undefined,
+    from: filters.from === '' ? undefined : filters.from,
+    to: filters.to === '' ? undefined : filters.to,
+  }
   const [page, accounts, categories] = await Promise.all([
-    loadTransactionsPage(session, {
-      limit: PAGE_SIZE,
-      q: filters.q === '' ? undefined : filters.q,
-      accountId: filters.account === '' ? undefined : filters.account,
-      categoryId: filters.category === '' ? undefined : filters.category,
-      review: filters.review ? true : undefined,
-      from: filters.from === '' ? undefined : filters.from,
-      to: filters.to === '' ? undefined : filters.to,
-    }),
+    loadTransactionsPage(session, { limit: PAGE_SIZE, ...query }),
     listAccountOptions(session),
     listCategoryOptions(session),
   ])
-
-  const range = rangeLabel(filters)
-  const filtered = filters.q !== '' || filters.account !== '' || filters.category !== '' || filters.review || range !== null
   const empty = page.items.length === 0 && !filtered
 
   return (
@@ -68,6 +69,12 @@ export default async function TransactionsPage({ searchParams }: PageProps<'/fin
       ) : (
         <div className='flex flex-col gap-4'>
           <TransactionFilters accounts={accounts} categories={categories} filters={filters} reviewCount={page.reviewCount} range={range} />
+          {/* The whole list needs no total; a question asked of it does. It streams in beside the list. */}
+          {filtered && page.items.length > 0 ? (
+            <Suspense key={transactionsHref(filters)} fallback={<TransactionSummarySkeleton />}>
+              <TransactionSummary load={loadTransactionSummary(session, query)} currency={session.household.currency} />
+            </Suspense>
+          ) : null}
           {/* Keyed on the filters: a different question starts a fresh list rather than appending. */}
           <TransactionList
             key={transactionsHref(filters)}

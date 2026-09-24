@@ -1,5 +1,7 @@
 import 'server-only'
-import type { Transaction } from '@ghar/contracts'
+import type { Transaction, TransactionSummaryValue } from '@ghar/contracts'
+import { addCalendarDays, todayInTimeZone } from '@ghar/core/dates'
+import { addMonths, transactionStripWindow, transactionSummary } from '@ghar/core/finances'
 import * as queries from '@ghar/db/queries'
 import type { RequestContext, TransactionFilters, TransactionRow } from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
@@ -35,9 +37,7 @@ export function toTransaction(row: TransactionRow): Transaction {
   }
 }
 
-export interface TransactionQuery {
-  cursor?: string
-  limit: number
+export interface TransactionFilterQuery {
   tripId?: string
   untagged?: boolean
   accountId?: string
@@ -48,8 +48,13 @@ export interface TransactionQuery {
   review?: boolean
 }
 
+export interface TransactionQuery extends TransactionFilterQuery {
+  cursor?: string
+  limit: number
+}
+
 /** `untagged` is the older spelling of `tripId=none`, which the trip budget panel still sends. */
-function filtersFor(query: TransactionQuery): TransactionFilters {
+function filtersFor(query: TransactionFilterQuery): TransactionFilters {
   return {
     tripId: query.untagged ? 'none' : query.tripId,
     accountId: query.accountId,
@@ -82,6 +87,27 @@ export async function loadTransactionsPage(
     queries.countReviewQueue(session.context, db),
   ])
   return { ...pageResponse(page, scope, toTransaction), reviewCount }
+}
+
+/**
+ * What the charges a list is filtered to add up to, and the same filter, without its dates, month
+ * by month over the year up to them.
+ */
+export async function loadTransactionSummary(session: Session, query: TransactionFilterQuery): Promise<TransactionSummaryValue> {
+  const db = getDb()
+  const today = todayInTimeZone(session.household.timeZone)
+  const filters = filtersFor(query)
+  const window = transactionStripWindow({ to: query.to, today })
+  const [totals, monthly] = await Promise.all([
+    queries.listTransactionMonthTotals(session.context, db, filters),
+    queries.listTransactionMonthTotals(session.context, db, {
+      ...filters,
+      from: window.from,
+      // To the last day of the window's last month.
+      to: addCalendarDays(addMonths(window.to, 1), -1),
+    }),
+  ])
+  return transactionSummary({ totals, monthly, from: query.from, to: query.to, today })
 }
 
 /** How many charges are waiting for someone to file them. What the Money page's link counts. */

@@ -1,4 +1,5 @@
 import {
+  CardSkeleton,
   DataListSkeleton,
   LoadingRegion,
   PageHeaderSkeleton,
@@ -17,6 +18,10 @@ export default function Loading() {
         <div>
           <SectionHeaderSkeleton />
           <DataListSkeleton rows={3} secondary />
+        </div>
+        <div>
+          <SectionHeaderSkeleton />
+          <CardSkeleton lines={3} />
         </div>
       </div>
     </LoadingRegion>

@@ -12,6 +12,7 @@ import {
   netWorthGlance,
   spendingTrends,
   TREND_RANGES,
+  transactionSummary,
 } from '@ghar/core/finances'
 import { describe, expect, it } from 'vitest'
 import {
@@ -26,6 +27,7 @@ import {
   monthPaceSchema,
   netWorthGlanceSchema,
   saveCategoryRule,
+  transactionSummarySchema,
   trendRangeSchema,
 } from '../src/v1/finances'
 
@@ -109,6 +111,15 @@ describe('finances contracts', () => {
       ...goalHistory({ targetCents: 50_000, savedCents: 20_000, readings, today: '2026-09-23' }),
     }
     expect(goalHistorySchema.parse(goal)).toEqual(goal)
+  })
+
+  it('carries a filtered list added up, as core works it out', () => {
+    const summary = transactionSummary({
+      totals: [{ month: '2026-09-01', outCents: 1_000, inCents: 0, count: 2 }],
+      monthly: [{ month: '2026-09-01', outCents: 1_000, inCents: 0, count: 2 }],
+      today: '2026-09-23',
+    })
+    expect(transactionSummarySchema.parse(summary)).toEqual(summary)
   })
 
   it('holds a category name and a matcher to the same lengths core does', () => {

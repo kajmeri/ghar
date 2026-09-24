@@ -250,25 +250,73 @@ export type Transaction = z.infer<typeof transactionSchema>
  * `categoryId` and `tripId` take `none` for "not filed" and "not on a trip". `review` narrows to
  * the queue: charges nothing has filed and nobody has excluded.
  */
+/** Which charges a list is asking about. The list and its summary take the same ones. */
+export const transactionFilterQuerySchema = z.object({
+  tripId: z.union([z.uuid(), z.literal('none')]).optional(),
+  /** Only what is not tagged to any trip yet. The same as `tripId=none`. */
+  untagged: queryBooleanSchema.optional(),
+  accountId: z.uuid().optional(),
+  categoryId: z.union([z.uuid(), z.literal('none')]).optional(),
+  from: calendarDateSchema.optional(),
+  to: calendarDateSchema.optional(),
+  /** Matches the description, the merchant or the notes. */
+  q: z.string().trim().max(100).optional(),
+  review: queryBooleanSchema.optional(),
+})
+
 export const listTransactions = defineEndpoint({
   method: 'GET',
   path: '/api/v1/transactions',
-  query: pageQuerySchema.extend({
-    tripId: z.union([z.uuid(), z.literal('none')]).optional(),
-    /** Only what is not tagged to any trip yet. The same as `tripId=none`. */
-    untagged: queryBooleanSchema.optional(),
-    accountId: z.uuid().optional(),
-    categoryId: z.union([z.uuid(), z.literal('none')]).optional(),
-    from: calendarDateSchema.optional(),
-    to: calendarDateSchema.optional(),
-    /** Matches the description, the merchant or the notes. */
-    q: z.string().trim().max(100).optional(),
-    review: queryBooleanSchema.optional(),
-  }),
+  query: pageQuerySchema.extend(transactionFilterQuerySchema.shape),
   response: pageSchema(transactionSchema).extend({
     /** How many charges are waiting to be filed, whatever this page was filtered to. */
     reviewCount: z.int(),
   }),
+})
+
+/** Mirrors TRANSACTION_STRIP_MONTHS in @ghar/core/finances. */
+const TRANSACTION_STRIP_MONTHS = 12
+
+const transactionMonthTotalSchema = z.object({
+  month: calendarDateSchema,
+  /** Money out, as a positive figure. */
+  outCents: centsSchema,
+  inCents: centsSchema,
+  count: z.int().min(0),
+})
+
+export const transactionSummarySchema = z.object({
+  /** Everything the filter matches, dates included, less what the household excluded. */
+  outCents: centsSchema,
+  inCents: centsSchema,
+  count: z.int().min(0),
+  /** Which way the money mostly went over the strip, and so which one it draws. */
+  direction: z.enum(['out', 'in']),
+  /** The same filter without its dates, a month at a time over the year up to them. Oldest first. */
+  months: z
+    .array(
+      transactionMonthTotalSchema.extend({
+        /** Inside the dates asked for; every month is when none were. */
+        inRange: z.boolean(),
+        /** The household's month now, which isn't over. */
+        partial: z.boolean(),
+      })
+    )
+    .length(TRANSACTION_STRIP_MONTHS),
+  /** The tallest month in the direction drawn. */
+  maxCents: centsSchema,
+})
+export type TransactionSummaryValue = z.infer<typeof transactionSummarySchema>
+
+/**
+ * Owners and adults. What the charges a list is filtered to add up to, and the same filter month
+ * by month over the last year. Takes the list's filters.
+ */
+export const getTransactionSummary = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/transactions/summary',
+  query: transactionFilterQuerySchema,
+  response: transactionSummarySchema,
 })
 
 /**

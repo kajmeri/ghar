@@ -13,6 +13,7 @@ import {
   createBankItem,
   getTransaction,
   listAccounts,
+  listTransactionMonthTotals,
   listTransactions,
   setAccountHidden,
   updateTransaction,
@@ -475,12 +476,29 @@ describe('insights', () => {
   it('sums spending by day and category', async () => {
     const rows = await listDailyCategorySpend(a, db, { from: '2026-08-01', to: '2026-09-01' })
     const groceries = await categoryByKey(a, 'groceries')
-    const find = (date: string, categoryId: string | null) => rows.find(row => row.date === date && row.categoryId === categoryId)?.spentCents
+    const find = (date: string, categoryId: string | null) =>
+      rows.find(row => row.date === date && row.categoryId === categoryId)?.spentCents
     expect(find('2026-08-03', groceries.id)).toBe(4520)
     expect(find('2026-08-20', groceries.id)).toBe(3010)
     expect(find('2026-08-10', null)).toBe(12_000)
     expect(rows.some(row => row.date === '2026-09-02')).toBe(false)
     expect(await listDailyCategorySpend(b, db, { from: '2026-08-01', to: '2026-09-01' })).toEqual([])
+  })
+
+  it('adds up what a filter on the list matches, a month at a time', async () => {
+    const august = { from: '2026-08-01', to: '2026-08-31' }
+    const listed = (await listTransactions(a, db, august, { limit: 200 })).rows.filter(row => !row.isExcluded)
+    const [total] = await listTransactionMonthTotals(a, db, august)
+    expect(total).toEqual({
+      month: '2026-08-01',
+      outCents: listed.filter(row => row.amountCents < 0).reduce((sum, row) => sum - row.amountCents, 0),
+      inCents: listed.filter(row => row.amountCents > 0).reduce((sum, row) => sum + row.amountCents, 0),
+      count: listed.length,
+    })
+    expect(await listTransactionMonthTotals(a, db, { ...august, q: 'trader' })).toEqual([
+      { month: '2026-08-01', outCents: 7530, inCents: 0, count: 2 },
+    ])
+    expect(await listTransactionMonthTotals(b, db, august)).toEqual([])
   })
 
   it('ranks merchants by money out', async () => {

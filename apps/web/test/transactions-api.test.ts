@@ -1,5 +1,5 @@
 import type { PGlite } from '@electric-sql/pglite'
-import type { MonthPaceValue, NetWorthGlanceValue, RequestContext, Transaction } from '@ghar/contracts'
+import type { Attention, MonthPaceValue, NetWorthGlanceValue, RequestContext, Transaction, TransactionSummaryValue } from '@ghar/contracts'
 import { invitationExpiresAt } from '@ghar/core/invitations'
 import {
   acceptInvitation,
@@ -17,9 +17,11 @@ import {
 } from '@ghar/db/queries'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
+import { GET as attention } from '@/app/api/v1/attention/route'
 import { GET as overview } from '@/app/api/v1/finances/overview/route'
 import { PATCH as tag } from '@/app/api/v1/transactions/[transactionId]/route'
 import { GET as list, POST as create } from '@/app/api/v1/transactions/route'
+import { GET as summary } from '@/app/api/v1/transactions/summary/route'
 
 // /api/v1/transactions against PGlite: what the money screen reads and what the sheet writes. The
 // household is whoever the test says is signed in, and nothing here trusts a household id from a
@@ -81,6 +83,18 @@ async function listCharges(query: Record<string, string> = {}): Promise<{ status
   for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value)
   const response = await list(new Request(url), { params: Promise.resolve({}) })
   return { status: response.status, body: (await response.json()) as ListBody }
+}
+
+async function addUp(query: Record<string, string> = {}): Promise<{ status: number; body: TransactionSummaryValue }> {
+  const url = new URL('http://localhost/api/v1/transactions/summary')
+  for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value)
+  const response = await summary(new Request(url), { params: Promise.resolve({}) })
+  return { status: response.status, body: (await response.json()) as TransactionSummaryValue }
+}
+
+async function getHome(): Promise<{ status: number; body: Attention }> {
+  const response = await attention(new Request('http://localhost/api/v1/attention'), { params: Promise.resolve({}) })
+  return { status: response.status, body: (await response.json()) as Attention }
 }
 
 async function post(body: unknown): Promise<{ status: number; body: { transaction: Transaction; error?: string } }> {
@@ -435,8 +449,53 @@ describe('the month so far', () => {
     expect(body.reviewCount).toBe(1)
   })
 
+  it('puts the month, and its plan, on Home for whoever can see money', async () => {
+    test.session = owner
+    const { status, body } = await getHome()
+    expect(status).toBe(200)
+    expect(body.money).toMatchObject({
+      monthStart: '2026-09-01',
+      spentCents: 3600,
+      previousSpentCents: 7520,
+      budget: { availableCents: 50_000, spentCents: 3600 },
+      netWorth: null,
+    })
+    expect(body.money?.budget?.elapsedShare).toBeCloseTo(22 / 30)
+
+    // A member sees Home, but not the household's money on it.
+    test.session = member
+    const home = await getHome()
+    expect(home.status).toBe(200)
+    expect(home.body.money).toBeNull()
+  })
+
+  it('adds up a filtered list, and draws the same filter a month at a time for the year', async () => {
+    test.session = owner
+    const listed = (await listCharges({ q: 'trader' })).body.items
+    const { status, body } = await addUp({ q: 'trader' })
+
+    expect(status).toBe(200)
+    expect(body).toMatchObject({ outCents: 4520, inCents: 0, count: listed.length, direction: 'out', maxCents: 4520 })
+    expect(body.months).toHaveLength(12)
+    expect(body.months[0]?.month).toBe('2025-10-01')
+    expect(body.months.at(-1)).toMatchObject({ month: '2026-09-01', partial: true, count: 0 })
+    expect(body.months.find(month => month.month === '2026-08-01')).toMatchObject({ outCents: 4520, count: 1, inRange: true })
+
+    // Everything: money in is counted beside money out, not netted against it, and the POS charge
+    // excluded earlier isn't counted at all.
+    const all = await addUp()
+    expect(all.body).toMatchObject({ outCents: 4520 + 3000 + 3600, inCents: 412, count: 4 })
+
+    // Dates narrow the total, and the strip still shows the year around them.
+    const august = await addUp({ from: '2026-08-01', to: '2026-08-31' })
+    expect(august.body).toMatchObject({ outCents: 4520 + 3000, inCents: 412, count: 3 })
+    expect(august.body.months.at(-1)).toMatchObject({ month: '2026-08-01', inRange: true })
+    expect(august.body.months.find(month => month.month === '2026-07-01')?.inRange).toBe(false)
+  })
+
   it('keeps members out, and answers nothing at all when signed out', async () => {
     test.session = member
+    expect((await addUp()).status).toBe(403)
     expect((await getOverview()).status).toBe(403)
     test.session = null
     expect((await getOverview()).status).toBe(401)

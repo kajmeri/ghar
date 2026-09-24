@@ -9105,7 +9105,6 @@
         "tags": [
           "finances"
         ],
-        "description": "Owners and adults. Everyday spending, newest first, so a charge can be found, filed, or tagged\nto a trip. Charges on a hidden account are left out unless that account is asked for by name.\n\n`categoryId` and `tripId` take `none` for \"not filed\" and \"not on a trip\". `review` narrows to\nthe queue: charges nothing has filed and nobody has excluded.",
         "parameters": [
           {
             "name": "cursor",
@@ -9348,6 +9347,136 @@
                   "required": [
                     "transaction"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/summary": {
+      "get": {
+        "operationId": "getTransactionSummary",
+        "tags": [
+          "finances"
+        ],
+        "description": "Owners and adults. What the charges a list is filtered to add up to, and the same filter month\nby month over the last year. Takes the list's filters.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "const": "none"
+                }
+              ]
+            }
+          },
+          {
+            "name": "untagged",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/QueryBoolean"
+            }
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "const": "none"
+                }
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CalendarDate"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CalendarDate"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "review",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/QueryBoolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionSummary"
                 }
               }
             }
@@ -13795,6 +13924,16 @@
             "items": {
               "$ref": "#/components/schemas/AttentionExpiry"
             }
+          },
+          "money": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HomeMoney"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -13802,7 +13941,8 @@
           "currency",
           "maintenance",
           "bills",
-          "expiries"
+          "expiries",
+          "money"
         ]
       },
       "AttentionExpiry": {
@@ -18403,6 +18543,84 @@
           "costBasisCents",
           "gainCents",
           "gainPercent"
+        ]
+      },
+      "HomeMoney": {
+        "type": "object",
+        "properties": {
+          "monthStart": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "spentCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "previousSpentCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "budget": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "availableCents": {
+                    "$ref": "#/components/schemas/Cents"
+                  },
+                  "spentCents": {
+                    "$ref": "#/components/schemas/Cents"
+                  },
+                  "elapsedShare": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "availableCents",
+                  "spentCents",
+                  "elapsedShare"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "netWorth": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "netCents": {
+                    "$ref": "#/components/schemas/Cents"
+                  },
+                  "monthChangeCents": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Cents"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "netCents",
+                  "monthChangeCents"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "monthStart",
+          "spentCents",
+          "previousSpentCents",
+          "budget",
+          "netWorth"
         ]
       },
       "HoursCheck": {
@@ -23075,6 +23293,78 @@
           "isTransfer",
           "isExcluded",
           "notes"
+        ]
+      },
+      "TransactionSummary": {
+        "type": "object",
+        "properties": {
+          "outCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "inCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "out",
+              "in"
+            ]
+          },
+          "months": {
+            "minItems": 12,
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "month": {
+                  "$ref": "#/components/schemas/CalendarDate"
+                },
+                "outCents": {
+                  "$ref": "#/components/schemas/Cents"
+                },
+                "inCents": {
+                  "$ref": "#/components/schemas/Cents"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "inRange": {
+                  "type": "boolean"
+                },
+                "partial": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "month",
+                "outCents",
+                "inCents",
+                "count",
+                "inRange",
+                "partial"
+              ]
+            }
+          },
+          "maxCents": {
+            "$ref": "#/components/schemas/Cents"
+          }
+        },
+        "required": [
+          "outCents",
+          "inCents",
+          "count",
+          "direction",
+          "months",
+          "maxCents"
         ]
       },
       "TravelEstimate": {

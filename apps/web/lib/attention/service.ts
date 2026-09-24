@@ -10,6 +10,7 @@ import type { ExpiryRow } from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
 import { listBillsWithStatus } from '@/lib/bills/service'
 import { getDb } from '@/lib/db'
+import { loadHomeMoney } from '@/lib/finances/overview'
 import { toMaintenanceTask } from '@/lib/home/service'
 import { toExpiry } from '@/lib/renewals/service'
 
@@ -21,13 +22,15 @@ export async function getAttention(session: Session): Promise<Attention> {
   // As far out as any lead time; each thing's own lead time decides below.
   const range = { from: addCalendarDays(today, -EXPIRED_VISIBLE_DAYS), to: addCalendarDays(today, REMINDER_LEAD_DAYS_MAX) }
 
-  const [tasks, bills, documents, warranties, renewals] = await Promise.all([
+  const seesMoney = can(context.role, 'finances.view')
+  const [tasks, bills, documents, warranties, renewals, money] = await Promise.all([
     // Only jobs already due or due within the due-soon window; the state filter below still decides.
     queries.listMaintenanceTasks(context, db, { dueTo: addCalendarDays(today, MAINTENANCE_DUE_SOON_DAYS) }),
-    can(context.role, 'finances.view') ? listBillsWithStatus(context, db, household.timeZone) : null,
+    seesMoney ? listBillsWithStatus(context, db, household.timeZone) : null,
     queries.listDocumentExpiries(context, db, range),
     queries.listWarrantyExpiries(context, db, range),
     queries.listRenewalExpiries(context, db, range),
+    seesMoney ? loadHomeMoney(session) : null,
   ])
 
   // Something nobody is renewing needs no attention.
@@ -49,14 +52,12 @@ export async function getAttention(session: Session): Promise<Attention> {
     .filter(expiry => needsRenewal(expiry.expiresOn, today, expiry.reminderLeadDays))
     .toSorted((a, b) => a.expiresOn.localeCompare(b.expiresOn) || a.title.localeCompare(b.title))
 
-
   return {
     today,
     currency: household.currency,
-    maintenance: tasks
-      .map(task => toMaintenanceTask(task, today))
-      .filter(task => task.state === 'overdue' || task.state === 'due_soon'),
+    maintenance: tasks.map(task => toMaintenanceTask(task, today)).filter(task => task.state === 'overdue' || task.state === 'due_soon'),
     bills: bills?.filter(bill => bill.needsAttention) ?? null,
     expiries,
+    money,
   }
 }

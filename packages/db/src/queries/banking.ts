@@ -963,6 +963,41 @@ export async function listTransactions(
   return toPage(rows, page.limit)
 }
 
+export interface TransactionMonthTotal {
+  /** The first of the month. */
+  month: string
+  /** Money out, as a positive figure. */
+  outCents: number
+  /** Money in. */
+  inCents: number
+  count: number
+}
+
+/**
+ * What the charges a filter matches add up to, a month at a time. The same rows the list shows,
+ * less the ones the household excluded, which it has said not to count.
+ */
+export async function listTransactionMonthTotals(
+  ctx: RequestContext,
+  db: Db,
+  filters: TransactionFilters
+): Promise<TransactionMonthTotal[]> {
+  requirePermission(ctx, 'finances.view')
+  const month = sql<string>`to_char(${transactions.date}, 'YYYY-MM') || '-01'`
+  return db
+    .select({
+      month,
+      outCents: sql<number>`coalesce(sum(-${transactions.amountCents}) filter (where ${transactions.amountCents} < 0), 0)`.mapWith(Number),
+      inCents: sql<number>`coalesce(sum(${transactions.amountCents}) filter (where ${transactions.amountCents} > 0), 0)`.mapWith(Number),
+      count: count(),
+    })
+    .from(transactions)
+    .leftJoin(accounts, eq(accounts.id, transactions.accountId))
+    .where(and(...transactionConditions(ctx, filters), eq(transactions.isExcluded, false)))
+    .groupBy(month)
+    .orderBy(month)
+}
+
 const TRANSACTION_NOT_FOUND = 'That transaction no longer exists.'
 
 export async function getTransaction(ctx: RequestContext, db: Db, input: { transactionId: string }): Promise<TransactionRow> {
