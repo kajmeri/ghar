@@ -5,10 +5,13 @@ import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { TripPolls } from '@/app/_components/trip-polls'
 import { Pill } from '@/components/ui/pill'
 import { getPageSession } from '@/lib/api/authed'
+import { requireAccountSession } from '@/lib/auth/context'
 import { densityCookieName, parseDensity } from '@/lib/travel/itinerary-display'
 import { listTripGuests } from '@/lib/travel/guests'
+import { listTripPolls } from '@/lib/travel/polls'
 import { loadTripBudget, loadTripDetail, loadTripIdeas } from '@/lib/travel/trips'
 import { BudgetPanel } from './_components/budget-panel'
 import { GuestsSummary } from './_components/guests-summary'
@@ -41,7 +44,7 @@ export default async function TripPage({
   const { tab: requested, view } = await searchParams
   const tab: TripTab = TABS.find(value => value === requested) ?? 'itinerary'
 
-  const [detail, ideas, cookieStore, guests] = await Promise.all([
+  const [detail, ideas, cookieStore, guests, polls] = await Promise.all([
     loadTripDetail(session, tripId).catch((error: unknown) => {
       if (error instanceof NotFoundError) notFound()
       throw error
@@ -52,6 +55,12 @@ export default async function TripPage({
       if (error instanceof NotFoundError) notFound()
       throw error
     }),
+    requireAccountSession()
+      .then(account => listTripPolls(account, tripId))
+      .catch((error: unknown) => {
+        if (error instanceof NotFoundError) notFound()
+        throw error
+      }),
   ])
 
   const { userId, role } = session.context
@@ -90,6 +99,15 @@ export default async function TripPage({
       </header>
 
       <GuestsSummary tripId={trip.id} guests={guests} />
+
+      {phase === 'past' ? null : (
+        <TripPolls
+          tripId={trip.id}
+          value={polls}
+          offer={[...(trip.startsOn === null ? (['dates'] as const) : []), ...(trip.destination === null ? (['place'] as const) : [])]}
+          today={today}
+        />
+      )}
 
       {trip.international && detail.documentIssues !== null && phase !== 'past' ? (
         <PassportsCard

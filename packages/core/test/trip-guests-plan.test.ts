@@ -15,12 +15,22 @@ function slot(overrides: Partial<GuestSlotSource> & Pick<GuestSlotSource, 'id'>)
     status: 'open',
     chosenOptionId: null,
     sortOrder: 0,
+    decideBy: null,
     ...overrides,
   }
 }
 
 function option(overrides: Partial<GuestOptionSource> & Pick<GuestOptionSource, 'id' | 'slotId'>): GuestOptionSource {
-  return { title: 'Somewhere', subtitle: null, address: null, url: null, status: 'candidate', ...overrides }
+  return {
+    title: 'Somewhere',
+    subtitle: null,
+    address: null,
+    url: null,
+    status: 'candidate',
+    sortOrder: 0,
+    createdByUserId: null,
+    ...overrides,
+  }
 }
 
 describe('the plan as a guest sees it', () => {
@@ -52,7 +62,38 @@ describe('the plan as a guest sees it', () => {
       ['dinner', 'booked', 'Fisherman’s Wharf'],
     ])
     expect(JSON.stringify(days)).not.toContain('4412')
-    expect(JSON.stringify(days)).not.toContain('Palolem')
+    expect(JSON.stringify(days)).not.toContain('Hotel buffet')
+    // What's being decided lists what's in the running; decided slots list nothing.
+    expect(days[0]?.slots[1]?.choices.map(choice => choice.title)).toEqual(['Palolem', 'Agonda'])
+    expect(days[0]?.slots[0]?.choices).toEqual([])
+  })
+
+  it('counts votes, marks the viewer’s own, and names who suggested what by first name', () => {
+    const days = guestItinerary(
+      [slot({ id: 'beach', decideBy: '2026-12-01' })],
+      [
+        option({ id: 'a', slotId: 'beach', title: 'Palolem', sortOrder: 2, createdByUserId: 'sam' }),
+        option({ id: 'b', slotId: 'beach', title: 'Agonda', sortOrder: 1, createdByUserId: 'host' }),
+      ],
+      {
+        viewerUserId: 'sam',
+        names: new Map([
+          ['sam', 'Sam Rao'],
+          ['host', null],
+        ]),
+        votes: [
+          { optionId: 'a', userId: 'sam', vote: 'yes' },
+          { optionId: 'a', userId: 'host', vote: 'no' },
+          { optionId: 'b', userId: 'kid', vote: 'maybe' },
+        ],
+      }
+    )
+    const beach = days[0]?.slots[0]
+    expect(beach?.decideBy).toBe('2026-12-01')
+    expect(beach?.choices).toMatchObject([
+      { id: 'b', addedBy: null, mine: false, yes: 0, maybe: 1, no: 0, myVote: null },
+      { id: 'a', addedBy: 'Sam', mine: true, yes: 1, maybe: 0, no: 1, myVote: 'yes' },
+    ])
   })
 
   it('puts timed events and the trip itself in the calendar, never untimed or undecided slots', () => {

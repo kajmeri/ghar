@@ -354,8 +354,10 @@ describe('the plan and the calendar, as a guest', () => {
       ['2026-12-20', [['Dinner', 'decided', 'Fisherman’s Wharf']]],
       ['2026-12-21', [['Beach', 'deciding', null]]],
     ])
+    // What's still open lists what's in the running, so the guest can weigh in.
+    expect(shared.itinerary[1]?.slots[0]?.choices.map(choice => choice.title)).toEqual(['Palolem', 'Agonda'])
     const text = JSON.stringify(shared)
-    for (const secret of ['ABC123', '600000', 'sea table', 'Owner is a friend', '7781', 'Palolem', 'Villa code']) {
+    for (const secret of ['ABC123', '600000', 'sea table', 'Owner is a friend', '7781', 'Villa code']) {
       expect(text).not.toContain(secret)
     }
   })

@@ -2,7 +2,7 @@ import type { IcsEvent } from './calendar/ics'
 import { addCalendarDays, type CalendarDate } from './dates'
 import { ConflictError, ForbiddenError, ValidationError } from './errors'
 import { normalizeEmail } from './invitations'
-import { SLOT_BANDS, type OptionStatus, type SlotBand, type SlotKind, type SlotStatus } from './itinerary'
+import { SLOT_BANDS, tallyOptionVotes, type OptionStatus, type OptionVote, type SlotBand, type SlotKind, type SlotStatus } from './itinerary'
 
 // People from outside the household on a trip: friends, the in-laws, a group of families. A guest
 // is an account let onto one trip, not a member of the household, so nothing here depends on
@@ -140,6 +140,7 @@ export interface GuestSlotSource {
   readonly status: SlotStatus
   readonly chosenOptionId: string | null
   readonly sortOrder: number
+  readonly decideBy: CalendarDate | null
 }
 
 export interface GuestOptionSource {
@@ -150,6 +151,39 @@ export interface GuestOptionSource {
   readonly address: string | null
   readonly url: string | null
   readonly status: OptionStatus
+  readonly sortOrder: number
+  readonly createdByUserId: string | null
+}
+
+export interface GuestVoteSource {
+  readonly optionId: string
+  readonly userId: string
+  readonly vote: OptionVote
+}
+
+/** Votes on what's still being decided, and whose names to put on suggestions. */
+export interface GuestVoting {
+  readonly votes: readonly GuestVoteSource[]
+  readonly viewerUserId: string
+  /** Account id to full name, for "Suggested by". Only first names leave here. */
+  readonly names: ReadonlyMap<string, string | null>
+}
+
+/** One option still in the running, as everyone on the trip sees it. Never a cost or a note. */
+export interface GuestChoice {
+  id: string
+  title: string
+  subtitle: string | null
+  address: string | null
+  url: string | null
+  /** First name of whoever added it. */
+  addedBy: string | null
+  /** Added by the person looking, who can take it back while it's undecided. */
+  mine: boolean
+  yes: number
+  maybe: number
+  no: number
+  myVote: OptionVote | null
 }
 
 export interface GuestSlot {
@@ -168,6 +202,10 @@ export interface GuestSlot {
   subtitle: string | null
   address: string | null
   url: string | null
+  /** When the household means to decide by. Null when there's no date. */
+  decideBy: CalendarDate | null
+  /** What's still in the running, in the household's order. Empty unless it's being decided. */
+  choices: GuestChoice[]
 }
 
 export interface GuestDay {
@@ -180,7 +218,11 @@ export interface GuestDay {
  * and where; slots with options still in the running say so; empty and skipped slots, and the
  * household's own notes, are left out.
  */
-export function guestItinerary(slots: readonly GuestSlotSource[], options: readonly GuestOptionSource[]): GuestDay[] {
+export function guestItinerary(
+  slots: readonly GuestSlotSource[],
+  options: readonly GuestOptionSource[],
+  voting: GuestVoting | null = null
+): GuestDay[] {
   const optionsBySlot = new Map<string, GuestOptionSource[]>()
   for (const option of options) {
     const list = optionsBySlot.get(option.slotId) ?? []
@@ -195,6 +237,7 @@ export function guestItinerary(slots: readonly GuestSlotSource[], options: reado
     const chosen =
       slot.status === 'decided' || slot.status === 'booked' ? (own.find(option => option.id === slot.chosenOptionId) ?? null) : null
     if (!chosen && !own.some(option => option.status !== 'rejected')) continue
+    const deciding = chosen === null
     shown.push({
       id: slot.id,
       day: slot.day,
@@ -208,6 +251,8 @@ export function guestItinerary(slots: readonly GuestSlotSource[], options: reado
       subtitle: chosen?.subtitle ?? null,
       address: chosen?.address ?? null,
       url: chosen?.url ?? null,
+      decideBy: deciding ? slot.decideBy : null,
+      choices: deciding ? guestChoices(own, voting) : [],
     })
   }
 
@@ -229,6 +274,30 @@ export function guestItinerary(slots: readonly GuestSlotSource[], options: reado
     else days.push({ day: slot.day, slots: [slot] })
   }
   return days
+}
+
+function guestChoices(options: readonly GuestOptionSource[], voting: GuestVoting | null): GuestChoice[] {
+  return options
+    .filter(option => option.status !== 'rejected')
+    .toSorted((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id))
+    .map(option => {
+      const votes = voting?.votes.filter(vote => vote.optionId === option.id) ?? []
+      const tally = tallyOptionVotes(votes)
+      const by = option.createdByUserId
+      return {
+        id: option.id,
+        title: option.title,
+        subtitle: option.subtitle,
+        address: option.address,
+        url: option.url,
+        addedBy: by === null ? null : firstName(voting?.names.get(by)),
+        mine: voting !== null && by === voting.viewerUserId,
+        yes: tally.yes,
+        maybe: tally.maybe,
+        no: tally.no,
+        myVote: votes.find(vote => vote.userId === voting?.viewerUserId)?.vote ?? null,
+      }
+    })
 }
 
 /** One line of who's going. First names only, the same as the invitation. */

@@ -295,6 +295,7 @@ Every job is idempotent, so a re-run is always safe:
 | `calendar.sync`              | Incremental with Google's sync token                                  |
 | `mail.booking_ingest`        | `mail_messages` records every message id it read; it gets a time budget |
 | `documents.expiry_reminders` | Each reminder is claimed with a row before it's sent                  |
+| `travel.decision_nudges`     | Each nudge is claimed with a row per person and deadline before it's sent |
 
 A per-link failure (one calendar, one inbox) is recorded on that link, not as a job failure. See the
 [runbook](runbook.md#recover-a-failed-sync).

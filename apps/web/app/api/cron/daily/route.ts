@@ -15,6 +15,7 @@ import { getGmailClient } from '@/lib/providers/gmail'
 import { getGoogleCalendarClient } from '@/lib/providers/google-calendar'
 import { getPlaidClient } from '@/lib/providers/plaid'
 import { getPriceProviders } from '@/lib/providers/prices'
+import { runDecisionNudges } from '@/lib/travel/decision-nudges'
 import { runPriceWatch } from '@/lib/travel/price-watch'
 
 // Vercel Cron calls this once a day (see apps/web/vercel.json). Each job writes a job_runs row,
@@ -23,9 +24,10 @@ import { runPriceWatch } from '@/lib/travel/price-watch'
 // calendar sync only asks Google for what changed since the first. The Gmail check never reads a
 // message twice, and only makes drafts for a person to review. Expiry reminders first move automatic
 // renewals past their date on to their current term, which a second run finds already done, then
-// claim each reminder (at the lead time, then 30 and 7 days before) with a row before emailing, so a second run sends nothing. The bank jobs only
-// read from Plaid and overwrite what they stored, and the net worth snapshot comes last so it reads
-// the balances they brought in; a second run rewrites the same day's rows rather than adding more.
+// claim each reminder (at the lead time, then 30 and 7 days before) with a row before emailing, so
+// a second run sends nothing. Decision nudges claim a row per person, per thing up for a vote, per
+// deadline, the same way. The bank jobs only read from Plaid and overwrite what they stored, and
+// the net worth snapshot comes last so it reads the balances they brought in; a second run rewrites the same day's rows rather than adding more.
 // The transaction sync asks Plaid only for what changed since its stored cursor, and advances the
 // cursor only once every row of that batch has landed. Categorization only looks at transactions
 // nothing has decided about yet, so a second run finds nothing left to ask about.
@@ -91,6 +93,18 @@ export async function GET(request: Request): Promise<Response> {
         'documents.expiry_reminders',
         () =>
           runExpiryReminders({
+            db,
+            email: getEmailProvider(),
+            appUrl: env().APP_URL,
+            now: new Date(),
+          }),
+        deps
+      ),
+      await runJob(
+        db,
+        'travel.decision_nudges',
+        () =>
+          runDecisionNudges({
             db,
             email: getEmailProvider(),
             appUrl: env().APP_URL,

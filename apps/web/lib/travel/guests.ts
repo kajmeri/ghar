@@ -4,6 +4,7 @@ import type {
   RequestContext,
   SharedTrip,
   SharedTripDetail,
+  SuggestSharedOptionBody,
   TripAnswer,
   TripCalendarFeed,
   TripGuest,
@@ -13,6 +14,7 @@ import type {
 } from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
 import { buildIcs } from '@ghar/core/calendar'
+import type { OptionVote } from '@ghar/core/itinerary'
 import { tripCalendarEvents, type GuestResponse } from '@ghar/core/trip-guests'
 import * as queries from '@ghar/db/queries'
 import type { SessionContext } from '@ghar/db/queries'
@@ -166,7 +168,10 @@ export async function countSharedTrips(session: SessionContext): Promise<number>
 }
 
 export async function getSharedTrip(session: SessionContext, tripId: string): Promise<SharedTripDetail> {
-  const { calendarFeedSealed, itinerary, ...trip } = await queries.getSharedTrip(session, getDb(), tripId)
+  return toSharedTripDetail(await queries.getSharedTrip(session, getDb(), tripId))
+}
+
+function toSharedTripDetail({ calendarFeedSealed, itinerary, ...trip }: queries.SharedTripDetail): SharedTripDetail {
   return {
     ...trip,
     itinerary: itinerary.map(day => ({
@@ -179,6 +184,27 @@ export async function getSharedTrip(session: SessionContext, tripId: string): Pr
     })),
     calendarFeed: calendarFeedSealed === null ? null : feedUrls(openSecret(calendarFeedSealed)),
   }
+}
+
+// Weighing in on what's still being decided. Each answers with the whole trip, so the page and a
+// phone redraw from one response.
+
+export async function voteOnSharedOption(
+  session: SessionContext,
+  input: { tripId: string; optionId: string; vote: OptionVote | null }
+): Promise<SharedTripDetail> {
+  return toSharedTripDetail(await queries.voteOnSharedOption(session, getDb(), input))
+}
+
+export async function suggestSharedOption(
+  session: SessionContext,
+  input: { tripId: string; slotId: string; suggestion: SuggestSharedOptionBody }
+): Promise<SharedTripDetail> {
+  return toSharedTripDetail(await queries.suggestSharedOption(session, getDb(), input))
+}
+
+export async function deleteSharedOption(session: SessionContext, input: { tripId: string; optionId: string }): Promise<SharedTripDetail> {
+  return toSharedTripDetail(await queries.deleteSharedOption(session, getDb(), input))
 }
 
 /** Where a calendar app reads a guest's feed. The token is the only key, so it's never logged. */

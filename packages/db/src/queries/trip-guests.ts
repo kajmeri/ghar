@@ -14,12 +14,14 @@ import {
   tripPeople,
   type GuestDay,
   type GuestResponse,
+  type GuestVoting,
   type GuestSource,
   type GuestStatus,
   type Headcount,
   type TripPerson,
 } from '@ghar/core/trip-guests'
-import { and, asc, count, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm'
+import { SORT_ORDER_STEP, type OptionVote } from '@ghar/core/itinerary'
+import { and, asc, count, desc, eq, inArray, isNotNull, max, ne, sql } from 'drizzle-orm'
 import { authUsers } from 'drizzle-orm/supabase'
 import {
   householdMembers,
@@ -27,6 +29,7 @@ import {
   households,
   itineraryOptions,
   itinerarySlots,
+  optionVotes,
   profiles,
   tripGuestCalendarFeeds,
   tripGuests,
@@ -680,7 +683,7 @@ export interface SharedTripDetail extends SharedTripBasics {
   timeZone: string
   /** Everyone coming or thinking about it, first names only. */
   people: TripPerson[]
-  /** The plan, decided parts and what's still being decided. Never costs, notes or votes. */
+  /** The plan, decided parts and what's still being decided. Never costs, notes, or who voted how. */
   itinerary: GuestDay[]
   /** Sealed; the web app opens it into the feed's URL. Null until the guest asks for one. */
   calendarFeedSealed: string | null
@@ -694,7 +697,7 @@ export async function getSharedTrip(ctx: SessionContext, db: Db, tripId: string)
     requireBasics(db, tripId),
     whoIsGoing(db, tripId),
     loadPeople(db, tripId, ctx.userId),
-    loadGuestItinerary(db, tripId),
+    loadGuestItinerary(db, tripId, ctx.userId),
     hostTimeZone(db, tripId),
     db
       .select({ tokenSealed: tripGuestCalendarFeeds.tokenSealed })
@@ -756,8 +759,12 @@ async function loadPeople(db: Db, tripId: string, viewerUserId: string): Promise
   return tripPeople({ travellers, guests, viewerUserId })
 }
 
-/** Only the columns a guest may see: no costs, notes, confirmation codes, booking links or votes. */
-async function loadGuestItinerary(db: Db, tripId: string): Promise<GuestDay[]> {
+/**
+ * Only the columns a guest may see: no costs, notes, confirmation codes or booking links. With a
+ * viewer, what's still being decided comes with how the votes stand, the viewer's own, and the
+ * first names of whoever suggested what; a calendar feed has no viewer and needs none of it.
+ */
+async function loadGuestItinerary(db: Db, tripId: string, viewerUserId: string | null = null): Promise<GuestDay[]> {
   const [slots, options] = await Promise.all([
     db
       .select({
@@ -771,6 +778,7 @@ async function loadGuestItinerary(db: Db, tripId: string): Promise<GuestDay[]> {
         status: itinerarySlots.status,
         chosenOptionId: itinerarySlots.chosenOptionId,
         sortOrder: itinerarySlots.sortOrder,
+        decideBy: itinerarySlots.decideBy,
       })
       .from(itinerarySlots)
       .where(eq(itinerarySlots.tripId, tripId)),
@@ -783,12 +791,165 @@ async function loadGuestItinerary(db: Db, tripId: string): Promise<GuestDay[]> {
         address: itineraryOptions.address,
         url: itineraryOptions.url,
         status: itineraryOptions.status,
+        sortOrder: itineraryOptions.sortOrder,
+        createdByUserId: itineraryOptions.createdByUserId,
       })
       .from(itineraryOptions)
       .innerJoin(itinerarySlots, eq(itinerarySlots.id, itineraryOptions.slotId))
       .where(eq(itinerarySlots.tripId, tripId)),
   ])
-  return guestItinerary(slots, options)
+  return guestItinerary(slots, options, viewerUserId === null ? null : await loadGuestVoting(db, tripId, viewerUserId))
+}
+
+/**
+ * Votes on the trip's open slots, and the names of the guests who suggested options. A name only
+ * shows for a guest's suggestion: the household's own options are simply the plan.
+ */
+async function loadGuestVoting(db: Db, tripId: string, viewerUserId: string): Promise<GuestVoting> {
+  const [votes, suggesters] = await Promise.all([
+    db
+      .select({ optionId: optionVotes.optionId, userId: optionVotes.userId, vote: optionVotes.vote })
+      .from(optionVotes)
+      .innerJoin(itineraryOptions, eq(itineraryOptions.id, optionVotes.optionId))
+      .innerJoin(itinerarySlots, eq(itinerarySlots.id, itineraryOptions.slotId))
+      .where(and(eq(itinerarySlots.tripId, tripId), eq(itinerarySlots.status, 'open'))),
+    db
+      .select({ userId: tripGuests.userId, name: profiles.fullName })
+      .from(tripGuests)
+      .innerJoin(profiles, eq(profiles.id, tripGuests.userId))
+      .where(eq(tripGuests.tripId, tripId)),
+  ])
+  const names = new Map<string, string | null>()
+  for (const guest of suggesters) if (guest.userId) names.set(guest.userId, guest.name)
+  return { votes, viewerUserId, names }
+}
+
+// Deciding together, from the guest's side ----------------------------------------------------
+
+const NOT_DECIDING = 'That’s been decided already.'
+const CHOICE_NOT_FOUND = 'That option is no longer in the running.'
+
+/**
+ * A slot the guest can see being decided, locked for the transaction: open, with at least one
+ * option still in the running. Empty slots stay the household's own business.
+ */
+async function lockDecidingSlot(tx: Db, tripId: string, slotId: string): Promise<void> {
+  const [slot] = await tx
+    .select({ status: itinerarySlots.status, kind: itinerarySlots.kind })
+    .from(itinerarySlots)
+    .where(and(eq(itinerarySlots.id, slotId), eq(itinerarySlots.tripId, tripId)))
+    .limit(1)
+    .for('update')
+  if (!slot || slot.kind === 'note') throw new NotFoundError(CHOICE_NOT_FOUND)
+  if (slot.status !== 'open') throw new ConflictError(NOT_DECIDING)
+  const [candidate] = await tx
+    .select({ id: itineraryOptions.id })
+    .from(itineraryOptions)
+    .where(and(eq(itineraryOptions.slotId, slotId), eq(itineraryOptions.status, 'candidate')))
+    .limit(1)
+  if (!candidate) throw new NotFoundError(CHOICE_NOT_FOUND)
+}
+
+/** An option still in the running on the trip, with its slot locked. */
+async function lockCandidate(tx: Db, tripId: string, optionId: string): Promise<{ id: string; createdByUserId: string | null }> {
+  const [option] = await tx
+    .select({
+      id: itineraryOptions.id,
+      slotId: itineraryOptions.slotId,
+      status: itineraryOptions.status,
+      createdByUserId: itineraryOptions.createdByUserId,
+    })
+    .from(itineraryOptions)
+    .innerJoin(itinerarySlots, eq(itinerarySlots.id, itineraryOptions.slotId))
+    .where(and(eq(itineraryOptions.id, optionId), eq(itinerarySlots.tripId, tripId)))
+    .limit(1)
+  if (!option || option.status === 'rejected') throw new NotFoundError(CHOICE_NOT_FOUND)
+  await lockDecidingSlot(tx, tripId, option.slotId)
+  if (option.status !== 'candidate') throw new ConflictError(NOT_DECIDING)
+  return option
+}
+
+/** A guest's vote on something still being decided. Voting again replaces it; null takes it back. */
+export async function voteOnSharedOption(
+  ctx: SessionContext,
+  db: Db,
+  input: { tripId: string; optionId: string; vote: OptionVote | null }
+): Promise<SharedTripDetail> {
+  await requireGuestAccess(ctx, db, input.tripId)
+  await db.transaction(async tx => {
+    const option = await lockCandidate(tx, input.tripId, input.optionId)
+    if (input.vote === null) {
+      await tx.delete(optionVotes).where(and(eq(optionVotes.optionId, option.id), eq(optionVotes.userId, ctx.userId)))
+    } else {
+      await tx
+        .insert(optionVotes)
+        .values({ optionId: option.id, userId: ctx.userId, vote: input.vote })
+        .onConflictDoUpdate({ target: [optionVotes.optionId, optionVotes.userId], set: { vote: input.vote, updatedAt: sql`now()` } })
+    }
+  })
+  return getSharedTrip(ctx, db, input.tripId)
+}
+
+export interface SharedSuggestion {
+  title: string
+  subtitle: string | null
+  address: string | null
+  url: string | null
+}
+
+/**
+ * A guest's idea for something still being decided. It joins the running like any other option,
+ * at the end, and the household chooses as usual.
+ */
+export async function suggestSharedOption(
+  ctx: SessionContext,
+  db: Db,
+  input: { tripId: string; slotId: string; suggestion: SharedSuggestion }
+): Promise<SharedTripDetail> {
+  await requireGuestAccess(ctx, db, input.tripId)
+  await db.transaction(async tx => {
+    await lockDecidingSlot(tx, input.tripId, input.slotId)
+    const [last] = await tx
+      .select({ value: max(itineraryOptions.sortOrder) })
+      .from(itineraryOptions)
+      .where(eq(itineraryOptions.slotId, input.slotId))
+    const [option] = await tx
+      .insert(itineraryOptions)
+      .values({
+        slotId: input.slotId,
+        ...input.suggestion,
+        source: 'manual',
+        status: 'candidate',
+        sortOrder: (last?.value ?? 0) + SORT_ORDER_STEP,
+        createdByUserId: ctx.userId,
+      })
+      .returning({ id: itineraryOptions.id })
+    if (!option) throw new Error('Suggestion insert returned no row')
+    const [trip] = await tx.select({ householdId: trips.householdId }).from(trips).where(eq(trips.id, input.tripId)).limit(1)
+    if (!trip) throw new NotFoundError(NOT_ON_TRIP)
+    await recordAudit({ userId: ctx.userId, householdId: trip.householdId }, tx, {
+      action: 'itinerary_option.suggested',
+      entity: 'itinerary_option',
+      entityId: option.id,
+      metadata: { tripId: input.tripId, slotId: input.slotId },
+    })
+  })
+  return getSharedTrip(ctx, db, input.tripId)
+}
+
+/** Takes back the guest's own suggestion, while it's still in the running. */
+export async function deleteSharedOption(
+  ctx: SessionContext,
+  db: Db,
+  input: { tripId: string; optionId: string }
+): Promise<SharedTripDetail> {
+  await requireGuestAccess(ctx, db, input.tripId)
+  await db.transaction(async tx => {
+    const option = await lockCandidate(tx, input.tripId, input.optionId)
+    if (option.createdByUserId !== ctx.userId) throw new ForbiddenError('You can only take back what you suggested.')
+    await tx.delete(itineraryOptions).where(eq(itineraryOptions.id, option.id))
+  })
+  return getSharedTrip(ctx, db, input.tripId)
 }
 
 // A guest's calendar feed ----------------------------------------------------------------------

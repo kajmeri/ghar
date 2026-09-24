@@ -1,6 +1,14 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
-import { calendarDateSchema, instantSchema, slotBandSchema, slotKindSchema } from './shared'
+import {
+  calendarDateSchema,
+  httpUrlSchema,
+  instantSchema,
+  optionVoteSchema,
+  shortTextSchema,
+  slotBandSchema,
+  slotKindSchema,
+} from './shared'
 
 // People from outside the household on a trip. The household's side lives under the trip; the
 // guest's side is under /trip-invites (answering) and /shared-trips (what they were let onto),
@@ -244,7 +252,28 @@ export const listSharedTrips = defineEndpoint({
   response: z.object({ trips: z.array(sharedTripSchema) }),
 })
 
-/** A slot of the plan as a guest sees it. Never a cost, a note, a vote or a confirmation code. */
+/**
+ * One thing a slot still being decided could be. Guests see how the votes stand and their own,
+ * never who voted how, and never a cost or a note.
+ */
+export const sharedChoiceSchema = z.object({
+  id: z.uuid(),
+  title: z.string(),
+  subtitle: z.string().nullable(),
+  address: z.string().nullable(),
+  url: z.string().nullable(),
+  /** The first name of a guest who suggested it. Null for the household's own, or no name given. */
+  addedBy: z.string().nullable(),
+  /** The caller suggested it, so they can take it back while it's still in the running. */
+  mine: z.boolean(),
+  yes: z.int(),
+  maybe: z.int(),
+  no: z.int(),
+  myVote: optionVoteSchema.nullable(),
+})
+export type SharedChoice = z.infer<typeof sharedChoiceSchema>
+
+/** A slot of the plan as a guest sees it. Never a cost, a note, who voted how, or a confirmation code. */
 export const sharedSlotSchema = z.object({
   id: z.uuid(),
   day: calendarDateSchema,
@@ -260,6 +289,10 @@ export const sharedSlotSchema = z.object({
   subtitle: z.string().nullable(),
   address: z.string().nullable(),
   url: z.string().nullable(),
+  /** When the household means to decide. Only while deciding. */
+  decideBy: calendarDateSchema.nullable(),
+  /** What's in the running, while deciding. Empty once decided. */
+  choices: z.array(sharedChoiceSchema),
 })
 export type SharedSlot = z.infer<typeof sharedSlotSchema>
 
@@ -330,4 +363,47 @@ export const deleteTripCalendarFeed = defineEndpoint({
   path: '/api/v1/shared-trips/:tripId/calendar-feed',
   params: tripParams,
   response: z.object({ tripId: z.uuid() }),
+})
+
+// Deciding together, from the guest's side. Each answers with the whole trip, so a client redraws
+// from one response.
+
+const sharedTripResponse = z.object({ trip: sharedTripDetailSchema })
+const sharedOptionParams = tripParams.extend({ optionId: z.uuid() })
+
+/** A null vote takes yours back. */
+export const sharedVoteBodySchema = z.object({ vote: optionVoteSchema.nullable() })
+
+/** 409 once the slot is decided, or the option is out of the running. */
+export const voteOnSharedOption = defineEndpoint({
+  method: 'PUT',
+  path: '/api/v1/shared-trips/:tripId/options/:optionId/vote',
+  params: sharedOptionParams,
+  body: sharedVoteBodySchema,
+  response: sharedTripResponse,
+})
+
+export const suggestSharedOptionBodySchema = z.object({
+  title: shortTextSchema,
+  subtitle: shortTextSchema.nullable().default(null),
+  address: shortTextSchema.nullable().default(null),
+  url: httpUrlSchema.nullable().default(null),
+})
+export type SuggestSharedOptionBody = z.infer<typeof suggestSharedOptionBodySchema>
+
+/** A guest's idea for a slot still being decided. 409 once it's decided. */
+export const suggestSharedOption = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/shared-trips/:tripId/slots/:slotId/options',
+  params: tripParams.extend({ slotId: z.uuid() }),
+  body: suggestSharedOptionBodySchema,
+  response: sharedTripResponse,
+})
+
+/** Takes back the caller's own suggestion, while the slot is still being decided. */
+export const deleteSharedOption = defineEndpoint({
+  method: 'DELETE',
+  path: '/api/v1/shared-trips/:tripId/options/:optionId',
+  params: sharedOptionParams,
+  response: sharedTripResponse,
 })

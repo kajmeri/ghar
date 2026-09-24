@@ -1,5 +1,6 @@
 import { HOUSEHOLD_ROLES } from '@ghar/core/auth'
 import { GUEST_RESPONSES, GUEST_SOURCES, MAX_PARTY_SIZE } from '@ghar/core/trip-guests'
+import { POLL_KINDS, POLL_PLACE_MAX_LENGTH } from '@ghar/core/trip-polls'
 import { BANK_ENVIRONMENTS, BANK_ITEM_STATUSES } from '@ghar/core/banking'
 import { BILL_CADENCES, BILL_NAME_MAX_LENGTH, BILL_NOTES_MAX_LENGTH, BILL_PAYEE_MAX_LENGTH, MAX_BILL_CENTS } from '@ghar/core/bills'
 import {
@@ -161,6 +162,7 @@ export const itineraryOptionStatus = pgEnum('itinerary_option_status', OPTION_ST
 export const itineraryCostBasis = pgEnum('itinerary_cost_basis', COST_BASES)
 export const itineraryOptionSource = pgEnum('itinerary_option_source', OPTION_SOURCES)
 export const optionVoteValue = pgEnum('option_vote', OPTION_VOTES)
+export const tripPollKind = pgEnum('trip_poll_kind', POLL_KINDS)
 export const documentKind = pgEnum('document_kind', DOCUMENT_KINDS)
 export const assetKind = pgEnum('asset_kind', ASSET_KINDS)
 export const billCadence = pgEnum('bill_cadence', BILL_CADENCES)
@@ -1260,6 +1262,113 @@ export const optionVotes = pgTable(
     updatedAt: timestamptz().notNull().defaultNow(),
   },
   table => [primaryKey({ columns: [table.optionId, table.userId] }), index('option_votes_user_idx').on(table.userId)]
+).enableRLS()
+
+/**
+ * Deciding a trip together before it has dates or a place: "When works?" or "Where to?". One of
+ * each at most. Everyone on the trip, household and guests, adds options and votes; the household
+ * picks, which sets the trip's dates or destination and deletes the poll.
+ */
+export const tripPolls = pgTable(
+  'trip_polls',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tripId: uuid()
+      .notNull()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    kind: tripPollKind().notNull(),
+    /** When the household means to pick, in its own zone. Everyone who hasn't voted is nudged near it. */
+    decideBy: date({ mode: 'string' }),
+    createdByUserId: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('trip_polls_trip_kind_unique').on(table.tripId, table.kind),
+    index('trip_polls_created_by_idx')
+      .on(table.createdByUserId)
+      .where(sql`${table.createdByUserId} is not null`),
+  ]
+).enableRLS()
+
+/** A date range on a dates poll, or a place on a place poll. The data access layer matches it to the kind. */
+export const tripPollOptions = pgTable(
+  'trip_poll_options',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    pollId: uuid()
+      .notNull()
+      .references(() => tripPolls.id, { onDelete: 'cascade' }),
+    startsOn: date({ mode: 'string' }),
+    endsOn: date({ mode: 'string' }),
+    label: text(),
+    /** A guest can take back what they added; the household can take back anything. */
+    createdByUserId: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    sortOrder: integer().notNull().default(0),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('trip_poll_options_poll_idx').on(table.pollId, table.sortOrder),
+    index('trip_poll_options_created_by_idx')
+      .on(table.createdByUserId)
+      .where(sql`${table.createdByUserId} is not null`),
+    // Dates or a place, never both or neither.
+    check(
+      'trip_poll_options_shape',
+      sql`case when ${table.label} is null
+        then ${table.startsOn} is not null and ${table.endsOn} is not null and ${table.endsOn} >= ${table.startsOn}
+        else ${table.startsOn} is null and ${table.endsOn} is null end`
+    ),
+    check('trip_poll_options_label_length', sql`char_length(${table.label}) between 1 and ${sql.raw(String(POLL_PLACE_MAX_LENGTH))}`),
+  ]
+).enableRLS()
+
+/** One vote per person per option, household or guest. Voting again replaces it. */
+export const tripPollVotes = pgTable(
+  'trip_poll_votes',
+  {
+    optionId: uuid()
+      .notNull()
+      .references(() => tripPollOptions.id, { onDelete: 'cascade' }),
+    userId: uuid()
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    vote: optionVoteValue().notNull(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [primaryKey({ columns: [table.optionId, table.userId] }), index('trip_poll_votes_user_idx').on(table.userId)]
+).enableRLS()
+
+/**
+ * A reminder to vote that went out: one per person, per slot or poll, per deadline, so moving the
+ * deadline earns one more. The row is claimed before sending, like expiry_reminders.
+ *
+ * No RLS policy: only the cron job reads it.
+ */
+export const decisionNudges = pgTable(
+  'decision_nudges',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: uuid()
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    slotId: uuid().references(() => itinerarySlots.id, { onDelete: 'cascade' }),
+    pollId: uuid().references(() => tripPolls.id, { onDelete: 'cascade' }),
+    deadline: date({ mode: 'string' }).notNull(),
+    sentAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('decision_nudges_user_idx').on(table.userId),
+    uniqueIndex('decision_nudges_slot_unique')
+      .on(table.slotId, table.userId, table.deadline)
+      .where(sql`${table.slotId} is not null`),
+    uniqueIndex('decision_nudges_poll_unique')
+      .on(table.pollId, table.userId, table.deadline)
+      .where(sql`${table.pollId} is not null`),
+    check('decision_nudges_one_subject', sql`num_nonnulls(${table.slotId}, ${table.pollId}) = 1`),
+  ]
 ).enableRLS()
 
 /** Days where someone said no to the breakfast-lunch-dinner skeleton, so it stops being offered. */
