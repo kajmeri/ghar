@@ -29,3 +29,14 @@ export interface SystemContext {
 }
 
 export type Actor = RequestContext | SystemContext
+
+/**
+ * A guest acting on a trip another household owns: answering its invitation. Only audit rows take
+ * one, filed under the trip's household with the guest as the actor. It has no role, because a
+ * guest is not a member.
+ */
+export interface GuestActor {
+  readonly householdId: string
+  readonly userId: string
+  readonly role?: never
+}

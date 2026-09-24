@@ -87,7 +87,12 @@ export function BookingForm({
   const bookingCurrency = initial?.currency ?? currency
 
   return (
-    <form ref={formRef} action={formAction} noValidate className='flex flex-col gap-6 rounded-card border border-line bg-surface p-4 md:p-6'>
+    <form
+      ref={formRef}
+      action={formAction}
+      noValidate
+      className='flex flex-col gap-6 rounded-card border border-line bg-surface p-4 md:p-6'
+    >
       {draft ? <input type='hidden' name='draftId' value={draft.id} /> : null}
       {booking && !draft ? <input type='hidden' name='bookingId' value={booking.id} /> : null}
       <input type='hidden' name='currency' value={bookingCurrency} />

@@ -106,7 +106,10 @@ export function WeekGrid({ className }: { className?: string }) {
       >
         <div />
         {visible.map(day => (
-          <div key={day} className={cn('border-l border-line px-2 py-2 text-sm', day === today ? 'font-medium text-ink' : 'text-ink-muted')}>
+          <div
+            key={day}
+            className={cn('border-l border-line px-2 py-2 text-sm', day === today ? 'font-medium text-ink' : 'text-ink-muted')}
+          >
             {formatCalendarDate(day, 'EEE d')}
           </div>
         ))}
@@ -212,7 +215,11 @@ function SlotChip({
   const chosen = chosenOptionOf(slot)
   const count = partitionOptions(slot.options).active.length
   const text =
-    shape === 'decided' && chosen ? chosen.title : shape === 'debating' ? `${slot.label} · ${count} ${count === 1 ? 'option' : 'options'}` : slot.label
+    shape === 'decided' && chosen
+      ? chosen.title
+      : shape === 'debating'
+        ? `${slot.label} · ${count} ${count === 1 ? 'option' : 'options'}`
+        : slot.label
 
   return (
     <button

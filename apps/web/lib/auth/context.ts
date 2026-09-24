@@ -1,7 +1,7 @@
 import 'server-only'
 import type { RequestContext } from '@ghar/contracts'
 import { NotFoundError, UnauthorizedError } from '@ghar/core/errors'
-import { findMembership, type SessionContext } from '@ghar/db/queries'
+import { countSharedTrips, findMembership, type SessionContext } from '@ghar/db/queries'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { cache } from 'react'
@@ -41,6 +41,17 @@ export async function requireSession(): Promise<WebSession> {
   return session
 }
 
+/**
+ * For the guest's side of a shared trip, which needs someone signed in but no household. A bearer
+ * token still has to match whatever household the person is in now, as everywhere else.
+ */
+export async function requireAccountSession(): Promise<WebSession> {
+  const session = await requireSession()
+  const membership = await getMembership(session)
+  if (outsideTokenScope(session, membership?.householdId ?? null)) throw new UnauthorizedError(TOKEN_SCOPE_CHANGED)
+  return session
+}
+
 /** The signed-in person's household and role, or null before onboarding. Cached for the request. */
 export const getMembership = cache((session: SessionContext) => findMembership(session, getDb()))
 
@@ -66,13 +77,16 @@ export async function getRequestContext(): Promise<RequestContext> {
   return { userId: session.userId, householdId: membership.householdId, role: membership.role }
 }
 
-/** For layouts and pages: the same context, redirecting to sign-in or onboarding instead of throwing. */
+/** For layouts and pages: the same context, redirecting to sign-in, trips shared with them, or onboarding instead of throwing. */
 export async function getPageContext(): Promise<{ ctx: RequestContext; session: WebSession }> {
   const session = await getSessionContext()
   if (!session) redirect('/login')
   const membership = await getMembership(session)
   if (outsideTokenScope(session, membership?.householdId ?? null)) redirect('/login')
-  if (!membership) redirect('/onboarding')
+  if (!membership) {
+    // Someone who came for another household's trip has somewhere to be before they have a home.
+    redirect((await countSharedTrips(session, getDb())) > 0 ? '/shared' : '/onboarding')
+  }
   return {
     session,
     ctx: { userId: session.userId, householdId: membership.householdId, role: membership.role },

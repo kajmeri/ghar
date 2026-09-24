@@ -25,13 +25,7 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
 export function CostFields({ idPrefix, option, kind }: { idPrefix: string; option?: ItineraryOption; kind: SlotKind }) {
   return (
     <div className='grid grid-cols-[minmax(0,1fr)_8rem] items-start gap-3'>
-      <MoneyInput
-        id={`${idPrefix}-cost`}
-        name='costCents'
-        label='Cost'
-        hint='Optional'
-        defaultValue={option?.costCents ?? undefined}
-      />
+      <MoneyInput id={`${idPrefix}-cost`} name='costCents' label='Cost' hint='Optional' defaultValue={option?.costCents ?? undefined} />
       <Field label='Priced'>
         <Select name='costBasis' defaultValue={option?.costBasis ?? defaultCostBasis(kind)}>
           {COST_BASES.map(basis => (
@@ -92,7 +86,12 @@ export function OptionFields({ option }: { option?: ItineraryOption }) {
         </div>
       </fieldset>
       <label className='flex min-h-tap items-center gap-3 self-start text-base md:col-span-2'>
-        <input type='checkbox' name='bookingRequired' defaultChecked={option?.bookingRequired ?? false} className='size-5 shrink-0 accent-ink' />
+        <input
+          type='checkbox'
+          name='bookingRequired'
+          defaultChecked={option?.bookingRequired ?? false}
+          className='size-5 shrink-0 accent-ink'
+        />
         Needs a reservation
       </label>
       <Field label='Reserve by'>

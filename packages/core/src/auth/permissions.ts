@@ -43,6 +43,8 @@ export const PERMISSIONS = {
   'calendar.manage': CONTRIBUTORS,
   'travel.view': EVERYONE,
   'travel.manage': CONTRIBUTORS,
+  /** Asking people from outside the household onto a trip, and letting them in or out. */
+  'travel.invite': OWNERS_AND_ADULTS,
   'documents.view': EVERYONE,
   'documents.manage': CONTRIBUTORS,
   /**

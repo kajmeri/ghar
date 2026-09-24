@@ -56,9 +56,7 @@ export function ItineraryToolbar({ layout, unlistedBookingCount }: { layout: Iti
               generate.mutate()
             }}
           >
-            {generate.pending
-              ? 'Adding…'
-              : `Add ${unlistedBookingCount} booking${unlistedBookingCount === 1 ? '' : 's'} to the days`}
+            {generate.pending ? 'Adding…' : `Add ${unlistedBookingCount} booking${unlistedBookingCount === 1 ? '' : 's'} to the days`}
           </Button>
         ) : null}
 
@@ -87,7 +85,11 @@ function LayoutLink({ href, active, className, children }: { href: string; activ
       href={href}
       scroll={false}
       aria-current={active ? 'page' : undefined}
-      className={cn('flex h-tap items-center px-3 text-sm focus-visible:-outline-offset-2', active ? 'bg-paper font-medium text-ink' : 'text-ink-muted hover:bg-paper', className)}
+      className={cn(
+        'flex h-tap items-center px-3 text-sm focus-visible:-outline-offset-2',
+        active ? 'bg-paper font-medium text-ink' : 'text-ink-muted hover:bg-paper',
+        className
+      )}
     >
       {children}
     </Link>

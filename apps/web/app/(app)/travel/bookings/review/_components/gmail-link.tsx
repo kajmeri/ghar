@@ -50,8 +50,7 @@ export function GmailLink({ link, timeZone }: { link: MailLink | null; timeZone:
         </>
       ) : (
         <p className={`${CARD} text-ink-muted`}>
-          Not linked. Link your Gmail and the bookings in your last {String(MAIL_FIRST_LOOKBACK_DAYS)} days of mail show up here to
-          check.
+          Not linked. Link your Gmail and the bookings in your last {String(MAIL_FIRST_LOOKBACK_DAYS)} days of mail show up here to check.
         </p>
       )}
     </section>
@@ -63,8 +62,7 @@ function LinkStatus({ link, timeZone }: { link: MailLink; timeZone: string }) {
     link.lastCheckedAt === null
       ? 'Not checked yet'
       : `Checked ${formatInstant(new Date(link.lastCheckedAt), timeZone, { dateStyle: 'medium', timeStyle: 'short' })}`
-  const problem =
-    link.status === 'needs_reconnect' ? 'Google stopped accepting this link. Reconnect to keep checking.' : link.lastError
+  const problem = link.status === 'needs_reconnect' ? 'Google stopped accepting this link. Reconnect to keep checking.' : link.lastError
   if (problem === null) return <p className='text-sm text-ink-muted'>{checked}</p>
   return (
     <p className='flex items-start gap-1.5 text-sm text-ink'>

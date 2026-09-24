@@ -96,10 +96,7 @@ export function AddOptionSheet({ slot }: { slot: ItinerarySlot }) {
     >
       <div className='flex flex-col gap-6'>
         <form id={formId} onSubmit={onSubmit} className='flex flex-col gap-4'>
-          <Field
-            label='Paste a link or type a name'
-            hint={isLikelyUrl(text) ? 'The name and picture come from the page.' : undefined}
-          >
+          <Field label='Paste a link or type a name' hint={isLikelyUrl(text) ? 'The name and picture come from the page.' : undefined}>
             <Input
               name='title'
               required

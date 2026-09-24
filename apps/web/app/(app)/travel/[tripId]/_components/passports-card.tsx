@@ -67,7 +67,10 @@ export function PassportsCard({
                     Open<span className='sr-only'> {nameOf(issue.personId)}’s passport</span>
                   </Link>
                 ) : (
-                  <Link href='/documents' className='flex min-h-tap shrink-0 items-center text-sm underline underline-offset-4 hover:text-ink-muted'>
+                  <Link
+                    href='/documents'
+                    className='flex min-h-tap shrink-0 items-center text-sm underline underline-offset-4 hover:text-ink-muted'
+                  >
                     Add it<span className='sr-only'> to documents</span>
                   </Link>
                 )}

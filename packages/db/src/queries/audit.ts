@@ -1,5 +1,5 @@
 import { auditLog } from '../schema'
-import type { Actor, Db } from './types'
+import type { Actor, Db, GuestActor } from './types'
 
 export interface AuditEntry {
   /** Dotted verb, such as `member.role_changed`. */
@@ -10,7 +10,7 @@ export interface AuditEntry {
 }
 
 /** Records who did what. Call with the transaction that made the change. */
-export async function recordAudit(ctx: Actor, db: Db, entry: AuditEntry): Promise<void> {
+export async function recordAudit(ctx: Actor | GuestActor, db: Db, entry: AuditEntry): Promise<void> {
   await db.insert(auditLog).values({
     householdId: ctx.householdId,
     actorUserId: ctx.userId,

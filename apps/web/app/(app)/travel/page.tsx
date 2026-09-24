@@ -1,7 +1,11 @@
 import { formatCountdown, nextTrip, settleTripStatus } from '@ghar/core/trips'
 import Link from 'next/link'
+import { GUEST_STATUS_LABELS, GUEST_STATUS_TONES, tripWhen } from '@/app/_components/shared-trip'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Pill } from '@/components/ui/pill'
 import { getPageSession } from '@/lib/api/authed'
+import { requireAccountSession } from '@/lib/auth/context'
+import { listSharedTrips } from '@/lib/travel/guests'
 import { loadTravelHub } from '@/lib/travel/trips'
 import { IdeaBoard } from './_components/idea-board'
 import { NextTripCountdown } from './_components/next-trip-countdown'
@@ -17,7 +21,7 @@ export const metadata = { title: 'Travel' }
  */
 export default async function TravelPage() {
   const session = await getPageSession()
-  const hub = await loadTravelHub(session)
+  const [hub, shared] = await Promise.all([loadTravelHub(session), requireAccountSession().then(listSharedTrips)])
   const soonest = nextTrip(hub.trips, hub.today)
 
   return (
@@ -61,6 +65,38 @@ export default async function TravelPage() {
           </ul>
         )}
       </section>
+
+      {shared.length > 0 ? (
+        <section aria-labelledby='shared-heading' className='flex flex-col gap-3'>
+          <div className='flex items-baseline justify-between gap-3'>
+            <h2 id='shared-heading' className='text-lg font-semibold'>
+              Shared with you
+            </h2>
+            <Link href='/shared' className='text-sm text-ink-muted underline underline-offset-4'>
+              See all
+            </Link>
+          </div>
+          <ul className='grid gap-3 md:grid-cols-2'>
+            {shared.map(trip => (
+              <li key={trip.id}>
+                <Link
+                  href={`/shared/${trip.id}`}
+                  className='flex h-full flex-col gap-1 rounded-card border border-line bg-surface p-4 hover:border-ink/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden'
+                >
+                  <span className='flex items-start justify-between gap-3'>
+                    <span className='font-semibold'>{trip.name}</span>
+                    <Pill tone={GUEST_STATUS_TONES[trip.mine.status]}>{GUEST_STATUS_LABELS[trip.mine.status]}</Pill>
+                  </span>
+                  <span className='text-sm text-ink-muted tabular-nums'>
+                    {[trip.destination, tripWhen(trip)].filter(Boolean).join(' · ')}
+                  </span>
+                  <span className='text-sm text-ink-muted'>With {trip.householdName}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <UnfiledBookings bookings={hub.unlinkedBookings} trips={hub.trips} timeZone={hub.timeZone} />
 

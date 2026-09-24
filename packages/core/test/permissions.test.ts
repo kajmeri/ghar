@@ -32,6 +32,7 @@ const APPROVED = {
   'calendar.manage': 'oam',
   'travel.view': 'oamv',
   'travel.manage': 'oam',
+  'travel.invite': 'oa',
   'documents.view': 'oamv',
   'documents.manage': 'oam',
   'documents.viewSensitive': 'oa',

@@ -146,6 +146,6 @@ export async function updateProfile(ctx: SessionContext, db: Db, input: { fullNa
     .onConflictDoUpdate({ target: profiles.id, set: { fullName: input.fullName } })
 }
 
-async function ensureProfile(ctx: SessionContext, db: Db): Promise<void> {
+export async function ensureProfile(ctx: SessionContext, db: Db): Promise<void> {
   await db.insert(profiles).values({ id: ctx.userId }).onConflictDoNothing({ target: profiles.id })
 }

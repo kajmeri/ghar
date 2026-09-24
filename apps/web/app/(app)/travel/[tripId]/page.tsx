@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/button'
 import { Pill } from '@/components/ui/pill'
 import { getPageSession } from '@/lib/api/authed'
 import { densityCookieName, parseDensity } from '@/lib/travel/itinerary-display'
+import { listTripGuests } from '@/lib/travel/guests'
 import { loadTripBudget, loadTripDetail, loadTripIdeas } from '@/lib/travel/trips'
 import { BudgetPanel } from './_components/budget-panel'
+import { GuestsSummary } from './_components/guests-summary'
 import { ItineraryPanel } from './_components/itinerary-panel'
 import { PassportsCard } from './_components/passports-card'
 import { PackingPanel } from './_components/packing-panel'
@@ -39,13 +41,17 @@ export default async function TripPage({
   const { tab: requested, view } = await searchParams
   const tab: TripTab = TABS.find(value => value === requested) ?? 'itinerary'
 
-  const [detail, ideas, cookieStore] = await Promise.all([
+  const [detail, ideas, cookieStore, guests] = await Promise.all([
     loadTripDetail(session, tripId).catch((error: unknown) => {
       if (error instanceof NotFoundError) notFound()
       throw error
     }),
     tab === 'itinerary' ? loadTripIdeas(session) : Promise.resolve([]),
     cookies(),
+    listTripGuests(session.context, tripId).catch((error: unknown) => {
+      if (error instanceof NotFoundError) notFound()
+      throw error
+    }),
   ])
 
   const { userId, role } = session.context
@@ -83,6 +89,8 @@ export default async function TripPage({
         </div>
       </header>
 
+      <GuestsSummary tripId={trip.id} guests={guests} />
+
       {trip.international && detail.documentIssues !== null && phase !== 'past' ? (
         <PassportsCard
           issues={detail.documentIssues}
@@ -110,7 +118,9 @@ export default async function TripPage({
           tripId={trip.id}
           items={detail.packing}
           members={detail.members}
-          travellingUserIds={detail.people.flatMap(person => (person.userId !== null && trip.travellerIds.includes(person.id) ? [person.userId] : []))}
+          travellingUserIds={detail.people.flatMap(person =>
+            person.userId !== null && trip.travellerIds.includes(person.id) ? [person.userId] : []
+          )}
           currentUserId={userId}
         />
       ) : (

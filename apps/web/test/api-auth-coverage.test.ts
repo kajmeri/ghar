@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 // contract. Read from source, so a new route that forgets both fails here instead of in production.
 //
 // A method counts as authenticated when it is built with authedRoute, or when it is built with
-// route and calls getRequestContext or requireSession imported from lib/auth/context or
+// route and calls getRequestContext, requireSession or requireAccountSession imported from lib/auth/context or
 // lib/api/authed (the routes that work before onboarding, or need the raw session, do that).
 
 const WEB_ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -62,7 +62,7 @@ export function exportedMethods(source: string): { method: string; body: string 
 export function isAuthenticated(body: string, source: string): boolean {
   if (/\bauthedRoute\s*\(/.test(body)) return true
   const importsSession = /from\s+['"]@\/lib\/(?:auth\/context|api\/authed)['"]/.test(source)
-  return importsSession && /\b(?:getRequestContext|requireSession)\s*\(/.test(body)
+  return importsSession && /\b(?:getRequestContext|requireSession|requireAccountSession)\s*\(/.test(body)
 }
 
 function isEndpoint(value: unknown): value is EndpointDefinition {

@@ -65,9 +65,7 @@ function checkMessage(result: MailCheckResult): string {
       return 'The check didn’t finish. Try again in a few minutes.'
     case 'checked': {
       const found =
-        result.drafts === 0
-          ? 'No new bookings found.'
-          : `Found ${String(result.drafts)} booking${result.drafts === 1 ? '' : 's'} to check.`
+        result.drafts === 0 ? 'No new bookings found.' : `Found ${String(result.drafts)} booking${result.drafts === 1 ? '' : 's'} to check.`
       if (result.complete) return found
       return result.failed > 0
         ? `${found} Some emails couldn’t be read. They’re tried again on the next check.`

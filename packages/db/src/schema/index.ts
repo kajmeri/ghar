@@ -1,4 +1,5 @@
 import { HOUSEHOLD_ROLES } from '@ghar/core/auth'
+import { GUEST_RESPONSES, GUEST_SOURCES, MAX_PARTY_SIZE } from '@ghar/core/trip-guests'
 import { BANK_ENVIRONMENTS, BANK_ITEM_STATUSES } from '@ghar/core/banking'
 import { BILL_CADENCES, BILL_NAME_MAX_LENGTH, BILL_NOTES_MAX_LENGTH, BILL_PAYEE_MAX_LENGTH, MAX_BILL_CENTS } from '@ghar/core/bills'
 import {
@@ -151,6 +152,8 @@ export const calendarProvider = pgEnum('calendar_provider', CALENDAR_PROVIDERS)
 export const calendarLinkDirection = pgEnum('calendar_link_direction', LINK_DIRECTIONS)
 export const calendarLinkStatus = pgEnum('calendar_link_status', LINK_STATUSES)
 export const tripStatus = pgEnum('trip_status', TRIP_STATUSES)
+export const tripGuestResponse = pgEnum('trip_guest_response', GUEST_RESPONSES)
+export const tripGuestSource = pgEnum('trip_guest_source', GUEST_SOURCES)
 export const itinerarySlotBand = pgEnum('itinerary_slot_band', SLOT_BANDS)
 export const itinerarySlotKind = pgEnum('itinerary_slot_kind', SLOT_KINDS)
 export const itinerarySlotStatus = pgEnum('itinerary_slot_status', SLOT_STATUSES)
@@ -1033,6 +1036,89 @@ export const tripTravellers = pgTable(
     createdAt: timestamptz().notNull().defaultNow(),
   },
   table => [primaryKey({ columns: [table.tripId, table.personId] }), index('trip_travellers_person_idx').on(table.personId)]
+).enableRLS()
+
+/**
+ * People from outside the household on a trip. A guest is an account let onto this one trip, not
+ * a member of any household, so their access follows the account: starting or joining a household
+ * later changes nothing here. Someone invited by email has a row from the start, with no account
+ * until they answer; someone who came through the link gets a row when they answer, and waits for
+ * `approved_at` when the link asks the household to let people in.
+ */
+export const tripGuests = pgTable(
+  'trip_guests',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tripId: uuid()
+      .notNull()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    /** The address invited, or the one they signed in with through the link. Lower-cased. */
+    email: text().notNull(),
+    /** Null until an emailed invitation is answered. Deleting the account takes them off the trip. */
+    userId: uuid().references(() => profiles.id, { onDelete: 'cascade' }),
+    source: tripGuestSource().notNull(),
+    /** Null until they answer. */
+    response: tripGuestResponse(),
+    /** The guest and whoever they bring. */
+    partySize: smallint().notNull().default(1),
+    /** When they were let in. Set at once for an emailed invitation. */
+    approvedAt: timestamptz(),
+    /** SHA-256 of the token in an emailed invitation. The token itself is never stored. */
+    tokenHash: text(),
+    invitedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    respondedAt: timestamptz(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('trip_guests_trip_email_unique').on(table.tripId, table.email),
+    uniqueIndex('trip_guests_trip_user_unique')
+      .on(table.tripId, table.userId)
+      .where(sql`${table.userId} is not null`),
+    index('trip_guests_user_idx')
+      .on(table.userId)
+      .where(sql`${table.userId} is not null`),
+    index('trip_guests_invited_by_idx')
+      .on(table.invitedBy)
+      .where(sql`${table.invitedBy} is not null`),
+    unique('trip_guests_token_hash_unique').on(table.tokenHash),
+    check('trip_guests_email_lowercase', sql`${table.email} = lower(${table.email})`),
+    check('trip_guests_party_size', sql`${table.partySize} between 1 and ${sql.raw(String(MAX_PARTY_SIZE))}`),
+    // An emailed invitation carries a token; someone from the link is already signed in.
+    check(
+      'trip_guests_source_shape',
+      sql`case when ${table.source} = 'email' then ${table.tokenHash} is not null else ${table.tokenHash} is null and ${table.userId} is not null end`
+    ),
+    check('trip_guests_answered', sql`(${table.response} is null) = (${table.respondedAt} is null)`),
+  ]
+).enableRLS()
+
+/**
+ * The trip's shareable link, while it is on. The token is sealed rather than hashed so the
+ * household can copy the link again; the hash is how an incoming link is found. Turning the link
+ * off deletes the row, and making a new one replaces it, so an old link stops working.
+ */
+export const tripShareLinks = pgTable(
+  'trip_share_links',
+  {
+    tripId: uuid()
+      .primaryKey()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    tokenHash: text().notNull(),
+    /** AES-256-GCM, from apps/web/lib/crypto.ts. */
+    tokenSealed: text().notNull(),
+    /** Whether people who come through the link wait for the household to let them in. */
+    requiresApproval: boolean().notNull().default(true),
+    createdBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('trip_share_links_token_hash_unique').on(table.tokenHash),
+    index('trip_share_links_created_by_idx')
+      .on(table.createdBy)
+      .where(sql`${table.createdBy} is not null`),
+  ]
 ).enableRLS()
 
 /**

@@ -120,6 +120,13 @@
       "when": 1790191878447,
       "tag": "0016_drop_trip_members",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790264137863,
+      "tag": "0017_trip_guests",
+      "breakpoints": true
     }
   ]
 }

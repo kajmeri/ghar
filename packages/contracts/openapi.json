@@ -90,6 +90,9 @@
       "name": "travel-hub"
     },
     {
+      "name": "trip-guests"
+    },
+    {
       "name": "trips"
     }
   ],
@@ -9033,6 +9036,196 @@
         }
       }
     },
+    "/api/v1/shared-trips": {
+      "get": {
+        "operationId": "listSharedTrips",
+        "tags": [
+          "trip-guests"
+        ],
+        "description": "Trips other households let the caller onto, soonest first. Their own household's are never here.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "trips": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SharedTrip"
+                      }
+                    }
+                  },
+                  "required": [
+                    "trips"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/shared-trips/{tripId}": {
+      "get": {
+        "operationId": "getSharedTrip",
+        "tags": [
+          "trip-guests"
+        ],
+        "description": "One trip as a guest sees it. 404 for anyone not let onto it, including its own household.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "trip": {
+                      "$ref": "#/components/schemas/SharedTripDetail"
+                    }
+                  },
+                  "required": [
+                    "trip"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/shared-trips/{tripId}/answer": {
+      "put": {
+        "operationId": "updateMyTripAnswer",
+        "tags": [
+          "trip-guests"
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TripAnswerBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "answer": {
+                      "$ref": "#/components/schemas/TripAnswer"
+                    }
+                  },
+                  "required": [
+                    "answer"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/sync": {
       "get": {
         "operationId": "syncChanges",
@@ -10591,6 +10784,136 @@
         }
       }
     },
+    "/api/v1/trip-invites/preview": {
+      "post": {
+        "operationId": "previewTripInvite",
+        "tags": [
+          "trip-guests"
+        ],
+        "description": "What an invitation shows, signed in or not: the trip, dates and cover, the household's name and\nthe first names of who's going. 404 for a link that's off or an invitation that was withdrawn.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "$ref": "#/components/schemas/TripInviteToken"
+                  }
+                },
+                "required": [
+                  "token"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "invite": {
+                      "$ref": "#/components/schemas/TripInvitePreview"
+                    }
+                  },
+                  "required": [
+                    "invite"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trip-invites/respond": {
+      "post": {
+        "operationId": "respondToTripInvite",
+        "tags": [
+          "trip-guests"
+        ],
+        "description": "Answers an invitation, or changes the answer. Needs a session but no household. An emailed\ninvitation needs the address it went to (403). 409 for someone in the trip's own household.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RespondToTripInviteBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "answer": {
+                      "$ref": "#/components/schemas/TripAnswer"
+                    }
+                  },
+                  "required": [
+                    "answer"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/trips": {
       "get": {
         "operationId": "listTrips",
@@ -11304,6 +11627,303 @@
                     "trip",
                     "members",
                     "decisions"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/guests": {
+      "get": {
+        "operationId": "listTripGuests",
+        "tags": [
+          "trip-guests"
+        ],
+        "description": "Everyone asked onto the trip, people waiting to be let in first. Capped at 100 guests a trip.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripGuestsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "inviteTripGuests",
+        "tags": [
+          "trip-guests"
+        ],
+        "description": "Owners and adults. Emails each new address its own link; they're let in as soon as they answer.\nAddresses already on the list or in the household are skipped, and said so.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteTripGuestsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "invited": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TripGuest"
+                      }
+                    },
+                    "skipped": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "email": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "already_invited",
+                              "in_household"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "email",
+                          "reason"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "invited",
+                    "skipped"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/guests/{guestId}": {
+      "delete": {
+        "operationId": "removeTripGuest",
+        "tags": [
+          "trip-guests"
+        ],
+        "description": "Takes someone off the trip, or turns down someone who asked. Their emailed link stops working.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "guestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/guests/{guestId}/approve": {
+      "post": {
+        "operationId": "approveTripGuest",
+        "tags": [
+          "trip-guests"
+        ],
+        "description": "Lets in someone who asked through the link.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "guestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "guest": {
+                      "$ref": "#/components/schemas/TripGuest"
+                    }
+                  },
+                  "required": [
+                    "guest"
                   ]
                 }
               }
@@ -12812,6 +13432,219 @@
                   },
                   "required": [
                     "slot"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/link": {
+      "post": {
+        "operationId": "createTripLink",
+        "tags": [
+          "trip-guests"
+        ],
+        "description": "Turns the link on, or makes a new one so the old one stops working. Owners and adults.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTripLinkBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "link": {
+                      "$ref": "#/components/schemas/TripLink"
+                    }
+                  },
+                  "required": [
+                    "link"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateTripLink",
+        "tags": [
+          "trip-guests"
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "requiresApproval": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "requiresApproval"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "link": {
+                      "$ref": "#/components/schemas/TripLink"
+                    }
+                  },
+                  "required": [
+                    "link"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTripLink",
+        "tags": [
+          "trip-guests"
+        ],
+        "description": "Turns the link off. People already on the trip stay on it.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tripId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "tripId"
                   ]
                 }
               }
@@ -17041,6 +17874,15 @@
           "name"
         ]
       },
+      "CreateTripLinkBody": {
+        "default": {},
+        "type": "object",
+        "properties": {
+          "requiresApproval": {
+            "type": "boolean"
+          }
+        }
+      },
       "DailyPrice": {
         "type": "object",
         "properties": {
@@ -18461,6 +19303,50 @@
           "projectedOn"
         ]
       },
+      "GuestResponse": {
+        "type": "string",
+        "enum": [
+          "going",
+          "maybe",
+          "not_going"
+        ]
+      },
+      "GuestSource": {
+        "type": "string",
+        "enum": [
+          "email",
+          "link"
+        ]
+      },
+      "GuestStatus": {
+        "type": "string",
+        "enum": [
+          "invited",
+          "asked",
+          "going",
+          "maybe",
+          "not_going"
+        ]
+      },
+      "Headcount": {
+        "type": "object",
+        "properties": {
+          "going": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "maybe": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "going",
+          "maybe"
+        ]
+      },
       "HealthResponse": {
         "type": "object",
         "properties": {
@@ -18942,6 +19828,22 @@
         },
         "required": [
           "token"
+        ]
+      },
+      "InviteTripGuestsBody": {
+        "type": "object",
+        "properties": {
+          "emails": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "emails"
         ]
       },
       "ItineraryOption": {
@@ -20508,6 +21410,39 @@
           "me"
         ]
       },
+      "MyTripAnswer": {
+        "type": "object",
+        "properties": {
+          "guestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuestResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "partySize": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "$ref": "#/components/schemas/GuestStatus"
+          }
+        },
+        "required": [
+          "guestId",
+          "response",
+          "partySize",
+          "status"
+        ]
+      },
       "NetWorthAccount": {
         "type": "object",
         "properties": {
@@ -21479,6 +22414,11 @@
           "items"
         ]
       },
+      "PartySize": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 10
+      },
       "Person": {
         "type": "object",
         "properties": {
@@ -22100,6 +23040,30 @@
           "other"
         ]
       },
+      "RespondToTripInviteBody": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/GuestResponse"
+          },
+          "partySize": {
+            "default": 1,
+            "$ref": "#/components/schemas/PartySize"
+          },
+          "token": {
+            "$ref": "#/components/schemas/TripInviteToken"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "response",
+          "token"
+        ]
+      },
       "RuleSuggestion": {
         "type": "object",
         "properties": {
@@ -22133,6 +23097,186 @@
           "categoryName",
           "merchantLabel",
           "matchingCount"
+        ]
+      },
+      "SharedTrip": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "destination": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "startsOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endsOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coverImageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "householdName": {
+            "type": "string"
+          },
+          "mine": {
+            "$ref": "#/components/schemas/MyTripAnswer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "destination",
+          "startsOn",
+          "endsOn",
+          "coverImageUrl",
+          "householdName",
+          "mine"
+        ]
+      },
+      "SharedTripBasics": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "destination": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "startsOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endsOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coverImageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "householdName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "destination",
+          "startsOn",
+          "endsOn",
+          "coverImageUrl",
+          "householdName"
+        ]
+      },
+      "SharedTripDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "destination": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "startsOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endsOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coverImageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "householdName": {
+            "type": "string"
+          },
+          "mine": {
+            "$ref": "#/components/schemas/MyTripAnswer"
+          },
+          "going": {
+            "$ref": "#/components/schemas/WhoIsGoing"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "destination",
+          "startsOn",
+          "endsOn",
+          "coverImageUrl",
+          "householdName",
+          "mine",
+          "going"
         ]
       },
       "ShortText": {
@@ -23730,6 +24874,46 @@
           "updatedAt"
         ]
       },
+      "TripAnswer": {
+        "type": "object",
+        "properties": {
+          "tripId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "guestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GuestStatus"
+          },
+          "admitted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tripId",
+          "guestId",
+          "status",
+          "admitted"
+        ]
+      },
+      "TripAnswerBody": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/GuestResponse"
+          },
+          "partySize": {
+            "default": 1,
+            "$ref": "#/components/schemas/PartySize"
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
       "TripBudget": {
         "type": "object",
         "properties": {
@@ -23889,6 +25073,120 @@
           "under_six_months"
         ]
       },
+      "TripGuest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/GuestSource"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuestResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/GuestStatus"
+          },
+          "partySize": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "approvedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Instant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "respondedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Instant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "invitedByName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Instant"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "source",
+          "response",
+          "status",
+          "partySize",
+          "approvedAt",
+          "respondedAt",
+          "invitedByName",
+          "createdAt"
+        ]
+      },
+      "TripGuestsResponse": {
+        "type": "object",
+        "properties": {
+          "guests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripGuest"
+            }
+          },
+          "headcount": {
+            "$ref": "#/components/schemas/Headcount"
+          },
+          "canInvite": {
+            "type": "boolean"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TripLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "guests",
+          "headcount",
+          "canInvite",
+          "link"
+        ]
+      },
       "TripIdea": {
         "type": "object",
         "properties": {
@@ -23950,6 +25248,99 @@
           "imageUrl",
           "votes",
           "createdByUserId",
+          "createdAt"
+        ]
+      },
+      "TripInvitePreview": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "email",
+              "link"
+            ]
+          },
+          "trip": {
+            "$ref": "#/components/schemas/SharedTripBasics"
+          },
+          "invitedByName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "going": {
+            "$ref": "#/components/schemas/WhoIsGoing"
+          },
+          "requiresApproval": {
+            "type": "boolean"
+          },
+          "invitedEmail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "forYou": {
+            "type": "boolean"
+          },
+          "signedIn": {
+            "type": "boolean"
+          },
+          "inHousehold": {
+            "type": "boolean"
+          },
+          "mine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MyTripAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "needsName": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "trip",
+          "invitedByName",
+          "going",
+          "requiresApproval",
+          "invitedEmail",
+          "forYou",
+          "signedIn",
+          "inHousehold",
+          "mine",
+          "needsName"
+        ]
+      },
+      "TripInviteToken": {
+        "type": "string",
+        "minLength": 32,
+        "maxLength": 128
+      },
+      "TripLink": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "requiresApproval": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Instant"
+          }
+        },
+        "required": [
+          "url",
+          "requiresApproval",
           "createdAt"
         ]
       },
@@ -24537,6 +25928,24 @@
         "additionalProperties": {
           "$ref": "#/components/schemas/Vote"
         }
+      },
+      "WhoIsGoing": {
+        "type": "object",
+        "properties": {
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "headcount": {
+            "$ref": "#/components/schemas/Headcount"
+          }
+        },
+        "required": [
+          "names",
+          "headcount"
+        ]
       }
     },
     "responses": {

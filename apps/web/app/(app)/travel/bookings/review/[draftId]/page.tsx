@@ -38,9 +38,7 @@ export default async function DraftPage({ params }: PageProps<'/travel/bookings/
       <PageHeader
         title='Check this booking'
         description={
-          draft.booking
-            ? 'Read from an email. Correct anything that’s wrong, then save it.'
-            : 'Ghar couldn’t make sense of this email.'
+          draft.booking ? 'Read from an email. Correct anything that’s wrong, then save it.' : 'Ghar couldn’t make sense of this email.'
         }
       />
 

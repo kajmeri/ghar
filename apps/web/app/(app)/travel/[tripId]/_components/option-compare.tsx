@@ -182,7 +182,9 @@ function CellValue({ cell, muted = false, emphasised = false }: { cell: Cell; mu
       >
         {cell.text}
       </span>
-      {cell.detail ? <span className={cn('text-xs', cell.tone === 'neutral' ? 'text-ink-muted' : TONE_TEXT[cell.tone])}>{cell.detail}</span> : null}
+      {cell.detail ? (
+        <span className={cn('text-xs', cell.tone === 'neutral' ? 'text-ink-muted' : TONE_TEXT[cell.tone])}>{cell.detail}</span>
+      ) : null}
     </span>
   )
 }

@@ -1,6 +1,14 @@
 'use client'
 
-import type { HouseholdMember, ItinerarySlot, ItineraryView, ItineraryWarningValue, OptionFactsValue, Trip, TripIdea } from '@ghar/contracts'
+import type {
+  HouseholdMember,
+  ItinerarySlot,
+  ItineraryView,
+  ItineraryWarningValue,
+  OptionFactsValue,
+  Trip,
+  TripIdea,
+} from '@ghar/contracts'
 import { slotShape, type SlotBand } from '@ghar/core/itinerary'
 import { tripDays } from '@ghar/core/trips'
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
