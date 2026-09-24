@@ -86,7 +86,7 @@ export async function linkBookingToTrip(
     const draft = slotDraftFromBooking(updated, { timeZone: options.timeZone, fallbackDay: trip.startsOn })
     if (!draft) return { booking: updated, slotId: null }
 
-    const [slot] = await insertBookingSlots(tx, trip.id, [draft])
+    const [slot] = await insertBookingSlots(tx, trip.id, [draft], ctx.userId)
     return { booking: updated, slotId: slot?.id ?? null }
   })
 
@@ -162,7 +162,7 @@ export async function generateItineraryFromBookings(
       else skipped.push(booking.id)
     }
 
-    const created = await insertBookingSlots(tx, trip.id, drafts)
+    const created = await insertBookingSlots(tx, trip.id, drafts, ctx.userId)
     return { createdCount: created.length, skippedBookingIds: skipped }
   })
 

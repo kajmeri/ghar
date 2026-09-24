@@ -7,6 +7,7 @@ import { recordAudit } from './audit'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { requireHouseholdPeople, requireOwnPerson } from './people'
 import { requireTrip, type TripRow } from './scope'
+import { recordTripChange } from './trip-update-records'
 import type { Db, RequestContext } from './types'
 
 // Trips: the dated container bookings, the itinerary, packing and tagged charges hang off.
@@ -140,16 +141,18 @@ export type UpdateTripInput = Partial<Omit<CreateTripInput, 'travellerIds'>> & {
 
 export async function updateTrip(ctx: RequestContext, db: Db, tripId: string, patch: UpdateTripInput): Promise<TripWithCounts> {
   requirePermission(ctx, 'travel.manage')
-  await requireTrip(ctx, db, tripId)
+  const before = await requireTrip(ctx, db, tripId)
   const { travellerIds, ...columns } = patch
   if (travellerIds) await requireHouseholdPeople(ctx, db, travellerIds)
 
   await db.transaction(async tx => {
     if (Object.keys(columns).length > 0) {
-      await tx
+      const [after] = await tx
         .update(trips)
         .set({ ...columns, updatedAt: sql`now()` })
         .where(and(eq(trips.id, tripId), eq(trips.householdId, ctx.householdId)))
+        .returning({ startsOn: trips.startsOn, endsOn: trips.endsOn, destination: trips.destination })
+      if (after) await recordTripChange(tx, tripId, before, after, ctx.userId)
     }
     if (travellerIds) {
       // Replace the roster wholesale: a PATCH that sends travellers is stating who is going.

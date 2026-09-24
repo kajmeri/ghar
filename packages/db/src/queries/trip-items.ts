@@ -2,6 +2,7 @@ import { planReopen, sortOrderForInsert, type BookingSlotDraft } from '@ghar/cor
 import { and, eq, inArray, isNotNull } from 'drizzle-orm'
 import { itineraryOptions, itinerarySlots } from '../schema'
 import type { ItinerarySlotRow } from './itinerary'
+import { forgetSlotUpdates, recordSlotChoice } from './trip-update-records'
 import type { Db } from './types'
 
 // Itinerary writes for a trip the caller has already resolved with requireTrip, which is why they
@@ -23,7 +24,12 @@ export async function bookingsOnItinerary(db: Db, bookingIds: readonly string[])
  * skipped, and the unique index on the option's booking id catches one that slips past a
  * concurrent run: its slot is removed again rather than left empty.
  */
-export async function insertBookingSlots(db: Db, tripId: string, drafts: readonly BookingSlotDraft[]): Promise<ItinerarySlotRow[]> {
+export async function insertBookingSlots(
+  db: Db,
+  tripId: string,
+  drafts: readonly BookingSlotDraft[],
+  actorUserId: string
+): Promise<ItinerarySlotRow[]> {
   const already = await bookingsOnItinerary(
     db,
     drafts.map(draft => draft.bookingId)
@@ -73,7 +79,9 @@ export async function insertBookingSlots(db: Db, tripId: string, drafts: readonl
       .set({ status: 'booked', chosenOptionId: option.id })
       .where(eq(itinerarySlots.id, slot.id))
       .returning()
-    if (booked) created.push(booked)
+    if (!booked) continue
+    created.push(booked)
+    await recordSlotChoice(db, slot, booked, actorUserId)
   }
   return created
 }
@@ -96,6 +104,7 @@ export async function deleteOptionsForBookings(db: Db, tripId: string, bookingId
     const options = await db.select().from(itineraryOptions).where(eq(itineraryOptions.slotId, slotId))
 
     if (options.every(option => option.id === id)) {
+      await forgetSlotUpdates(db, [slotId])
       await db.delete(itinerarySlots).where(eq(itinerarySlots.id, slotId))
       continue
     }
@@ -105,6 +114,7 @@ export async function deleteOptionsForBookings(db: Db, tripId: string, bookingId
         await db.update(itineraryOptions).set({ status: change.status }).where(eq(itineraryOptions.id, change.id))
       }
       await db.update(itinerarySlots).set({ status: plan.slot.status, chosenOptionId: null }).where(eq(itinerarySlots.id, slotId))
+      await forgetSlotUpdates(db, [slotId])
     }
     await db.delete(itineraryOptions).where(eq(itineraryOptions.id, id))
   }

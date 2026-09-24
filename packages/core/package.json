@@ -39,6 +39,7 @@
     "./travel": "./src/travel/index.ts",
     "./trip-guests": "./src/trip-guests.ts",
     "./trip-polls": "./src/trip-polls.ts",
+    "./trip-updates": "./src/trip-updates.ts",
     "./trips": "./src/trips.ts"
   },
   "scripts": {

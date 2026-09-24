@@ -23,6 +23,7 @@ import { and, asc, eq, inArray, max, sql } from 'drizzle-orm'
 import { itineraryOptions, itineraryScaffoldDismissals, itinerarySlots, optionVotes } from '../schema'
 import { requireTripIdea } from './ideas'
 import { requireTrip, type TripRow } from './scope'
+import { forgetSlotUpdates, recordSlotChoice } from './trip-update-records'
 import type { Db, RequestContext } from './types'
 
 // A trip's itinerary: slots on days, the options being weighed for each, and the household's votes
@@ -153,19 +154,21 @@ async function lockSlotOfOption(tx: Db, tripId: string, optionId: string): Promi
   return { slot, options }
 }
 
-async function applyChoicePlan(tx: Db, slotId: string, plan: ChoicePlan): Promise<void> {
+/** The one place a slot's choice changes, so the trip's updates hear about every decision. */
+async function applyChoicePlan(tx: Db, slot: ItinerarySlotRow, plan: ChoicePlan, actorUserId: string): Promise<void> {
   // The slot goes last: a chosen option must already be marked chosen when the slot points at it,
   // and nothing else constrains the order.
   for (const change of plan.options) {
     await tx
       .update(itineraryOptions)
       .set({ status: change.status, updatedAt: sql`now()` })
-      .where(and(eq(itineraryOptions.id, change.id), eq(itineraryOptions.slotId, slotId)))
+      .where(and(eq(itineraryOptions.id, change.id), eq(itineraryOptions.slotId, slot.id)))
   }
   await tx
     .update(itinerarySlots)
     .set({ status: plan.slot.status, chosenOptionId: plan.slot.chosenOptionId, updatedAt: sql`now()` })
-    .where(eq(itinerarySlots.id, slotId))
+    .where(eq(itinerarySlots.id, slot.id))
+  await recordSlotChoice(tx, slot, plan.slot, actorUserId)
 }
 
 // Slots
@@ -273,11 +276,15 @@ export async function moveSlot(ctx: RequestContext, db: Db, tripId: string, slot
 export async function deleteSlot(ctx: RequestContext, db: Db, tripId: string, slotId: string): Promise<void> {
   requirePermission(ctx, 'travel.manage')
   await requireTrip(ctx, db, tripId)
-  const [deleted] = await db
-    .delete(itinerarySlots)
-    .where(and(eq(itinerarySlots.id, slotId), eq(itinerarySlots.tripId, tripId)))
-    .returning({ id: itinerarySlots.id })
-  if (!deleted) throw new NotFoundError(SLOT_NOT_FOUND)
+  await db.transaction(async tx => {
+    // First, while the updates still point at the slot.
+    await forgetSlotUpdates(tx, [slotId])
+    const [deleted] = await tx
+      .delete(itinerarySlots)
+      .where(and(eq(itinerarySlots.id, slotId), eq(itinerarySlots.tripId, tripId)))
+      .returning({ id: itinerarySlots.id })
+    if (!deleted) throw new NotFoundError(SLOT_NOT_FOUND)
+  })
 }
 
 export async function reopenSlot(ctx: RequestContext, db: Db, tripId: string, slotId: string): Promise<ItinerarySlotWithOptions> {
@@ -298,9 +305,9 @@ async function rewriteChoice(
   requirePermission(ctx, 'travel.manage')
   await requireTrip(ctx, db, tripId)
   await db.transaction(async tx => {
-    await lockSlot(tx, tripId, slotId)
+    const slot = await lockSlot(tx, tripId, slotId)
     const options = await tx.select().from(itineraryOptions).where(eq(itineraryOptions.slotId, slotId))
-    await applyChoicePlan(tx, slotId, plan(options))
+    await applyChoicePlan(tx, slot, plan(options), ctx.userId)
   })
   return loadSlot(db, tripId, slotId)
 }
@@ -354,7 +361,7 @@ export async function createOption(
   const { source = 'manual', choose = false, ...fields } = input
 
   await db.transaction(async tx => {
-    await lockSlot(tx, tripId, slotId)
+    const slot = await lockSlot(tx, tripId, slotId)
     const [last] = await tx
       .select({ value: max(itineraryOptions.sortOrder) })
       .from(itineraryOptions)
@@ -376,7 +383,7 @@ export async function createOption(
 
     if (choose) {
       const options = await tx.select().from(itineraryOptions).where(eq(itineraryOptions.slotId, slotId))
-      await applyChoicePlan(tx, slotId, planChoice(options, option.id))
+      await applyChoicePlan(tx, slot, planChoice(options, option.id), ctx.userId)
     }
   })
   return loadSlot(db, tripId, slotId)
@@ -434,7 +441,7 @@ export async function deleteOption(ctx: RequestContext, db: Db, tripId: string, 
   const { slot } = await db.transaction(async tx => {
     const locked = await lockSlotOfOption(tx, tripId, optionId)
     if (locked.slot.chosenOptionId === optionId) {
-      await applyChoicePlan(tx, locked.slot.id, planReopen(locked.options))
+      await applyChoicePlan(tx, locked.slot, planReopen(locked.options), ctx.userId)
     }
     await tx.delete(itineraryOptions).where(and(eq(itineraryOptions.id, optionId), eq(itineraryOptions.slotId, locked.slot.id)))
     return locked
@@ -453,7 +460,7 @@ async function rewriteOptionChoice(
   await requireTrip(ctx, db, tripId)
   const { slot } = await db.transaction(async tx => {
     const locked = await lockSlotOfOption(tx, tripId, optionId)
-    await applyChoicePlan(tx, locked.slot.id, plan(locked.options, locked.slot))
+    await applyChoicePlan(tx, locked.slot, plan(locked.options, locked.slot), ctx.userId)
     return locked
   })
   return loadSlot(db, tripId, slot.id)

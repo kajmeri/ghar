@@ -1,4 +1,3 @@
-import { can } from '@ghar/core/auth'
 import { todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
 import { ConflictError, ForbiddenError, NotFoundError } from '@ghar/core/errors'
 import { SORT_ORDER_STEP, type OptionVote } from '@ghar/core/itinerary'
@@ -16,11 +15,11 @@ import {
   type PollOptionInput,
 } from '@ghar/core/trip-polls'
 import { and, asc, eq, inArray, max, sql } from 'drizzle-orm'
-import { households, profiles, tripPollOptions, tripPolls, tripPollVotes, trips } from '../schema'
+import { profiles, tripPollOptions, tripPolls, tripPollVotes, trips } from '../schema'
 import { recordAudit } from './audit'
 import { isUniqueViolation } from './pg-errors'
-import { findMembership } from './session'
-import { findTripAccess } from './trip-guests'
+import { recordTripChange } from './trip-update-records'
+import { auditActor, requireManager, requireParticipant, type Participant } from './trip-participant'
 import type { Db, SessionContext } from './types'
 
 // "When works?" and "Where to?": deciding a trip together before it has dates or a place. Both
@@ -28,47 +27,11 @@ import type { Db, SessionContext } from './types'
 // the caller is to the trip from the session and the trip id in the path, never from a body.
 // Everyone who can vote can add options; only the household opens, closes and picks.
 
-const NOT_ON_TRIP = "You're not on that trip."
 const POLL_NOT_FOUND = 'That poll has closed.'
 const OPTION_NOT_FOUND = 'That option is no longer in the poll.'
 
-interface Participant {
-  userId: string
-  tripId: string
-  hostHouseholdId: string
-  timeZone: string
-  /** Adds options and votes: the household's contributors, and admitted guests. */
-  canVote: boolean
-  /** Opens, closes and picks: the household's contributors. */
-  canManage: boolean
-}
-
-async function requireParticipant(ctx: SessionContext, db: Db, tripId: string): Promise<Participant> {
-  const access = await findTripAccess(ctx, db, tripId)
-  if (!access) throw new NotFoundError(NOT_ON_TRIP)
-  const [zone] = await db
-    .select({ timeZone: households.timezone })
-    .from(households)
-    .where(eq(households.id, access.hostHouseholdId))
-    .limit(1)
-  if (!zone) throw new NotFoundError(NOT_ON_TRIP)
-  const base = { userId: ctx.userId, tripId, hostHouseholdId: access.hostHouseholdId, timeZone: zone.timeZone }
-  if (access.access === 'guest') return { ...base, canVote: true, canManage: false }
-  const membership = await findMembership(ctx, db)
-  const canManage = membership !== null && can(membership.role, 'travel.manage')
-  return { ...base, canVote: canManage, canManage }
-}
-
 function requireVoter(participant: Participant): void {
   if (!participant.canVote) throw new ForbiddenError('You can look at polls but not vote on them.')
-}
-
-function requireManager(participant: Participant): void {
-  if (!participant.canManage) throw new ForbiddenError('Only the household hosting the trip can do that.')
-}
-
-function auditActor(participant: Participant) {
-  return { userId: participant.userId, householdId: participant.hostHouseholdId }
 }
 
 // Reading ------------------------------------------------------------------------------------
@@ -276,10 +239,19 @@ export async function pickTripPollOption(
       .limit(1)
     if (!option) throw new NotFoundError(OPTION_NOT_FOUND)
     const patch = poll.kind === 'dates' ? tripDatesFromOption(option) : { destination: option.label }
-    await tx
+    const tripKey = and(eq(trips.id, input.tripId), eq(trips.householdId, participant.hostHouseholdId))
+    const [before] = await tx
+      .select({ startsOn: trips.startsOn, endsOn: trips.endsOn, destination: trips.destination })
+      .from(trips)
+      .where(tripKey)
+      .limit(1)
+      .for('update')
+    const [after] = await tx
       .update(trips)
       .set({ ...patch, updatedAt: sql`now()` })
-      .where(and(eq(trips.id, input.tripId), eq(trips.householdId, participant.hostHouseholdId)))
+      .where(tripKey)
+      .returning({ startsOn: trips.startsOn, endsOn: trips.endsOn, destination: trips.destination })
+    if (before && after) await recordTripChange(tx, input.tripId, before, after, ctx.userId)
     await tx.delete(tripPolls).where(eq(tripPolls.id, poll.id))
     await recordAudit(auditActor(participant), tx, {
       action: 'trip_poll.picked',

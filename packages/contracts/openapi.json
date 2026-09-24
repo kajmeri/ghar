@@ -96,6 +96,9 @@
       "name": "trip-polls"
     },
     {
+      "name": "trip-updates"
+    },
+    {
       "name": "trips"
     }
   ],
@@ -15171,6 +15174,284 @@
           }
         }
       }
+    },
+    "/api/v1/trips/{tripId}/updates": {
+      "get": {
+        "operationId": "listTripUpdates",
+        "tags": [
+          "trip-updates"
+        ],
+        "description": "For the household and admitted guests alike. 404 for anyone else.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripUpdatesValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "postTripUpdate",
+        "tags": [
+          "trip-updates"
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostTripUpdateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripUpdatesValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/updates/mute": {
+      "put": {
+        "operationId": "muteTripUpdates",
+        "tags": [
+          "trip-updates"
+        ],
+        "description": "Stops or restarts the emails for the caller. The updates still show on the trip.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MuteTripUpdatesBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripUpdatesValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/updates/{updateId}": {
+      "delete": {
+        "operationId": "deleteTripUpdate",
+        "tags": [
+          "trip-updates"
+        ],
+        "description": "Your own post, or anything for the household.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "updateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripUpdatesValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -22388,6 +22669,17 @@
           "band"
         ]
       },
+      "MuteTripUpdatesBody": {
+        "type": "object",
+        "properties": {
+          "muted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "muted"
+        ]
+      },
       "MyHouseholdResponse": {
         "type": "object",
         "properties": {
@@ -23511,6 +23803,23 @@
         "enum": [
           "dates",
           "place"
+        ]
+      },
+      "PostTripUpdateBody": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "emailNow": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "body"
         ]
       },
       "PriceAlert": {
@@ -27062,6 +27371,120 @@
           "merchant",
           "amountCents",
           "tripId"
+        ]
+      },
+      "TripUpdate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TripUpdateKind"
+          },
+          "author": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mine": {
+            "type": "boolean"
+          },
+          "canDelete": {
+            "type": "boolean"
+          },
+          "body": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "day": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endsOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Instant"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "author",
+          "mine",
+          "canDelete",
+          "body",
+          "label",
+          "day",
+          "endsOn",
+          "detail",
+          "createdAt"
+        ]
+      },
+      "TripUpdateKind": {
+        "type": "string",
+        "enum": [
+          "post",
+          "decided",
+          "booked",
+          "dates",
+          "destination"
+        ]
+      },
+      "TripUpdatesValue": {
+        "type": "object",
+        "properties": {
+          "updates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripUpdate"
+            }
+          },
+          "canPost": {
+            "type": "boolean"
+          },
+          "canEmail": {
+            "type": "boolean"
+          },
+          "muted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "updates",
+          "canPost",
+          "canEmail",
+          "muted"
         ]
       },
       "UpdateManualAccountBody": {

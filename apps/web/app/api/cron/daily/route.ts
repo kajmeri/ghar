@@ -17,6 +17,7 @@ import { getPlaidClient } from '@/lib/providers/plaid'
 import { getPriceProviders } from '@/lib/providers/prices'
 import { runDecisionNudges } from '@/lib/travel/decision-nudges'
 import { runPriceWatch } from '@/lib/travel/price-watch'
+import { runTripUpdateDigest } from '@/lib/travel/update-digest'
 
 // Vercel Cron calls this once a day (see apps/web/vercel.json). Each job writes a job_runs row,
 // and one failing never stops the next. Running it twice in a day stores another price check per
@@ -26,7 +27,8 @@ import { runPriceWatch } from '@/lib/travel/price-watch'
 // renewals past their date on to their current term, which a second run finds already done, then
 // claim each reminder (at the lead time, then 30 and 7 days before) with a row before emailing, so
 // a second run sends nothing. Decision nudges claim a row per person, per thing up for a vote, per
-// deadline, the same way. The bank jobs only read from Plaid and overwrite what they stored, and
+// deadline, the same way. The trip update email marks what it sends as sent before sending, so a
+// second run finds nothing new. The bank jobs only read from Plaid and overwrite what they stored, and
 // the net worth snapshot comes last so it reads the balances they brought in; a second run rewrites the same day's rows rather than adding more.
 // The transaction sync asks Plaid only for what changed since its stored cursor, and advances the
 // cursor only once every row of that batch has landed. Categorization only looks at transactions
@@ -112,6 +114,7 @@ export async function GET(request: Request): Promise<Response> {
           }),
         deps
       ),
+      await runJob(db, 'travel.trip_updates', () => runTripUpdateDigest({ db, email: getEmailProvider(), appUrl: env().APP_URL }), deps),
       // Transactions first: a new connection's accounts arrive with them. Then balances, whose
       // account types the liability and holding jobs use, and whose figures the snapshot uses.
       await runJob(db, 'bank.transactions_sync', () => runTransactionsSync(bankDeps(db)), deps),

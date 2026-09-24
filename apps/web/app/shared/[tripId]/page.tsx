@@ -5,10 +5,12 @@ import { notFound, redirect } from 'next/navigation'
 import { GUEST_STATUS_LABELS, GUEST_STATUS_TONES, SharedTripFrame, SharedTripHero } from '@/app/_components/shared-trip'
 import { TripAnswerForm } from '@/app/_components/trip-answer-form'
 import { TripPolls } from '@/app/_components/trip-polls'
+import { TripUpdates } from '@/app/_components/trip-updates'
 import { Pill } from '@/components/ui/pill'
 import { getMembership, getSessionContext } from '@/lib/auth/context'
 import * as guests from '@/lib/travel/guests'
 import * as polls from '@/lib/travel/polls'
+import * as updates from '@/lib/travel/updates'
 import { updateMyAnswerAction } from '../actions'
 import { CalendarFeed } from './_components/calendar-feed'
 import { TripPeople } from './_components/trip-people'
@@ -60,6 +62,7 @@ export default async function SharedTripPage({ params }: PageProps<'/shared/[tri
         </section>
         <TripPolls tripId={trip.id} value={await polls.listTripPolls(session, trip.id)} offer={[]} />
         <TripPlan tripId={trip.id} days={trip.itinerary} timeZone={trip.timeZone} householdName={trip.householdName} />
+        <TripUpdates tripId={trip.id} value={await updates.listTripUpdates(session, trip.id)} timeZone={trip.timeZone} />
         <section aria-labelledby='calendar-heading' className='flex flex-col gap-3 rounded-card border border-line bg-surface p-4'>
           <h2 id='calendar-heading' className='text-lg font-semibold'>
             In your calendar

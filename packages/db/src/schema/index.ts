@@ -1,6 +1,7 @@
 import { HOUSEHOLD_ROLES } from '@ghar/core/auth'
 import { GUEST_RESPONSES, GUEST_SOURCES, MAX_PARTY_SIZE } from '@ghar/core/trip-guests'
 import { POLL_KINDS, POLL_PLACE_MAX_LENGTH } from '@ghar/core/trip-polls'
+import { TRIP_POST_MAX_LENGTH, TRIP_UPDATE_KINDS } from '@ghar/core/trip-updates'
 import { BANK_ENVIRONMENTS, BANK_ITEM_STATUSES } from '@ghar/core/banking'
 import { BILL_CADENCES, BILL_NAME_MAX_LENGTH, BILL_NOTES_MAX_LENGTH, BILL_PAYEE_MAX_LENGTH, MAX_BILL_CENTS } from '@ghar/core/bills'
 import {
@@ -163,6 +164,7 @@ export const itineraryCostBasis = pgEnum('itinerary_cost_basis', COST_BASES)
 export const itineraryOptionSource = pgEnum('itinerary_option_source', OPTION_SOURCES)
 export const optionVoteValue = pgEnum('option_vote', OPTION_VOTES)
 export const tripPollKind = pgEnum('trip_poll_kind', POLL_KINDS)
+export const tripUpdateKind = pgEnum('trip_update_kind', TRIP_UPDATE_KINDS)
 export const documentKind = pgEnum('document_kind', DOCUMENT_KINDS)
 export const assetKind = pgEnum('asset_kind', ASSET_KINDS)
 export const billCadence = pgEnum('bill_cadence', BILL_CADENCES)
@@ -1369,6 +1371,63 @@ export const decisionNudges = pgTable(
       .where(sql`${table.pollId} is not null`),
     check('decision_nudges_one_subject', sql`num_nonnulls(${table.slotId}, ${table.pollId}) = 1`),
   ]
+).enableRLS()
+
+/**
+ * What's new on a trip, for the household and its guests: posts, and what the household decided,
+ * which posts itself with only what guests can already see. `emailed_at` is set once it has gone
+ * out, in the daily email or straight away when the household sends a post to everyone.
+ */
+export const tripUpdates = pgTable(
+  'trip_updates',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tripId: uuid()
+      .notNull()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    kind: tripUpdateKind().notNull(),
+    authorUserId: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    body: text(),
+    label: text(),
+    day: date({ mode: 'string' }),
+    endsOn: date({ mode: 'string' }),
+    detail: text(),
+    /** The slot a decision or booking was about, so deciding again before it's emailed replaces it. */
+    slotId: uuid().references(() => itinerarySlots.id, { onDelete: 'set null' }),
+    emailedAt: timestamptz(),
+    createdAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('trip_updates_trip_idx').on(table.tripId, table.createdAt),
+    index('trip_updates_unsent_idx')
+      .on(table.tripId)
+      .where(sql`${table.emailedAt} is null`),
+    index('trip_updates_author_idx')
+      .on(table.authorUserId)
+      .where(sql`${table.authorUserId} is not null`),
+    index('trip_updates_slot_idx')
+      .on(table.slotId)
+      .where(sql`${table.slotId} is not null`),
+    check(
+      'trip_updates_body',
+      sql`(${table.kind} = 'post') = (${table.body} is not null) and (${table.body} is null or char_length(${table.body}) <= ${sql.raw(String(TRIP_POST_MAX_LENGTH))})`
+    ),
+  ]
+).enableRLS()
+
+/** People who'd rather not get a trip's updates by email. They still see them on the trip. */
+export const tripUpdateMutes = pgTable(
+  'trip_update_mutes',
+  {
+    tripId: uuid()
+      .notNull()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    userId: uuid()
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [primaryKey({ columns: [table.tripId, table.userId] }), index('trip_update_mutes_user_idx').on(table.userId)]
 ).enableRLS()
 
 /** Days where someone said no to the breakfast-lunch-dinner skeleton, so it stops being offered. */
