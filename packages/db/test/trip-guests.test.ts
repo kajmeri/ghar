@@ -10,6 +10,7 @@ import {
   approveTripGuest,
   countSharedTrips,
   createTripShareLink,
+  deleteMyCalendarFeed,
   deleteTripShareLink,
   findTripAccess,
   getSharedTrip,
@@ -18,11 +19,14 @@ import {
   listSharedTrips,
   listTripGuests,
   previewTripInvite,
+  readTripCalendarFeed,
   removeTripGuest,
   respondToTripInvite,
+  setMyCalendarFeed,
   setTripShareLinkApproval,
   updateMyTripAnswer,
 } from '../src/queries/trip-guests'
+import { createOption, createSlot } from '../src/queries/itinerary'
 import { createTrip } from '../src/queries/trips'
 import type { Db, SessionContext } from '../src/queries/types'
 import { createAuthUser, createTestDatabase, queryAs } from './support/database'
@@ -49,7 +53,12 @@ beforeAll(async () => {
   a = { userId: ownerA.userId, householdId: householdA.household.id, role: 'owner' }
 
   const member = await person('member-a@example.com')
-  await createInvitation(a, db, { email: member.email ?? '', role: 'member', tokenHash: 'hash-member-a', expiresAt: invitationExpiresAt(now) })
+  await createInvitation(a, db, {
+    email: member.email ?? '',
+    role: 'member',
+    tokenHash: 'hash-member-a',
+    expiresAt: invitationExpiresAt(now),
+  })
   await acceptInvitation(member, db, { tokenHash: 'hash-member-a', now })
   memberA = { userId: member.userId, householdId: a.householdId, role: 'member' }
 
@@ -260,7 +269,12 @@ describe('a guest who joins the host household, then leaves', () => {
     await respondToTripInvite(pat, db, { tokenHash: 'hash-pat', response: 'going', partySize: 1, now })
     expect(await findTripAccess(pat, db, tripId)).toMatchObject({ access: 'guest' })
 
-    await createInvitation(a, db, { email: 'pat@example.com', role: 'adult', tokenHash: 'hash-pat-join', expiresAt: invitationExpiresAt(now) })
+    await createInvitation(a, db, {
+      email: 'pat@example.com',
+      role: 'adult',
+      tokenHash: 'hash-pat-join',
+      expiresAt: invitationExpiresAt(now),
+    })
     await acceptInvitation(pat, db, { tokenHash: 'hash-pat-join', now })
     expect(await findTripAccess(pat, db, tripId)).toMatchObject({ access: 'household', guestId: null })
     expect(await listSharedTrips(pat, db)).toEqual([])
@@ -283,5 +297,103 @@ describe('row level security', () => {
     expect(await queryAs(client, b.userId, 'select id from trip_guests')).toEqual([])
     expect(await queryAs(client, a.userId, 'select trip_id from trip_share_links')).toEqual([])
     expect(await queryAs(client, null, 'select id from trip_guests')).toEqual([])
+  })
+})
+
+describe('the plan and the calendar, as a guest', () => {
+  let priya: SessionContext
+  let priyaGuestId: string
+
+  beforeAll(async () => {
+    await inviteTripGuests(a, db, { tripId, invites: [{ email: 'priya@example.com', tokenHash: 'hash-priya' }], now })
+    priya = await person('priya@example.com', 'Priya Nair')
+    priyaGuestId = (await respondToTripInvite(priya, db, { tokenHash: 'hash-priya', response: 'going', partySize: 1, now })).guestId
+
+    const noSlot = { endsAt: null, decideBy: null, notes: null }
+    const dinner = await createSlot(a, db, tripId, {
+      ...noSlot,
+      day: '2026-12-20',
+      band: 'evening',
+      kind: 'meal',
+      label: 'Dinner',
+      startsAt: new Date('2026-12-20T14:30:00Z'),
+      notes: 'Ask for the sea table',
+    })
+    await createOption(a, db, tripId, dinner.id, {
+      title: 'Fisherman’s Wharf',
+      address: 'Cavelossim',
+      costCents: 6_000_00,
+      confirmationCode: 'ABC123',
+      notes: 'Owner is a friend',
+      choose: true,
+    })
+    const beach = await createSlot(a, db, tripId, {
+      ...noSlot,
+      day: '2026-12-21',
+      band: 'afternoon',
+      kind: 'activity',
+      label: 'Beach',
+      startsAt: null,
+    })
+    await createOption(a, db, tripId, beach.id, { title: 'Palolem' })
+    await createOption(a, db, tripId, beach.id, { title: 'Agonda' })
+    await createSlot(a, db, tripId, {
+      ...noSlot,
+      day: '2026-12-21',
+      band: 'morning',
+      kind: 'note',
+      label: 'Gate code 7781',
+      startsAt: null,
+    })
+  })
+
+  it('shows what is decided and what is still open, and nothing about money, notes or bookings', async () => {
+    const shared = await getSharedTrip(priya, db, tripId)
+    expect(shared.timeZone).toBe('America/Chicago')
+    expect(shared.itinerary.map(day => [day.day, day.slots.map(slot => [slot.label, slot.state, slot.title])])).toEqual([
+      ['2026-12-20', [['Dinner', 'decided', 'Fisherman’s Wharf']]],
+      ['2026-12-21', [['Beach', 'deciding', null]]],
+    ])
+    const text = JSON.stringify(shared)
+    for (const secret of ['ABC123', '600000', 'sea table', 'Owner is a friend', '7781', 'Palolem', 'Villa code']) {
+      expect(text).not.toContain(secret)
+    }
+  })
+
+  it('lists who is going by first name, the household first, and marks the viewer', async () => {
+    const { people } = await getSharedTrip(priya, db, tripId)
+    expect(people[0]).toMatchObject({ name: 'Asha', host: true, you: false })
+    expect(people.find(entry => entry.you)).toMatchObject({ name: 'Priya', response: 'going', host: false })
+    expect(people.every(entry => entry.name === null || !entry.name.includes(' '))).toBe(true)
+  })
+
+  it('gives the guest a feed that works until it is replaced', async () => {
+    expect((await getSharedTrip(priya, db, tripId)).calendarFeedSealed).toBeNull()
+    await setMyCalendarFeed(priya, db, { tripId, tokenHash: 'feed-1', tokenSealed: 'sealed-1' })
+    expect((await getSharedTrip(priya, db, tripId)).calendarFeedSealed).toBe('sealed-1')
+
+    const feed = await readTripCalendarFeed(db, 'feed-1')
+    expect(feed.trip.name).toBe('Goa in December')
+    expect(JSON.stringify(feed)).not.toContain('ABC123')
+
+    await setMyCalendarFeed(priya, db, { tripId, tokenHash: 'feed-2', tokenSealed: 'sealed-2' })
+    await expect(readTripCalendarFeed(db, 'feed-1')).rejects.toThrow(NotFoundError)
+    expect((await readTripCalendarFeed(db, 'feed-2')).trip.id).toBe(tripId)
+  })
+
+  it('is only for guests, and nobody reads the tokens through the API roles', async () => {
+    const owner = { userId: a.userId, email: 'owner-a@example.com' }
+    await expect(setMyCalendarFeed(owner, db, { tripId, tokenHash: 'feed-owner', tokenSealed: 'x' })).rejects.toThrow(NotFoundError)
+    expect(await queryAs(client, a.userId, 'select guest_id from trip_guest_calendar_feeds')).toEqual([])
+    expect(await queryAs(client, priya.userId, 'select guest_id from trip_guest_calendar_feeds')).toEqual([])
+  })
+
+  it('stops the feed when turned off, and when the guest comes off the trip', async () => {
+    await deleteMyCalendarFeed(priya, db, tripId)
+    await expect(readTripCalendarFeed(db, 'feed-2')).rejects.toThrow(NotFoundError)
+
+    await setMyCalendarFeed(priya, db, { tripId, tokenHash: 'feed-3', tokenSealed: 'sealed-3' })
+    await removeTripGuest(a, db, { tripId, guestId: priyaGuestId })
+    await expect(readTripCalendarFeed(db, 'feed-3')).rejects.toThrow(NotFoundError)
   })
 })

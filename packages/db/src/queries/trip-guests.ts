@@ -9,15 +9,31 @@ import {
   guestStatus,
   MAX_TRIP_GUESTS,
   normalizeGuestEmails,
+  guestItinerary,
   tripHeadcount,
+  tripPeople,
+  type GuestDay,
   type GuestResponse,
   type GuestSource,
   type GuestStatus,
   type Headcount,
+  type TripPerson,
 } from '@ghar/core/trip-guests'
 import { and, asc, count, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm'
 import { authUsers } from 'drizzle-orm/supabase'
-import { householdMembers, householdPeople, households, profiles, tripGuests, trips, tripShareLinks, tripTravellers } from '../schema'
+import {
+  householdMembers,
+  householdPeople,
+  households,
+  itineraryOptions,
+  itinerarySlots,
+  profiles,
+  tripGuestCalendarFeeds,
+  tripGuests,
+  trips,
+  tripShareLinks,
+  tripTravellers,
+} from '../schema'
 import { recordAudit } from './audit'
 import { isUniqueViolation } from './pg-errors'
 import { requireTrip } from './scope'
@@ -363,7 +379,12 @@ async function findInvite(db: Db, tokenHash: string, options: { lock?: boolean }
 }
 
 async function requireBasics(db: Db, tripId: string): Promise<SharedTripBasics> {
-  const [row] = await db.select(basicsColumns).from(trips).innerJoin(households, eq(households.id, trips.householdId)).where(eq(trips.id, tripId)).limit(1)
+  const [row] = await db
+    .select(basicsColumns)
+    .from(trips)
+    .innerJoin(households, eq(households.id, trips.householdId))
+    .where(eq(trips.id, tripId))
+    .limit(1)
   if (!row) throw new NotFoundError('That trip no longer exists.')
   return row
 }
@@ -434,8 +455,12 @@ export async function previewTripInvite(ctx: SessionContext | null, db: Db, inpu
   const invitedBy =
     invite.kind === 'email'
       ? invite.guest.invitedBy
-      : ((await db.select({ by: tripShareLinks.createdBy }).from(tripShareLinks).where(eq(tripShareLinks.tripId, invite.tripId)).limit(1))[0]?.by ?? null)
-  const [inviterRow] = invitedBy ? await db.select({ name: profiles.fullName }).from(profiles).where(eq(profiles.id, invitedBy)).limit(1) : []
+      : ((
+          await db.select({ by: tripShareLinks.createdBy }).from(tripShareLinks).where(eq(tripShareLinks.tripId, invite.tripId)).limit(1)
+        )[0]?.by ?? null)
+  const [inviterRow] = invitedBy
+    ? await db.select({ name: profiles.fullName }).from(profiles).where(eq(profiles.id, invitedBy)).limit(1)
+    : []
 
   let inHousehold = false
   let mine: MyTripAnswer | null = null
@@ -651,18 +676,163 @@ export async function countSharedTrips(ctx: SessionContext, db: Db): Promise<num
 export interface SharedTripDetail extends SharedTripBasics {
   mine: MyTripAnswer
   going: WhoIsGoing
+  /** The host household's zone, which the plan's times are in. */
+  timeZone: string
+  /** Everyone coming or thinking about it, first names only. */
+  people: TripPerson[]
+  /** The plan, decided parts and what's still being decided. Never costs, notes or votes. */
+  itinerary: GuestDay[]
+  /** Sealed; the web app opens it into the feed's URL. Null until the guest asks for one. */
+  calendarFeedSealed: string | null
 }
 
 /** One trip as a guest sees it. A member of the trip's household opens it as their own instead. */
 export async function getSharedTrip(ctx: SessionContext, db: Db, tripId: string): Promise<SharedTripDetail> {
+  const guestId = await requireGuestAccess(ctx, db, tripId)
+  const [guest, basics, going, people, itinerary, zone, feed] = await Promise.all([
+    requireGuest(db, guestId),
+    requireBasics(db, tripId),
+    whoIsGoing(db, tripId),
+    loadPeople(db, tripId, ctx.userId),
+    loadGuestItinerary(db, tripId),
+    hostTimeZone(db, tripId),
+    db
+      .select({ tokenSealed: tripGuestCalendarFeeds.tokenSealed })
+      .from(tripGuestCalendarFeeds)
+      .where(eq(tripGuestCalendarFeeds.guestId, guestId))
+      .limit(1),
+  ])
+  return {
+    ...basics,
+    mine: { guestId: guest.id, response: guest.response, partySize: guest.partySize, status: guest.status },
+    going,
+    timeZone: zone,
+    people,
+    itinerary,
+    calendarFeedSealed: feed[0]?.tokenSealed ?? null,
+  }
+}
+
+/** The caller's guest row on the trip, when they were let on it as a guest. */
+async function requireGuestAccess(ctx: SessionContext, db: Db, tripId: string): Promise<string> {
   const access = await findTripAccess(ctx, db, tripId)
   if (access?.access !== 'guest' || !access.guestId) throw new NotFoundError(NOT_ON_TRIP)
-  const guest = await requireGuest(db, access.guestId)
-  return {
-    ...(await requireBasics(db, tripId)),
-    mine: { guestId: guest.id, response: guest.response, partySize: guest.partySize, status: guest.status },
-    going: await whoIsGoing(db, tripId),
-  }
+  return access.guestId
+}
+
+async function hostTimeZone(db: Db, tripId: string): Promise<string> {
+  const [row] = await db
+    .select({ timeZone: households.timezone })
+    .from(trips)
+    .innerJoin(households, eq(households.id, trips.householdId))
+    .where(eq(trips.id, tripId))
+    .limit(1)
+  if (!row) throw new NotFoundError('That trip no longer exists.')
+  return row.timeZone
+}
+
+async function loadPeople(db: Db, tripId: string, viewerUserId: string): Promise<TripPerson[]> {
+  const [travellers, guests] = await Promise.all([
+    db
+      .select({ name: sql<string | null>`coalesce(${householdPeople.name}, ${profiles.fullName})`, userId: householdPeople.userId })
+      .from(tripTravellers)
+      .innerJoin(householdPeople, eq(householdPeople.id, tripTravellers.personId))
+      .leftJoin(profiles, eq(profiles.id, householdPeople.userId))
+      .where(eq(tripTravellers.tripId, tripId))
+      .orderBy(asc(tripTravellers.createdAt)),
+    db
+      .select({
+        name: profiles.fullName,
+        userId: tripGuests.userId,
+        response: tripGuests.response,
+        partySize: tripGuests.partySize,
+        approvedAt: tripGuests.approvedAt,
+      })
+      .from(tripGuests)
+      .leftJoin(profiles, eq(profiles.id, tripGuests.userId))
+      .where(eq(tripGuests.tripId, tripId))
+      .orderBy(asc(tripGuests.respondedAt), asc(tripGuests.id)),
+  ])
+  return tripPeople({ travellers, guests, viewerUserId })
+}
+
+/** Only the columns a guest may see: no costs, notes, confirmation codes, booking links or votes. */
+async function loadGuestItinerary(db: Db, tripId: string): Promise<GuestDay[]> {
+  const [slots, options] = await Promise.all([
+    db
+      .select({
+        id: itinerarySlots.id,
+        day: itinerarySlots.day,
+        band: itinerarySlots.band,
+        kind: itinerarySlots.kind,
+        label: itinerarySlots.label,
+        startsAt: itinerarySlots.startsAt,
+        endsAt: itinerarySlots.endsAt,
+        status: itinerarySlots.status,
+        chosenOptionId: itinerarySlots.chosenOptionId,
+        sortOrder: itinerarySlots.sortOrder,
+      })
+      .from(itinerarySlots)
+      .where(eq(itinerarySlots.tripId, tripId)),
+    db
+      .select({
+        id: itineraryOptions.id,
+        slotId: itineraryOptions.slotId,
+        title: itineraryOptions.title,
+        subtitle: itineraryOptions.subtitle,
+        address: itineraryOptions.address,
+        url: itineraryOptions.url,
+        status: itineraryOptions.status,
+      })
+      .from(itineraryOptions)
+      .innerJoin(itinerarySlots, eq(itinerarySlots.id, itineraryOptions.slotId))
+      .where(eq(itinerarySlots.tripId, tripId)),
+  ])
+  return guestItinerary(slots, options)
+}
+
+// A guest's calendar feed ----------------------------------------------------------------------
+
+/** Turns on the caller's feed for the trip, or replaces it so the old URL stops working. */
+export async function setMyCalendarFeed(
+  ctx: SessionContext,
+  db: Db,
+  input: { tripId: string; tokenHash: string; tokenSealed: string }
+): Promise<{ tokenSealed: string }> {
+  const guestId = await requireGuestAccess(ctx, db, input.tripId)
+  const [row] = await db
+    .insert(tripGuestCalendarFeeds)
+    .values({ guestId, tokenHash: input.tokenHash, tokenSealed: input.tokenSealed })
+    .onConflictDoUpdate({ target: tripGuestCalendarFeeds.guestId, set: { tokenHash: input.tokenHash, tokenSealed: input.tokenSealed } })
+    .returning({ tokenSealed: tripGuestCalendarFeeds.tokenSealed })
+  if (!row) throw new Error('Calendar feed upsert returned nothing')
+  return row
+}
+
+export async function deleteMyCalendarFeed(ctx: SessionContext, db: Db, tripId: string): Promise<void> {
+  const guestId = await requireGuestAccess(ctx, db, tripId)
+  await db.delete(tripGuestCalendarFeeds).where(eq(tripGuestCalendarFeeds.guestId, guestId))
+}
+
+export interface TripCalendarFeed {
+  trip: SharedTripBasics
+  itinerary: GuestDay[]
+}
+
+/**
+ * What a calendar app reads with the feed's URL. The URL is the only key, so it works only while
+ * its guest is let onto the trip; taking them off deletes it.
+ */
+export async function readTripCalendarFeed(db: Db, tokenHash: string): Promise<TripCalendarFeed> {
+  const [feed] = await db
+    .select({ tripId: tripGuests.tripId })
+    .from(tripGuestCalendarFeeds)
+    .innerJoin(tripGuests, eq(tripGuests.id, tripGuestCalendarFeeds.guestId))
+    .where(and(eq(tripGuestCalendarFeeds.tokenHash, tokenHash), isNotNull(tripGuests.approvedAt)))
+    .limit(1)
+  if (!feed) throw new NotFoundError('This calendar link is off.')
+  const [trip, itinerary] = await Promise.all([requireBasics(db, feed.tripId), loadGuestItinerary(db, feed.tripId)])
+  return { trip, itinerary }
 }
 
 /** A guest changing their answer. Someone still waiting to be let in can change theirs too. */
@@ -677,7 +847,10 @@ export async function updateMyTripAnswer(
       .update(tripGuests)
       .set({ response: input.response, partySize: input.partySize, respondedAt: input.now })
       .where(and(eq(tripGuests.tripId, input.tripId), eq(tripGuests.userId, ctx.userId)))
-      .returning({ id: tripGuests.id, householdId: sql<string>`(select ${trips.householdId} from ${trips} where ${trips.id} = ${tripGuests.tripId})` })
+      .returning({
+        id: tripGuests.id,
+        householdId: sql<string>`(select ${trips.householdId} from ${trips} where ${trips.id} = ${tripGuests.tripId})`,
+      })
     if (!row) throw new NotFoundError(NOT_ON_TRIP)
     await recordAudit({ userId: ctx.userId, householdId: row.householdId }, tx, {
       action: 'trip_guest.responded',

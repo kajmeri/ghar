@@ -1,3 +1,4 @@
+import { SLOT_BANDS, SLOT_KINDS } from '@ghar/core/itinerary'
 import { GUEST_RESPONSES, GUEST_SOURCES, MAX_INVITE_EMAILS, MAX_PARTY_SIZE } from '@ghar/core/trip-guests'
 import { describe, expect, it } from 'vitest'
 import {
@@ -7,6 +8,7 @@ import {
   guestSourceSchema,
   inviteTripGuestsBodySchema,
   respondToTripInviteBodySchema,
+  sharedSlotSchema,
 } from '../src/v1/trip-guests'
 
 const token = 'a'.repeat(43)
@@ -17,6 +19,8 @@ describe('trip guests', () => {
     expect(guestSourceSchema.options).toEqual([...GUEST_SOURCES])
     expect(GUEST_MAX_PARTY_SIZE).toBe(MAX_PARTY_SIZE)
     expect(GUEST_MAX_INVITE_EMAILS).toBe(MAX_INVITE_EMAILS)
+    expect(sharedSlotSchema.shape.band.options).toEqual([...SLOT_BANDS])
+    expect(sharedSlotSchema.shape.kind.options).toEqual([...SLOT_KINDS])
   })
 
   it('tidies the addresses on the invite form', () => {

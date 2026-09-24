@@ -1,10 +1,10 @@
 'use client'
 
 import type { TripLink } from '@ghar/contracts'
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState } from 'react'
+import { CopyField } from '@/app/_components/copy-field'
 import { Button } from '@/components/ui/button'
 import { FormMessage } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import { IDLE } from '@/lib/actions/state'
 import { createLinkAction, deleteLinkAction, setLinkApprovalAction } from '../actions'
 
@@ -38,7 +38,7 @@ export function ShareLink({ tripId, link }: { tripId: string; link: TripLink | n
 
   return (
     <div className='flex flex-col gap-4'>
-      <CopyLink url={link.url} />
+      <CopyField value={link.url} label='Trip link' />
       <form action={approvalAction} className='flex flex-col gap-2'>
         <input type='hidden' name='tripId' value={tripId} />
         <input type='hidden' name='requiresApproval' value={link.requiresApproval ? 'false' : 'true'} />
@@ -67,57 +67,6 @@ export function ShareLink({ tripId, link }: { tripId: string; link: TripLink | n
       </div>
       <p className='text-sm text-ink-muted'>A new link stops the old one working. People already on the trip stay on it either way.</p>
       <FormMessage state={message} />
-    </div>
-  )
-}
-
-/** The clipboard isn't there over plain http or in some in-app browsers, so a failure selects the text. */
-function CopyLink({ url }: { url: string }) {
-  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
-  useEffect(() => {
-    if (state === 'idle') return
-    const timer = setTimeout(() => {
-      setState('idle')
-    }, 2000)
-    return () => {
-      clearTimeout(timer)
-    }
-  }, [state])
-
-  return (
-    <div className='flex flex-col gap-2 md:flex-row'>
-      <label htmlFor='trip-link' className='sr-only'>
-        Trip link
-      </label>
-      <Input
-        id='trip-link'
-        readOnly
-        value={url}
-        onFocus={event => {
-          event.currentTarget.select()
-        }}
-        className='text-sm text-ink-muted'
-      />
-      <Button
-        type='button'
-        className='md:w-32'
-        onClick={() => {
-          navigator.clipboard.writeText(url).then(
-            () => {
-              setState('copied')
-            },
-            () => {
-              document.getElementById('trip-link')?.focus()
-              setState('failed')
-            }
-          )
-        }}
-      >
-        {state === 'copied' ? 'Copied' : 'Copy link'}
-      </Button>
-      <span role='status' className='sr-only'>
-        {state === 'copied' ? 'Link copied' : state === 'failed' ? 'Couldn’t copy. The link is selected, so copy it yourself.' : ''}
-      </span>
     </div>
   )
 }

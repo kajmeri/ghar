@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
-import { calendarDateSchema, instantSchema } from './shared'
+import { calendarDateSchema, instantSchema, slotBandSchema, slotKindSchema } from './shared'
 
 // People from outside the household on a trip. The household's side lives under the trip; the
 // guest's side is under /trip-invites (answering) and /shared-trips (what they were let onto),
@@ -20,7 +20,11 @@ export const guestSourceSchema = z.enum(['email', 'link'])
 export const GUEST_MAX_PARTY_SIZE = 10
 export const GUEST_MAX_INVITE_EMAILS = 20
 
-export const partySizeSchema = z.coerce.number().int().min(1, 'At least 1.').max(GUEST_MAX_PARTY_SIZE, `Up to ${String(GUEST_MAX_PARTY_SIZE)}.`)
+export const partySizeSchema = z.coerce
+  .number()
+  .int()
+  .min(1, 'At least 1.')
+  .max(GUEST_MAX_PARTY_SIZE, `Up to ${String(GUEST_MAX_PARTY_SIZE)}.`)
 
 export const headcountSchema = z.object({ going: z.int(), maybe: z.int() })
 
@@ -240,7 +244,58 @@ export const listSharedTrips = defineEndpoint({
   response: z.object({ trips: z.array(sharedTripSchema) }),
 })
 
-export const sharedTripDetailSchema = sharedTripSchema.extend({ going: whoIsGoingSchema })
+/** A slot of the plan as a guest sees it. Never a cost, a note, a vote or a confirmation code. */
+export const sharedSlotSchema = z.object({
+  id: z.uuid(),
+  day: calendarDateSchema,
+  band: slotBandSchema,
+  kind: slotKindSchema,
+  /** What the slot is for, as the household named it: "Dinner". */
+  label: z.string(),
+  startsAt: instantSchema.nullable(),
+  endsAt: instantSchema.nullable(),
+  state: z.enum(['decided', 'booked', 'deciding']),
+  /** The chosen option. Null while it's still being decided. */
+  title: z.string().nullable(),
+  subtitle: z.string().nullable(),
+  address: z.string().nullable(),
+  url: z.string().nullable(),
+})
+export type SharedSlot = z.infer<typeof sharedSlotSchema>
+
+export const sharedDaySchema = z.object({ day: calendarDateSchema, slots: z.array(sharedSlotSchema) })
+export type SharedDay = z.infer<typeof sharedDaySchema>
+
+/** One line of who's going. First names only; a null name is someone who hasn't given one. */
+export const tripPersonSchema = z.object({
+  name: z.string().nullable(),
+  response: z.enum(['going', 'maybe']),
+  partySize: z.int(),
+  /** In the household hosting the trip. */
+  host: z.boolean(),
+  /** The caller. */
+  you: z.boolean(),
+})
+export type TripPerson = z.infer<typeof tripPersonSchema>
+
+export const tripCalendarFeedSchema = z.object({
+  /** https, for copying into a calendar app's "subscribe by URL". */
+  url: z.url(),
+  /** The same feed as webcal://, which opens the device's calendar app to subscribe. */
+  webcalUrl: z.string(),
+})
+export type TripCalendarFeed = z.infer<typeof tripCalendarFeedSchema>
+
+export const sharedTripDetailSchema = sharedTripSchema.extend({
+  going: whoIsGoingSchema,
+  /** The host household's zone. The plan's times are shown in it. */
+  timeZone: z.string(),
+  people: z.array(tripPersonSchema),
+  /** Days with something on them, in order. Empty until the household plans something. */
+  itinerary: z.array(sharedDaySchema),
+  /** The caller's private calendar feed, while it's on. Anyone holding it can read the plan. */
+  calendarFeed: tripCalendarFeedSchema.nullable(),
+})
 export type SharedTripDetail = z.infer<typeof sharedTripDetailSchema>
 
 /** One trip as a guest sees it. 404 for anyone not let onto it, including its own household. */
@@ -257,4 +312,22 @@ export const updateMyTripAnswer = defineEndpoint({
   params: tripParams,
   body: tripAnswerBodySchema,
   response: z.object({ answer: tripAnswerSchema }),
+})
+
+/**
+ * Turns on the caller's calendar feed for a trip they're a guest on, or makes a new one so the
+ * old URL stops working. Holds the trip's dates and each decided slot with a time.
+ */
+export const createTripCalendarFeed = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/shared-trips/:tripId/calendar-feed',
+  params: tripParams,
+  response: z.object({ feed: tripCalendarFeedSchema }),
+})
+
+export const deleteTripCalendarFeed = defineEndpoint({
+  method: 'DELETE',
+  path: '/api/v1/shared-trips/:tripId/calendar-feed',
+  params: tripParams,
+  response: z.object({ tripId: z.uuid() }),
 })

@@ -1122,6 +1122,26 @@ export const tripShareLinks = pgTable(
 ).enableRLS()
 
 /**
+ * A guest's private calendar feed for one trip. Calendar apps can't sign in, so the URL is the
+ * key: stored as a hash to look it up, and sealed so the guest can copy it again. Goes when they
+ * come off the trip.
+ */
+export const tripGuestCalendarFeeds = pgTable(
+  'trip_guest_calendar_feeds',
+  {
+    guestId: uuid()
+      .primaryKey()
+      .references(() => tripGuests.id, { onDelete: 'cascade' }),
+    tokenHash: text().notNull(),
+    /** AES-256-GCM, from apps/web/lib/crypto.ts. */
+    tokenSealed: text().notNull(),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [unique('trip_guest_calendar_feeds_token_hash_unique').on(table.tokenHash)]
+).enableRLS()
+
+/**
  * A stretch of a day that needs filling: "Dinner", "Morning". It holds the options being weighed
  * for it, and at most one of them is chosen. A band is enough while planning is rough, so the
  * times stay empty until someone knows them.

@@ -5,13 +5,15 @@ import type {
   SharedTrip,
   SharedTripDetail,
   TripAnswer,
+  TripCalendarFeed,
   TripGuest,
   TripGuestsValue,
   TripInvitePreview,
   TripLink,
 } from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
-import type { GuestResponse } from '@ghar/core/trip-guests'
+import { buildIcs } from '@ghar/core/calendar'
+import { tripCalendarEvents, type GuestResponse } from '@ghar/core/trip-guests'
 import * as queries from '@ghar/db/queries'
 import type { SessionContext } from '@ghar/db/queries'
 import { openSecret, sealSecret } from '@/lib/crypto'
@@ -164,7 +166,50 @@ export async function countSharedTrips(session: SessionContext): Promise<number>
 }
 
 export async function getSharedTrip(session: SessionContext, tripId: string): Promise<SharedTripDetail> {
-  return queries.getSharedTrip(session, getDb(), tripId)
+  const { calendarFeedSealed, itinerary, ...trip } = await queries.getSharedTrip(session, getDb(), tripId)
+  return {
+    ...trip,
+    itinerary: itinerary.map(day => ({
+      day: day.day,
+      slots: day.slots.map(slot => ({
+        ...slot,
+        startsAt: slot.startsAt?.toISOString() ?? null,
+        endsAt: slot.endsAt?.toISOString() ?? null,
+      })),
+    })),
+    calendarFeed: calendarFeedSealed === null ? null : feedUrls(openSecret(calendarFeedSealed)),
+  }
+}
+
+/** Where a calendar app reads a guest's feed. The token is the only key, so it's never logged. */
+export function feedUrls(token: string): TripCalendarFeed {
+  const url = new URL(`/api/feeds/trips/${encodeURIComponent(token)}`, env().APP_URL).toString()
+  return { url, webcalUrl: url.replace(/^https?:/, 'webcal:') }
+}
+
+/** Turns on the guest's feed, or replaces it so the old URL stops working. */
+export async function createTripCalendarFeed(session: SessionContext, tripId: string): Promise<TripCalendarFeed> {
+  const { token, tokenHash } = createInvitationToken()
+  await queries.setMyCalendarFeed(session, getDb(), { tripId, tokenHash, tokenSealed: sealSecret(token) })
+  return feedUrls(token)
+}
+
+export async function deleteTripCalendarFeed(session: SessionContext, tripId: string): Promise<{ tripId: string }> {
+  await queries.deleteMyCalendarFeed(session, getDb(), tripId)
+  return { tripId }
+}
+
+/** The .ics a calendar app fetches with the feed's URL. */
+export async function tripCalendarFile(token: string): Promise<{ name: string; ics: string }> {
+  const { trip, itinerary } = await queries.readTripCalendarFeed(getDb(), hashInvitationToken(token))
+  const name = `${trip.name}, with ${trip.householdName}`
+  const events = tripCalendarEvents({
+    trip,
+    householdName: trip.householdName,
+    days: itinerary,
+    url: new URL(`/shared/${trip.id}`, env().APP_URL).toString(),
+  })
+  return { name, ics: buildIcs({ name, events, now: new Date() }) }
 }
 
 export async function updateMyTripAnswer(

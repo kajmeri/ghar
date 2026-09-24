@@ -127,6 +127,13 @@
       "when": 1790264137863,
       "tag": "0017_trip_guests",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790274482854,
+      "tag": "0018_trip_guest_calendar_feeds",
+      "breakpoints": true
     }
   ]
 }

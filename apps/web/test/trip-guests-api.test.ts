@@ -2,12 +2,14 @@ import type { PGlite } from '@electric-sql/pglite'
 import type { RequestContext } from '@ghar/contracts'
 import { invitationExpiresAt } from '@ghar/core/invitations'
 import { acceptInvitation, createHousehold, createInvitation, type Db } from '@ghar/db/queries'
-import { createTrip } from '@ghar/db/queries'
+import { createOption, createSlot, createTrip } from '@ghar/db/queries'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
 import { POST as respond } from '@/app/api/v1/trip-invites/respond/route'
 import { POST as preview } from '@/app/api/v1/trip-invites/preview/route'
 import { PUT as putAnswer } from '@/app/api/v1/shared-trips/[tripId]/answer/route'
+import { GET as feedFile } from '@/app/api/feeds/trips/[token]/route'
+import { DELETE as deleteFeed, POST as createFeed } from '@/app/api/v1/shared-trips/[tripId]/calendar-feed/route'
 import { GET as getShared } from '@/app/api/v1/shared-trips/[tripId]/route'
 import { GET as listShared } from '@/app/api/v1/shared-trips/route'
 import { POST as approve } from '@/app/api/v1/trips/[tripId]/guests/[guestId]/approve/route'
@@ -243,5 +245,93 @@ describe('trip guests over the API', () => {
     expect((await call(getShared, 'GET', { tripId })).status).toBe(404)
     const list = await call(listShared, 'GET', {})
     expect(list.body.trips).toEqual([])
+  })
+})
+
+describe('a guest’s calendar feed', () => {
+  let asha: Account
+  let ashaGuestId: string
+
+  beforeAll(async () => {
+    signInAs(ownerAccount, owner)
+    test.outbox.length = 0
+    await call(invite, 'POST', { tripId }, { emails: ['asha@example.com'] })
+    const token = tokenFrom(test.outbox[0]?.text ?? '')
+    asha = { userId: await createAuthUser(client, 'asha@example.com'), email: 'asha@example.com' }
+    signInAs(asha)
+    ashaGuestId = ((await call(respond, 'POST', {}, { token, response: 'going', name: 'Asha' })).body.answer as { guestId: string }).guestId
+
+    const dinner = await createSlot(owner, db, tripId, {
+      day: '2026-12-21',
+      band: 'evening',
+      kind: 'meal',
+      label: 'Dinner',
+      startsAt: new Date('2026-12-21T19:00:00Z'),
+      endsAt: null,
+      decideBy: null,
+      notes: 'Ask for the sea table',
+    })
+    await createOption(owner, db, tripId, dinner.id, { title: 'Thalassa', costCents: 9_000_00, confirmationCode: 'ZX9', choose: true })
+  })
+
+  async function fetchFeed(url: string): Promise<Response> {
+    const token = decodeURIComponent(new URL(url).pathname.split('/').at(-1) ?? '')
+    return feedFile(new Request(url), { params: Promise.resolve({ token }) })
+  }
+
+  it('shows a guest the plan, and turns a feed on that a calendar app can read', async () => {
+    signInAs(asha)
+    const detail = await call(getShared, 'GET', { tripId })
+    expect(detail.body.trip).toMatchObject({
+      calendarFeed: null,
+      itinerary: [{ day: '2026-12-21', slots: [{ title: 'Thalassa', state: 'decided' }] }],
+    })
+    expect(JSON.stringify(detail.body)).not.toMatch(/ZX9|900000|sea table/)
+
+    const made = await call(createFeed, 'POST', { tripId })
+    expect(made.status).toBe(201)
+    const feed = made.body.feed as { url: string; webcalUrl: string }
+    expect(feed.url.startsWith('https://ghar.test/api/feeds/trips/')).toBe(true)
+    expect(feed.webcalUrl.startsWith('webcal://ghar.test/api/feeds/trips/')).toBe(true)
+    expect((await call(getShared, 'GET', { tripId })).body.trip).toMatchObject({ calendarFeed: feed })
+
+    const response = await fetchFeed(feed.url)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('text/calendar; charset=utf-8')
+    expect(response.headers.get('cache-control')).toContain('private')
+    const ics = await response.text()
+    expect(ics).toContain('BEGIN:VCALENDAR')
+    expect(ics).toContain('SUMMARY:Goa in December')
+    expect(ics).toContain('SUMMARY:Dinner: Thalassa')
+    expect(ics).toContain('DTSTART:20261221T190000Z')
+    expect(ics).not.toMatch(/ZX9|900000|sea table|4412/)
+  })
+
+  it('stops the old URL when a new one is made, or the feed is turned off', async () => {
+    signInAs(asha)
+    const first = ((await call(createFeed, 'POST', { tripId })).body.feed as { url: string }).url
+    const second = ((await call(createFeed, 'POST', { tripId })).body.feed as { url: string }).url
+    expect(second).not.toBe(first)
+    expect((await fetchFeed(first)).status).toBe(404)
+    expect((await fetchFeed(second)).status).toBe(200)
+
+    expect((await call(deleteFeed, 'DELETE', { tripId })).status).toBe(200)
+    expect((await fetchFeed(second)).status).toBe(404)
+    expect((await fetchFeed('https://ghar.test/api/feeds/trips/short')).status).toBe(404)
+  })
+
+  it('dies with the guest, and is never theirs to make for a trip they’re not on', async () => {
+    signInAs(asha)
+    const url = ((await call(createFeed, 'POST', { tripId })).body.feed as { url: string }).url
+
+    signInAs(ownerAccount, owner)
+    expect((await call(createFeed, 'POST', { tripId })).status).toBe(404)
+    expect((await call(removeGuest, 'DELETE', { tripId, guestId: ashaGuestId })).status).toBe(200)
+    expect((await fetchFeed(url)).status).toBe(404)
+
+    signInAs(asha)
+    expect((await call(createFeed, 'POST', { tripId })).status).toBe(404)
+    signInAs(null)
+    expect((await call(createFeed, 'POST', { tripId })).status).toBe(401)
   })
 })

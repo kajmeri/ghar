@@ -9226,6 +9226,130 @@
         }
       }
     },
+    "/api/v1/shared-trips/{tripId}/calendar-feed": {
+      "post": {
+        "operationId": "createTripCalendarFeed",
+        "tags": [
+          "trip-guests"
+        ],
+        "description": "Turns on the caller's calendar feed for a trip they're a guest on, or makes a new one so the\nold URL stops working. Holds the trip's dates and each decided slot with a time.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "feed": {
+                      "$ref": "#/components/schemas/TripCalendarFeed"
+                    }
+                  },
+                  "required": [
+                    "feed"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTripCalendarFeed",
+        "tags": [
+          "trip-guests"
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tripId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "tripId"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/sync": {
       "get": {
         "operationId": "syncChanges",
@@ -23099,6 +23223,111 @@
           "matchingCount"
         ]
       },
+      "SharedDay": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "slots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SharedSlot"
+            }
+          }
+        },
+        "required": [
+          "day",
+          "slots"
+        ]
+      },
+      "SharedSlot": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "day": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "band": {
+            "$ref": "#/components/schemas/SlotBand"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SlotKind"
+          },
+          "label": {
+            "type": "string"
+          },
+          "startsAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Instant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endsAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Instant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "decided",
+              "booked",
+              "deciding"
+            ]
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subtitle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "day",
+          "band",
+          "kind",
+          "label",
+          "startsAt",
+          "endsAt",
+          "state",
+          "title",
+          "subtitle",
+          "address",
+          "url"
+        ]
+      },
       "SharedTrip": {
         "type": "object",
         "properties": {
@@ -23265,6 +23494,31 @@
           },
           "going": {
             "$ref": "#/components/schemas/WhoIsGoing"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripPerson"
+            }
+          },
+          "itinerary": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SharedDay"
+            }
+          },
+          "calendarFeed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TripCalendarFeed"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -23276,7 +23530,11 @@
           "coverImageUrl",
           "householdName",
           "mine",
-          "going"
+          "going",
+          "timeZone",
+          "people",
+          "itinerary",
+          "calendarFeed"
         ]
       },
       "ShortText": {
@@ -24952,6 +25210,22 @@
           "transactions"
         ]
       },
+      "TripCalendarFeed": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "webcalUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "webcalUrl"
+        ]
+      },
       "TripDetail": {
         "type": "object",
         "properties": {
@@ -25342,6 +25616,42 @@
           "url",
           "requiresApproval",
           "createdAt"
+        ]
+      },
+      "TripPerson": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "response": {
+            "type": "string",
+            "enum": [
+              "going",
+              "maybe"
+            ]
+          },
+          "partySize": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "host": {
+            "type": "boolean"
+          },
+          "you": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "response",
+          "partySize",
+          "host",
+          "you"
         ]
       },
       "TripStatus": {

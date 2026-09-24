@@ -2,16 +2,21 @@ import { NotFoundError } from '@ghar/core/errors'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { GUEST_STATUS_LABELS, GUEST_STATUS_TONES, SharedTripFrame, SharedTripHero, WhoIsGoing } from '@/app/_components/shared-trip'
+import { GUEST_STATUS_LABELS, GUEST_STATUS_TONES, SharedTripFrame, SharedTripHero } from '@/app/_components/shared-trip'
 import { TripAnswerForm } from '@/app/_components/trip-answer-form'
 import { Pill } from '@/components/ui/pill'
 import { getMembership, getSessionContext } from '@/lib/auth/context'
 import * as guests from '@/lib/travel/guests'
 import { updateMyAnswerAction } from '../actions'
+import { CalendarFeed } from './_components/calendar-feed'
+import { TripPeople } from './_components/trip-people'
+import { TripPlan } from './_components/trip-plan'
 
-// One trip as a guest sees it. The household's own members open it under Travel instead.
+// One trip as a guest sees it: who's going, the plan as it's decided, and their own answer. The
+// household's own members open it under Travel instead.
 
-export const metadata: Metadata = { title: 'Shared trip' }
+// The calendar link on this page is a bearer secret, so it never leaves through Referer.
+export const metadata: Metadata = { title: 'Shared trip', referrer: 'no-referrer' }
 
 export default async function SharedTripPage({ params }: PageProps<'/shared/[tripId]'>) {
   const { tripId } = await params
@@ -32,7 +37,7 @@ export default async function SharedTripPage({ params }: PageProps<'/shared/[tri
           ← Shared with you
         </Link>
         <SharedTripHero trip={trip} eyebrow={`With ${trip.householdName}`} />
-        <WhoIsGoing going={trip.going} />
+        <TripPeople people={trip.people} householdName={trip.householdName} />
         <section aria-labelledby='answer-heading' className='flex flex-col gap-4 rounded-card border border-line bg-surface p-4'>
           <div className='flex items-center justify-between gap-3'>
             <h2 id='answer-heading' className='text-lg font-semibold'>
@@ -51,7 +56,14 @@ export default async function SharedTripPage({ params }: PageProps<'/shared/[tri
             submitLabel='Save answer'
           />
         </section>
-        <p className='text-sm text-ink-muted'>The plan, bookings and everything else about the trip stay with {trip.householdName}.</p>
+        <TripPlan days={trip.itinerary} timeZone={trip.timeZone} householdName={trip.householdName} />
+        <section aria-labelledby='calendar-heading' className='flex flex-col gap-3 rounded-card border border-line bg-surface p-4'>
+          <h2 id='calendar-heading' className='text-lg font-semibold'>
+            In your calendar
+          </h2>
+          <CalendarFeed tripId={trip.id} feed={trip.calendarFeed} />
+        </section>
+        <p className='text-sm text-ink-muted'>Costs, bookings and notes stay with {trip.householdName}.</p>
       </div>
     </SharedTripFrame>
   )
