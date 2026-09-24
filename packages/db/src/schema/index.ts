@@ -1,6 +1,8 @@
 import { HOUSEHOLD_ROLES } from '@ghar/core/auth'
 import { GUEST_RESPONSES, GUEST_SOURCES, MAX_PARTY_SIZE } from '@ghar/core/trip-guests'
 import { POLL_KINDS, POLL_PLACE_MAX_LENGTH } from '@ghar/core/trip-polls'
+import { ARRIVAL_DIRECTIONS, ARRIVAL_MODES, ARRIVAL_NUMBER_MAX_LENGTH, ARRIVAL_PLACE_MAX_LENGTH } from '@ghar/core/trip-arrivals'
+import { ROOM_NAME_MAX_LENGTH, ROOM_SLEEPS_MAX } from '@ghar/core/trip-rooms'
 import { TRIP_POST_MAX_LENGTH, TRIP_UPDATE_KINDS } from '@ghar/core/trip-updates'
 import { BANK_ENVIRONMENTS, BANK_ITEM_STATUSES } from '@ghar/core/banking'
 import { BILL_CADENCES, BILL_NAME_MAX_LENGTH, BILL_NOTES_MAX_LENGTH, BILL_PAYEE_MAX_LENGTH, MAX_BILL_CENTS } from '@ghar/core/bills'
@@ -165,6 +167,8 @@ export const itineraryOptionSource = pgEnum('itinerary_option_source', OPTION_SO
 export const optionVoteValue = pgEnum('option_vote', OPTION_VOTES)
 export const tripPollKind = pgEnum('trip_poll_kind', POLL_KINDS)
 export const tripUpdateKind = pgEnum('trip_update_kind', TRIP_UPDATE_KINDS)
+export const tripArrivalDirection = pgEnum('trip_arrival_direction', ARRIVAL_DIRECTIONS)
+export const tripArrivalMode = pgEnum('trip_arrival_mode', ARRIVAL_MODES)
 export const documentKind = pgEnum('document_kind', DOCUMENT_KINDS)
 export const assetKind = pgEnum('asset_kind', ASSET_KINDS)
 export const billCadence = pgEnum('bill_cadence', BILL_CADENCES)
@@ -1412,6 +1416,103 @@ export const tripUpdates = pgTable(
       'trip_updates_body',
       sql`(${table.kind} = 'post') = (${table.body} is not null) and (${table.body} is null or char_length(${table.body}) <= ${sql.raw(String(TRIP_POST_MAX_LENGTH))})`
     ),
+  ]
+).enableRLS()
+
+/**
+ * How someone gets to the trip and home again: one way in and one way out each, for a household
+ * traveller or a guest, never both. Only the travel itself; a confirmation code, seat or price is
+ * never kept. `ride_user_id` is whoever offered to pick them up or drop them off.
+ */
+export const tripArrivals = pgTable(
+  'trip_arrivals',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tripId: uuid()
+      .notNull()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    personId: uuid().references(() => householdPeople.id, { onDelete: 'cascade' }),
+    guestId: uuid().references(() => tripGuests.id, { onDelete: 'cascade' }),
+    direction: tripArrivalDirection().notNull(),
+    mode: tripArrivalMode().notNull(),
+    at: timestamptz().notNull(),
+    place: text(),
+    number: text(),
+    wantsRide: boolean().notNull().default(false),
+    rideUserId: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('trip_arrivals_person_unique').on(table.tripId, table.personId, table.direction),
+    unique('trip_arrivals_guest_unique').on(table.tripId, table.guestId, table.direction),
+    index('trip_arrivals_trip_idx').on(table.tripId, table.at),
+    index('trip_arrivals_person_idx')
+      .on(table.personId)
+      .where(sql`${table.personId} is not null`),
+    index('trip_arrivals_guest_idx')
+      .on(table.guestId)
+      .where(sql`${table.guestId} is not null`),
+    index('trip_arrivals_ride_idx')
+      .on(table.rideUserId)
+      .where(sql`${table.rideUserId} is not null`),
+    check('trip_arrivals_one_person', sql`(${table.personId} is null) <> (${table.guestId} is null)`),
+    check('trip_arrivals_ride_wanted', sql`${table.rideUserId} is null or ${table.wantsRide}`),
+    check('trip_arrivals_place_length', sql`char_length(${table.place}) <= ${sql.raw(String(ARRIVAL_PLACE_MAX_LENGTH))}`),
+    check('trip_arrivals_number_length', sql`char_length(${table.number}) <= ${sql.raw(String(ARRIVAL_NUMBER_MAX_LENGTH))}`),
+  ]
+).enableRLS()
+
+/** Where people sleep on a trip, set up by the household. */
+export const tripRooms = pgTable(
+  'trip_rooms',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tripId: uuid()
+      .notNull()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    sleeps: smallint().notNull(),
+    createdAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('trip_rooms_trip_idx').on(table.tripId, table.createdAt),
+    // For trip_room_assignments' foreign key, so a room and its people are on the same trip.
+    unique('trip_rooms_id_trip_unique').on(table.id, table.tripId),
+    check('trip_rooms_name_length', sql`char_length(${table.name}) between 1 and ${sql.raw(String(ROOM_NAME_MAX_LENGTH))}`),
+    check('trip_rooms_sleeps', sql`${table.sleeps} between 1 and ${sql.raw(String(ROOM_SLEEPS_MAX))}`),
+  ]
+).enableRLS()
+
+/** Who is in which room. Someone is in one room at most on a trip. */
+export const tripRoomAssignments = pgTable(
+  'trip_room_assignments',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tripId: uuid()
+      .notNull()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    roomId: uuid().notNull(),
+    personId: uuid().references(() => householdPeople.id, { onDelete: 'cascade' }),
+    guestId: uuid().references(() => tripGuests.id, { onDelete: 'cascade' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    foreignKey({
+      name: 'trip_room_assignments_room_fk',
+      columns: [table.roomId, table.tripId],
+      foreignColumns: [tripRooms.id, tripRooms.tripId],
+    }).onDelete('cascade'),
+    unique('trip_room_assignments_person_unique').on(table.tripId, table.personId),
+    unique('trip_room_assignments_guest_unique').on(table.tripId, table.guestId),
+    index('trip_room_assignments_room_idx').on(table.roomId, table.tripId),
+    index('trip_room_assignments_person_idx')
+      .on(table.personId)
+      .where(sql`${table.personId} is not null`),
+    index('trip_room_assignments_guest_idx')
+      .on(table.guestId)
+      .where(sql`${table.guestId} is not null`),
+    check('trip_room_assignments_one_person', sql`(${table.personId} is null) <> (${table.guestId} is null)`),
   ]
 ).enableRLS()
 

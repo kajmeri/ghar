@@ -16,6 +16,10 @@ export interface Participant {
   tripId: string
   hostHouseholdId: string
   timeZone: string
+  /** In the household hosting the trip, or a guest on it. */
+  access: 'household' | 'guest'
+  /** The guest list row, for a guest. */
+  guestId: string | null
   /** Adds, votes and posts: the household's contributors, and admitted guests. */
   canVote: boolean
   /** Opens, closes, picks and sends to everyone: the household's contributors. */
@@ -31,7 +35,14 @@ export async function requireParticipant(ctx: SessionContext, db: Db, tripId: st
     .where(eq(households.id, access.hostHouseholdId))
     .limit(1)
   if (!zone) throw new NotFoundError(NOT_ON_TRIP)
-  const base = { userId: ctx.userId, tripId, hostHouseholdId: access.hostHouseholdId, timeZone: zone.timeZone }
+  const base = {
+    userId: ctx.userId,
+    tripId,
+    hostHouseholdId: access.hostHouseholdId,
+    timeZone: zone.timeZone,
+    access: access.access,
+    guestId: access.guestId,
+  }
   if (access.access === 'guest') return { ...base, canVote: true, canManage: false }
   const membership = await findMembership(ctx, db)
   const canManage = membership !== null && can(membership.role, 'travel.manage')

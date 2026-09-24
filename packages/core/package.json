@@ -37,8 +37,10 @@
     "./search": "./src/search.ts",
     "./sync": "./src/sync.ts",
     "./travel": "./src/travel/index.ts",
+    "./trip-arrivals": "./src/trip-arrivals.ts",
     "./trip-guests": "./src/trip-guests.ts",
     "./trip-polls": "./src/trip-polls.ts",
+    "./trip-rooms": "./src/trip-rooms.ts",
     "./trip-updates": "./src/trip-updates.ts",
     "./trips": "./src/trips.ts"
   },

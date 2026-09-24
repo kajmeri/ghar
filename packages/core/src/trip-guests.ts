@@ -2,7 +2,15 @@ import type { IcsEvent } from './calendar/ics'
 import { addCalendarDays, type CalendarDate } from './dates'
 import { ConflictError, ForbiddenError, ValidationError } from './errors'
 import { normalizeEmail } from './invitations'
-import { SLOT_BANDS, tallyOptionVotes, type OptionStatus, type OptionVote, type SlotBand, type SlotKind, type SlotStatus } from './itinerary'
+import {
+  SLOT_BANDS,
+  tallyOptionVotes,
+  type OptionStatus,
+  type OptionVote,
+  type SlotBand,
+  type SlotKind,
+  type SlotStatus,
+} from './itinerary'
 
 // People from outside the household on a trip: friends, the in-laws, a group of families. A guest
 // is an account let onto one trip, not a member of the household, so nothing here depends on
@@ -337,6 +345,60 @@ export function tripPeople(input: {
         partySize: guest.partySize,
         host: false,
         you: guest.userId === input.viewerUserId,
+      }))
+  return [...hosts, ...guests('going'), ...guests('maybe')]
+}
+
+/**
+ * Someone on the trip who can have an arrival or a bed: one of the household's travellers, by
+ * their household person, or a guest, by their place on the guest list.
+ */
+export interface TripPersonKey {
+  readonly kind: 'traveller' | 'guest'
+  readonly id: string
+}
+
+export function samePerson(a: TripPersonKey, b: TripPersonKey): boolean {
+  return a.kind === b.kind && a.id === b.id
+}
+
+export interface RosterEntry {
+  key: TripPersonKey
+  /** First name only. */
+  name: string | null
+  /** The account, when they have one. A child in the household may not. */
+  userId: string | null
+  /** Beds they need: one for a traveller, the whole party for a guest. */
+  heads: number
+  host: boolean
+}
+
+/** The people in tripPeople, each with the key their arrival and bed are kept under. */
+export function tripRoster(input: {
+  travellers: readonly { readonly personId: string; readonly name: string | null; readonly userId: string | null }[]
+  guests: readonly (GuestState & {
+    readonly guestId: string
+    readonly name: string | null
+    readonly userId: string | null
+    readonly partySize: number
+  })[]
+}): RosterEntry[] {
+  const hosts: RosterEntry[] = input.travellers.map(traveller => ({
+    key: { kind: 'traveller', id: traveller.personId },
+    name: firstName(traveller.name),
+    userId: traveller.userId,
+    heads: 1,
+    host: true,
+  }))
+  const guests = (response: 'going' | 'maybe'): RosterEntry[] =>
+    input.guests
+      .filter(guest => isAdmitted(guest) && guest.response === response)
+      .map(guest => ({
+        key: { kind: 'guest', id: guest.guestId },
+        name: firstName(guest.name),
+        userId: guest.userId,
+        heads: guest.partySize,
+        host: false,
       }))
   return [...hosts, ...guests('going'), ...guests('maybe')]
 }

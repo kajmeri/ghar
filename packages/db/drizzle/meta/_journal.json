@@ -148,6 +148,20 @@
       "when": 1790278194681,
       "tag": "0020_trip_updates",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790281531422,
+      "tag": "0021_trip_arrivals_rooms",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790282237375,
+      "tag": "0022_trip_arrivals_fixes",
+      "breakpoints": true
     }
   ]
 }

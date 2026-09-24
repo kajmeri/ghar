@@ -5,7 +5,7 @@ import 'server-only'
 // script uses, and the few banking lookups that find a
 // connection before its household is known (each says so). Tests import the files directly, because `server-only`
 // refuses to load outside a React Server environment. trip-items.ts and trip-update-records.ts are left out on purpose: their
-// writes take a trip the caller has already resolved.
+// writes take a trip the caller has already resolved. So is trip-roster.ts, which only helps the trip queries.
 export * from './action-tokens'
 export * from './api-tokens'
 export * from './audit'
@@ -38,10 +38,12 @@ export * from './secrets'
 export * from './session'
 export * from './sync'
 export * from './travel'
+export * from './trip-arrivals'
 export * from './trip-bookings'
 export * from './trip-transactions'
 export * from './trip-guests'
 export * from './trip-polls'
+export * from './trip-rooms'
 export * from './trip-updates'
 export * from './trips'
 export type { Actor, Db, GuestActor, RequestContext, SessionContext, SystemContext } from './types'

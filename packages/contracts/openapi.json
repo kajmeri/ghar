@@ -90,6 +90,9 @@
       "name": "travel-hub"
     },
     {
+      "name": "trip-arrivals"
+    },
+    {
       "name": "trip-guests"
     },
     {
@@ -11639,6 +11642,391 @@
         }
       }
     },
+    "/api/v1/trips/{tripId}/arrivals": {
+      "get": {
+        "operationId": "listTripArrivals",
+        "tags": [
+          "trip-arrivals"
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripArrivalsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "saveTripArrival",
+        "tags": [
+          "trip-arrivals"
+        ],
+        "description": "Sets someone's way in or out, replacing what was there. Your own, or the household's travellers for the household.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveTripArrivalBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripArrivalsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/arrivals/read": {
+      "post": {
+        "operationId": "readTripArrival",
+        "tags": [
+          "trip-arrivals"
+        ],
+        "description": "Reads a pasted confirmation into drafts to check, and saves nothing. Null when it didn't say.\nA few a day per account; 409 past that.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadTripArrivalBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "arriving": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/components/schemas/ArrivalDraft"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "leaving": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/components/schemas/ArrivalDraft"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "arriving",
+                        "leaving"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/arrivals/{arrivalId}": {
+      "delete": {
+        "operationId": "deleteTripArrival",
+        "tags": [
+          "trip-arrivals"
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "arrivalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripArrivalsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/arrivals/{arrivalId}/ride": {
+      "put": {
+        "operationId": "setArrivalRide",
+        "tags": [
+          "trip-arrivals"
+        ],
+        "description": "Offers the caller as someone's ride, or takes the offer back. 409 when someone got there first.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "arrivalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetArrivalRideBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripArrivalsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/trips/{tripId}/bookings": {
       "post": {
         "operationId": "linkBookingToTrip",
@@ -15121,6 +15509,362 @@
         }
       }
     },
+    "/api/v1/trips/{tripId}/rooms": {
+      "get": {
+        "operationId": "listTripRooms",
+        "tags": [
+          "trip-arrivals"
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripRoomsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createTripRoom",
+        "tags": [
+          "trip-arrivals"
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTripRoomBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripRoomsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/rooms/placements": {
+      "put": {
+        "operationId": "placeTripPerson",
+        "tags": [
+          "trip-arrivals"
+        ],
+        "description": "Puts someone in a room, moving them out of any other.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaceTripPersonBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripRoomsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/rooms/{roomId}": {
+      "patch": {
+        "operationId": "updateTripRoom",
+        "tags": [
+          "trip-arrivals"
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "roomId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTripRoomBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripRoomsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTripRoom",
+        "tags": [
+          "trip-arrivals"
+        ],
+        "description": "Whoever was in it goes back to having no room.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "roomId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripRoomsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/trips/{tripId}/travel-mode": {
       "get": {
         "operationId": "getTravelMode",
@@ -15601,6 +16345,52 @@
           "ok",
           "late",
           "unknown"
+        ]
+      },
+      "ArrivalDirection": {
+        "type": "string",
+        "enum": [
+          "arriving",
+          "leaving"
+        ]
+      },
+      "ArrivalDraft": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/ArrivalMode"
+          },
+          "at": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "place": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "mode",
+          "at",
+          "place",
+          "number"
+        ]
+      },
+      "ArrivalMode": {
+        "type": "string",
+        "enum": [
+          "flight",
+          "train",
+          "bus",
+          "car",
+          "other"
         ]
       },
       "Asset": {
@@ -19176,6 +19966,25 @@
             "type": "boolean"
           }
         }
+      },
+      "CreateTripRoomBody": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "sleeps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        },
+        "required": [
+          "name",
+          "sleeps"
+        ]
       },
       "DailyPrice": {
         "type": "object",
@@ -23798,6 +24607,29 @@
           "name"
         ]
       },
+      "PlaceTripPersonBody": {
+        "type": "object",
+        "properties": {
+          "person": {
+            "$ref": "#/components/schemas/TripPersonKey"
+          },
+          "roomId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "person",
+          "roomId"
+        ]
+      },
       "PollKind": {
         "type": "string",
         "enum": [
@@ -24008,6 +24840,19 @@
           "prepaid",
           "pay_at_property",
           "refundable"
+        ]
+      },
+      "ReadTripArrivalBody": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16000
+          }
+        },
+        "required": [
+          "text"
         ]
       },
       "RemindFromDays": {
@@ -24415,6 +25260,22 @@
           "token"
         ]
       },
+      "RideState": {
+        "type": "string",
+        "enum": [
+          "none",
+          "wanted",
+          "arranged"
+        ]
+      },
+      "RoomFill": {
+        "type": "string",
+        "enum": [
+          "space",
+          "full",
+          "over"
+        ]
+      },
       "RuleSuggestion": {
         "type": "object",
         "properties": {
@@ -24448,6 +25309,66 @@
           "categoryName",
           "merchantLabel",
           "matchingCount"
+        ]
+      },
+      "SaveTripArrivalBody": {
+        "type": "object",
+        "properties": {
+          "person": {
+            "$ref": "#/components/schemas/TripPersonKey"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/ArrivalDirection"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ArrivalMode"
+          },
+          "at": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "wantsRide": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "person",
+          "direction",
+          "mode",
+          "at"
+        ]
+      },
+      "SetArrivalRideBody": {
+        "type": "object",
+        "properties": {
+          "offer": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "offer"
         ]
       },
       "SharedChoice": {
@@ -26556,6 +27477,149 @@
           "response"
         ]
       },
+      "TripArrival": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "person": {
+            "$ref": "#/components/schemas/TripPersonKey"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "host": {
+            "type": "boolean"
+          },
+          "you": {
+            "type": "boolean"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/ArrivalDirection"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ArrivalMode"
+          },
+          "at": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "place": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "wantsRide": {
+            "type": "boolean"
+          },
+          "ride": {
+            "$ref": "#/components/schemas/RideState"
+          },
+          "rideBy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rideMine": {
+            "type": "boolean"
+          },
+          "canEdit": {
+            "type": "boolean"
+          },
+          "canOfferRide": {
+            "type": "boolean"
+          },
+          "canCancelRide": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "person",
+          "name",
+          "host",
+          "you",
+          "direction",
+          "mode",
+          "at",
+          "place",
+          "number",
+          "wantsRide",
+          "ride",
+          "rideBy",
+          "rideMine",
+          "canEdit",
+          "canOfferRide",
+          "canCancelRide"
+        ]
+      },
+      "TripArrivalPerson": {
+        "type": "object",
+        "properties": {
+          "person": {
+            "$ref": "#/components/schemas/TripPersonKey"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "host": {
+            "type": "boolean"
+          },
+          "you": {
+            "type": "boolean"
+          },
+          "canEdit": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "person",
+          "name",
+          "host",
+          "you",
+          "canEdit"
+        ]
+      },
+      "TripArrivalsValue": {
+        "type": "object",
+        "properties": {
+          "arrivals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripArrival"
+            }
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripArrivalPerson"
+            }
+          },
+          "canRead": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "arrivals",
+          "people",
+          "canRead"
+        ]
+      },
       "TripBudget": {
         "type": "object",
         "properties": {
@@ -27038,6 +28102,26 @@
           "you"
         ]
       },
+      "TripPersonKey": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "traveller",
+              "guest"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ]
+      },
       "TripPoll": {
         "type": "object",
         "properties": {
@@ -27194,6 +28278,102 @@
         "required": [
           "polls",
           "canVote",
+          "canManage"
+        ]
+      },
+      "TripRoom": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sleeps": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "heads": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "fill": {
+            "$ref": "#/components/schemas/RoomFill"
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripRoomPerson"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "sleeps",
+          "heads",
+          "fill",
+          "people"
+        ]
+      },
+      "TripRoomPerson": {
+        "type": "object",
+        "properties": {
+          "person": {
+            "$ref": "#/components/schemas/TripPersonKey"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "heads": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "host": {
+            "type": "boolean"
+          },
+          "you": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "person",
+          "name",
+          "heads",
+          "host",
+          "you"
+        ]
+      },
+      "TripRoomsValue": {
+        "type": "object",
+        "properties": {
+          "rooms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripRoom"
+            }
+          },
+          "unplaced": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripRoomPerson"
+            }
+          },
+          "canManage": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "rooms",
+          "unplaced",
           "canManage"
         ]
       },
@@ -27867,6 +29047,21 @@
         "required": [
           "decideBy"
         ]
+      },
+      "UpdateTripRoomBody": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "sleeps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        }
       },
       "Vote": {
         "type": "string",

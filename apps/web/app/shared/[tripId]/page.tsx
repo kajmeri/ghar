@@ -4,10 +4,13 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { GUEST_STATUS_LABELS, GUEST_STATUS_TONES, SharedTripFrame, SharedTripHero } from '@/app/_components/shared-trip'
 import { TripAnswerForm } from '@/app/_components/trip-answer-form'
+import { TripArrivals } from '@/app/_components/trip-arrivals'
 import { TripPolls } from '@/app/_components/trip-polls'
+import { TripRooms } from '@/app/_components/trip-rooms'
 import { TripUpdates } from '@/app/_components/trip-updates'
 import { Pill } from '@/components/ui/pill'
 import { getMembership, getSessionContext } from '@/lib/auth/context'
+import * as arrivals from '@/lib/travel/arrivals'
 import * as guests from '@/lib/travel/guests'
 import * as polls from '@/lib/travel/polls'
 import * as updates from '@/lib/travel/updates'
@@ -62,6 +65,8 @@ export default async function SharedTripPage({ params }: PageProps<'/shared/[tri
         </section>
         <TripPolls tripId={trip.id} value={await polls.listTripPolls(session, trip.id)} offer={[]} />
         <TripPlan tripId={trip.id} days={trip.itinerary} timeZone={trip.timeZone} householdName={trip.householdName} />
+        <TripArrivals tripId={trip.id} value={await arrivals.listTripArrivals(session, trip.id)} timeZone={trip.timeZone} />
+        <TripRooms tripId={trip.id} value={await arrivals.listTripRooms(session, trip.id)} />
         <TripUpdates tripId={trip.id} value={await updates.listTripUpdates(session, trip.id)} timeZone={trip.timeZone} />
         <section aria-labelledby='calendar-heading' className='flex flex-col gap-3 rounded-card border border-line bg-surface p-4'>
           <h2 id='calendar-heading' className='text-lg font-semibold'>
