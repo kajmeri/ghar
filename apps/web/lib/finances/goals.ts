@@ -1,7 +1,7 @@
 import 'server-only'
-import type { Goal, GoalBody } from '@ghar/contracts'
-import { todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
-import { goalProgress, goalSavedCents, goalSchedule, goalTotals } from '@ghar/core/finances'
+import type { Goal, GoalBody, GoalHistoryValue } from '@ghar/contracts'
+import { addCalendarDays, todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
+import { GOAL_HISTORY_DAYS, goalHistory, goalProgress, goalSavedCents, goalSchedule, goalTotals } from '@ghar/core/finances'
 import * as queries from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
 import { getDb } from '@/lib/db'
@@ -32,10 +32,40 @@ function todayFor(session: Session): CalendarDate {
   return todayInTimeZone(session.household.timeZone)
 }
 
-export async function loadGoals(session: Session): Promise<{ goals: Goal[]; totals: { targetCents: number; savedCents: number } }> {
+/**
+ * Each goal's saved money over the last few months, from its account's daily balances. A goal
+ * with nothing linked, or linked to money owed, has no line to draw.
+ */
+async function loadHistories(session: Session, goals: readonly Goal[], today: CalendarDate): Promise<GoalHistoryValue[]> {
+  const tracked = goals.filter(goal => goal.linkedAccountId !== null && goal.savedCents !== null)
+  const readings = await queries.listAccountSnapshotSeries(session.context, getDb(), {
+    accountIds: [...new Set(tracked.flatMap(goal => (goal.linkedAccountId === null ? [] : [goal.linkedAccountId])))],
+    from: addCalendarDays(today, -GOAL_HISTORY_DAYS),
+  })
+  return tracked.flatMap(goal =>
+    goal.savedCents === null
+      ? []
+      : [
+          {
+            goalId: goal.id,
+            ...goalHistory({
+              targetCents: goal.targetCents,
+              savedCents: goal.savedCents,
+              readings: readings.filter(reading => reading.accountId === goal.linkedAccountId),
+              today,
+            }),
+          },
+        ]
+  )
+}
+
+export async function loadGoals(
+  session: Session
+): Promise<{ goals: Goal[]; totals: { targetCents: number; savedCents: number }; histories: GoalHistoryValue[] }> {
+  const today = todayFor(session)
   const rows = await queries.listGoals(session.context, getDb())
-  const goals = rows.map(row => toGoal(row, todayFor(session)))
-  return { goals, totals: goalTotals(goals) }
+  const goals = rows.map(row => toGoal(row, today))
+  return { goals, totals: goalTotals(goals), histories: await loadHistories(session, goals, today) }
 }
 
 export async function addGoal(session: Session, body: GoalBody): Promise<Goal> {

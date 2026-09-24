@@ -4,6 +4,9 @@ import {
   CATEGORY_MATCHER_TYPES,
   CATEGORY_NAME_MAX_LENGTH,
   CATEGORY_SOURCES,
+  BUDGET_HISTORY_MONTHS,
+  budgetHistory,
+  goalHistory,
   MATCHER_VALUE_MAX_LENGTH,
   monthPace,
   netWorthGlance,
@@ -12,12 +15,14 @@ import {
 } from '@ghar/core/finances'
 import { describe, expect, it } from 'vitest'
 import {
+  budgetHistorySchema,
   categoryColorTokenSchema,
   categoryIconSchema,
   categoryMatcherTypeSchema,
   categorySourceSchema,
   createCategory,
   getSpendingTrends,
+  goalHistorySchema,
   monthPaceSchema,
   netWorthGlanceSchema,
   saveCategoryRule,
@@ -79,6 +84,31 @@ describe('finances contracts', () => {
     }))
     const glance = netWorthGlance(snapshots)
     expect(netWorthGlanceSchema.parse(glance)).toEqual(glance)
+  })
+
+  it('carries months against their plans, and a goal building up, as core works them out', () => {
+    const history = budgetHistory(
+      Array.from({ length: BUDGET_HISTORY_MONTHS }, (_, index) => ({
+        periodStart: `2026-0${4 + index}-01`,
+        planned: true,
+        availableCents: 100_000,
+        spentCents: 90_000 + index * 5_000,
+        closed: index < BUDGET_HISTORY_MONTHS - 1,
+      })),
+      { currentPeriodStart: '2026-09-01' }
+    )
+    expect(budgetHistorySchema.parse(history)).toEqual(history)
+
+    // Six months of daily readings still fits as weeks.
+    const readings = Array.from({ length: 200 }, (_, index) => ({
+      asOf: new Date(Date.UTC(2026, 2, 1 + index)).toISOString().slice(0, 10),
+      balanceCents: index * 100,
+    }))
+    const goal = {
+      goalId: '3f6f1f4e-1b2a-4c3d-8e9f-0a1b2c3d4e5f',
+      ...goalHistory({ targetCents: 50_000, savedCents: 20_000, readings, today: '2026-09-23' }),
+    }
+    expect(goalHistorySchema.parse(goal)).toEqual(goal)
   })
 
   it('holds a category name and a matcher to the same lengths core does', () => {

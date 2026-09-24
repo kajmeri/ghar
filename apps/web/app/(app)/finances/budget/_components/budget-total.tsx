@@ -30,11 +30,12 @@ export function BudgetTotal({ month, currency }: { month: BudgetMonth; currency:
         max={total.availableCents}
         valueText={`of ${money(total.availableCents)}`}
         detail={month.closedAt === null ? `${left} · ${PACE[total.pace]}` : `${left} · the month is closed`}
+        marker={month.closedAt === null ? month.elapsedShare : undefined}
       />
       <p className='text-sm text-ink-muted'>
         {money(total.plannedCents)} planned
         {rolledIn === 0 ? '' : `, ${money(rolledIn)} carried in`}
-        {month.closedAt === null ? ` · ${formatShare(month.elapsedShare)} of the month has gone by` : ''}
+        {month.closedAt === null ? ` · ${formatShare(month.elapsedShare)} of the month has gone by, marked on each bar` : ''}
       </p>
     </section>
   )

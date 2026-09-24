@@ -19,6 +19,7 @@ export default function BudgetLoading() {
             </div>
           ))}
         </div>
+        <div className='h-60 rounded-card border border-line bg-surface md:h-72' />
       </div>
     </LoadingRegion>
   )

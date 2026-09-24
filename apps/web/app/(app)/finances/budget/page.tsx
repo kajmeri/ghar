@@ -3,7 +3,7 @@ import { formatPeriod } from '@ghar/core/finances'
 import type { Metadata } from 'next'
 import { getPageSession } from '@/lib/api/authed'
 import { budgetMonthParam, monthRange } from '@/lib/finances/display'
-import { loadBudgetMonth } from '@/lib/finances/budget'
+import { loadBudgetHistory, loadBudgetMonth } from '@/lib/finances/budget'
 import { listCategoryOptions } from '@/lib/finances/service'
 import { BackLink } from '../../_components/ui/back-link'
 import { EmptyState } from '../../_components/ui/empty-state'
@@ -11,6 +11,7 @@ import { ChartIllustration, LockIllustration } from '../../_components/ui/illust
 import { Notice } from '../../_components/ui/notice'
 import { PageHeader } from '../../_components/ui/page-header'
 import { BudgetActions } from './_components/budget-actions'
+import { BudgetHistory } from './_components/budget-history'
 import { BudgetLines } from './_components/budget-lines'
 import { BudgetTotal } from './_components/budget-total'
 import { MonthNav } from './_components/month-nav'
@@ -35,8 +36,9 @@ export default async function BudgetPage({ searchParams }: PageProps<'/finances/
     )
   }
 
-  const [month, categories] = await Promise.all([
+  const [month, history, categories] = await Promise.all([
     loadBudgetMonth(session, { periodStart: budgetMonthParam(params.month) }),
+    loadBudgetHistory(session),
     listCategoryOptions(session),
   ])
 
@@ -74,6 +76,8 @@ export default async function BudgetPage({ searchParams }: PageProps<'/finances/
         )}
 
         <Unplanned month={month} range={range} currency={currency} />
+
+        <BudgetHistory history={history} viewing={month.periodStart} currency={currency} />
 
         {actions}
       </div>

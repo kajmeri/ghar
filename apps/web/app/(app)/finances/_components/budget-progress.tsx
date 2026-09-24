@@ -29,7 +29,7 @@ export function BudgetProgress({ budget, currency }: { budget: Budget; currency:
     <Link href={budgetHref(budget.periodStart)} className={CARD}>
       <SectionHeader
         title={`${formatCalendarDate(budget.periodStart, 'MMMM')}’s plan`}
-        description={`${formatShare(budget.elapsedShare)} of the month has gone by`}
+        description={`${formatShare(budget.elapsedShare)} of the month has gone by, marked on the bar`}
         action={<ChevronRight aria-hidden className='size-5 text-ink-muted' />}
       />
       <ProgressBar
@@ -38,6 +38,7 @@ export function BudgetProgress({ budget, currency }: { budget: Budget; currency:
         max={budget.availableCents}
         valueText={`${money(budget.spentCents)} of ${money(budget.availableCents)}`}
         detail={`${left} · ${PACE[budget.pace]}`}
+        marker={budget.elapsedShare}
       />
     </Link>
   )

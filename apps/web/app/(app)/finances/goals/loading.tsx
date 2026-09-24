@@ -11,6 +11,7 @@ export default function GoalsLoading() {
           {[0, 1, 2].map(row => (
             <div key={row} className='rounded-card border border-line bg-surface p-4 md:p-5'>
               <ProgressBarSkeleton />
+              <div className='mt-4 h-12 rounded-control bg-line/60' />
             </div>
           ))}
         </div>

@@ -4618,6 +4618,50 @@
         }
       }
     },
+    "/api/v1/finances/budget/history": {
+      "get": {
+        "operationId": "getBudgetHistory",
+        "tags": [
+          "finances"
+        ],
+        "description": "Owners and adults. The last six months, this one included, each against what it planned.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetHistory"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/finances/budget/lines": {
       "put": {
         "operationId": "setBudgetLine",
@@ -4750,7 +4794,7 @@
         "tags": [
           "finances"
         ],
-        "description": "Owners and adults. Oldest first, with what each one's linked account has in it today.",
+        "description": "Owners and adults. Oldest first, with what each one's linked account has in it today and how\nthat has built up.",
         "responses": {
           "200": {
             "description": "OK",
@@ -4784,11 +4828,18 @@
                         "targetCents",
                         "savedCents"
                       ]
+                    },
+                    "histories": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GoalHistory"
+                      }
                     }
                   },
                   "required": [
                     "goals",
-                    "totals"
+                    "totals",
+                    "histories"
                   ]
                 }
               }
@@ -15008,6 +15059,85 @@
           "completed"
         ]
       },
+      "BudgetHistory": {
+        "type": "object",
+        "properties": {
+          "months": {
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "periodStart": {
+                  "$ref": "#/components/schemas/CalendarDate"
+                },
+                "planned": {
+                  "type": "boolean"
+                },
+                "availableCents": {
+                  "$ref": "#/components/schemas/Cents"
+                },
+                "spentCents": {
+                  "$ref": "#/components/schemas/Cents"
+                },
+                "closed": {
+                  "type": "boolean"
+                },
+                "leftCents": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Cents"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "within",
+                    "over",
+                    "unplanned"
+                  ]
+                },
+                "partial": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "periodStart",
+                "planned",
+                "availableCents",
+                "spentCents",
+                "closed",
+                "leftCents",
+                "status",
+                "partial"
+              ]
+            }
+          },
+          "domain": {
+            "$ref": "#/components/schemas/ChartDomain"
+          },
+          "withinCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "plannedCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "months",
+          "domain",
+          "withinCount",
+          "plannedCount"
+        ]
+      },
       "BudgetLine": {
         "type": "object",
         "properties": {
@@ -18131,6 +18261,64 @@
         "required": [
           "name",
           "targetCents"
+        ]
+      },
+      "GoalHistory": {
+        "type": "object",
+        "properties": {
+          "goalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "points": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "asOf": {
+                  "$ref": "#/components/schemas/CalendarDate"
+                },
+                "savedCents": {
+                  "$ref": "#/components/schemas/Cents"
+                }
+              },
+              "required": [
+                "asOf",
+                "savedCents"
+              ]
+            }
+          },
+          "maxCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "perMonthCents": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cents"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projectedOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "goalId",
+          "points",
+          "maxCents",
+          "perMonthCents",
+          "projectedOn"
         ]
       },
       "HealthResponse": {

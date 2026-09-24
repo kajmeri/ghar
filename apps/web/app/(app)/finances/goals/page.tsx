@@ -33,7 +33,7 @@ export default async function GoalsPage() {
   }
 
   const canManage = can(role, 'finances.manage')
-  const [{ goals, totals }, accounts] = await Promise.all([loadGoals(session), canManage ? listAccountOptions(session) : []])
+  const [{ goals, totals, histories }, accounts] = await Promise.all([loadGoals(session), canManage ? listAccountOptions(session) : []])
   const { currency, timeZone } = session.household
   const today = todayInTimeZone(timeZone)
   const money = (cents: number) => formatCents(cents, { currency })
@@ -76,7 +76,7 @@ export default async function GoalsPage() {
           />
         </section>
 
-        <GoalList goals={goals} accounts={accounts} currency={currency} today={today} canManage={canManage} />
+        <GoalList goals={goals} histories={histories} accounts={accounts} currency={currency} today={today} canManage={canManage} />
       </div>
     </>
   )

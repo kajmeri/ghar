@@ -32,6 +32,7 @@ export function ProgressBar({
   valueText,
   detail,
   approachingAt,
+  marker,
   className,
 }: {
   label: string
@@ -44,6 +45,11 @@ export function ProgressBar({
   detail?: string
   /** The fraction of max where the bar turns to caution. Defaults to 80%. */
   approachingAt?: number
+  /**
+   * A tick at this fraction of the bar, for where the value would be if it went evenly: how far a
+   * month has got. Left off at either end, where it would only sit on the bar's edge.
+   */
+  marker?: number
   className?: string
 }) {
   const status = progressStatus(value, max, { approachingAt })
@@ -55,16 +61,25 @@ export function ProgressBar({
         <p className='min-w-0 font-medium break-words'>{label}</p>
         {valueText ? <p className='text-sm text-ink-muted'>{valueText}</p> : null}
       </div>
-      <div
-        role='progressbar'
-        aria-label={label}
-        aria-valuemin={0}
-        aria-valuemax={max}
-        aria-valuenow={Math.min(Math.max(value, 0), max)}
-        aria-valuetext={[valueText, STATUS_LABEL[status]].filter(Boolean).join(', ')}
-        className='h-2 overflow-hidden rounded-pill bg-line inset-ring inset-ring-line-strong'
-      >
-        <div className={cn('h-full rounded-pill', FILL[status])} style={{ width: `${percent}%` }} />
+      <div className='relative'>
+        <div
+          role='progressbar'
+          aria-label={label}
+          aria-valuemin={0}
+          aria-valuemax={max}
+          aria-valuenow={Math.min(Math.max(value, 0), max)}
+          aria-valuetext={[valueText, STATUS_LABEL[status]].filter(Boolean).join(', ')}
+          className='h-2 overflow-hidden rounded-pill bg-line inset-ring inset-ring-line-strong'
+        >
+          <div className={cn('h-full rounded-pill', FILL[status])} style={{ width: `${percent}%` }} />
+        </div>
+        {marker !== undefined && marker > 0 && marker < 1 ? (
+          <span
+            aria-hidden
+            className='absolute -inset-y-1 w-0.5 -translate-x-1/2 rounded-pill bg-ink ring-2 ring-surface'
+            style={{ left: `${marker * 100}%` }}
+          />
+        ) : null}
       </div>
       {detail ? (
         <p className={cn('flex items-center gap-1.5 text-sm', DETAIL[status])}>

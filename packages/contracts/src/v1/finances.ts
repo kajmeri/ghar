@@ -576,6 +576,44 @@ export const getBudget = defineEndpoint({
   response: budgetMonthSchema,
 })
 
+/** Mirrors BUDGET_HISTORY_MONTHS in @ghar/core/finances. */
+const BUDGET_HISTORY_MONTHS = 6
+
+export const budgetHistorySchema = z.object({
+  /** Oldest first, from the first month anyone planned, up to this one. Empty until then. */
+  months: z
+    .array(
+      z.object({
+        periodStart: calendarDateSchema,
+        /** Whether the month had a plan to be measured against. */
+        planned: z.boolean(),
+        /** Planned plus what rolled in. */
+        availableCents: centsSchema,
+        /** Everything spent: the lines, the unbudgeted and the unfiled. */
+        spentCents: centsSchema,
+        closed: z.boolean(),
+        /** What was left, or negative for how far past the plan it went. Null without a plan. */
+        leftCents: centsSchema.nullable(),
+        status: z.enum(['within', 'over', 'unplanned']),
+        /** The month the household is in, which isn't over yet. */
+        partial: z.boolean(),
+      })
+    )
+    .max(BUDGET_HISTORY_MONTHS),
+  domain: chartDomainSchema,
+  /** Of the whole months that had a plan, how many stayed within it. */
+  withinCount: z.int().min(0),
+  plannedCount: z.int().min(0),
+})
+export type BudgetHistoryValue = z.infer<typeof budgetHistorySchema>
+
+/** Owners and adults. The last six months, this one included, each against what it planned. */
+export const getBudgetHistory = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/finances/budget/history',
+  response: budgetHistorySchema,
+})
+
 export const budgetLineBodySchema = z.object({
   periodStart: monthStartSchema,
   categoryId: z.uuid(),
@@ -657,6 +695,20 @@ export const goalSchema = z.object({
 })
 export type Goal = z.infer<typeof goalSchema>
 
+/** A goal's saved money over the last six months, and when it gets there at that rate. */
+export const goalHistorySchema = z.object({
+  goalId: z.uuid(),
+  /** Oldest first, one a week, ending today on what's saved now. */
+  points: z.array(z.object({ asOf: calendarDateSchema, savedCents: centsSchema })).max(30),
+  /** The top of the chart: the target, or more if the balance has gone past it. */
+  maxCents: centsSchema,
+  /** What has gone in a month, going by the last three. Null without four weeks of history. */
+  perMonthCents: centsSchema.nullable(),
+  /** When the target is reached at that rate. Null when reached, not rising, or too far off. */
+  projectedOn: calendarDateSchema.nullable(),
+})
+export type GoalHistoryValue = z.infer<typeof goalHistorySchema>
+
 export const goalBodySchema = z.object({
   name: goalNameSchema,
   targetCents: centsSchema.min(1).max(1_000_000_000),
@@ -668,7 +720,10 @@ export type GoalBody = z.output<typeof goalBodySchema>
 
 const goalParamsSchema = z.object({ goalId: z.uuid() })
 
-/** Owners and adults. Oldest first, with what each one's linked account has in it today. */
+/**
+ * Owners and adults. Oldest first, with what each one's linked account has in it today and how
+ * that has built up.
+ */
 export const listGoals = defineEndpoint({
   method: 'GET',
   path: '/api/v1/finances/goals',
@@ -676,6 +731,8 @@ export const listGoals = defineEndpoint({
     goals: z.array(goalSchema),
     /** Every goal added up, so the screen can say where the household stands in one line. */
     totals: z.object({ targetCents: centsSchema, savedCents: centsSchema }),
+    /** One for each goal with an account holding its money. None for one linked to a debt. */
+    histories: z.array(goalHistorySchema),
   }),
 })
 

@@ -39,6 +39,7 @@ export function BudgetLines({
               max={line.availableCents}
               valueText={`${money(line.actualCents)} of ${money(line.availableCents)}`}
               detail={line.remainingCents >= 0 ? `${money(line.remainingCents)} left` : `${money(-line.remainingCents)} over`}
+              marker={month.closedAt === null ? month.elapsedShare : undefined}
             />
           )
           return (

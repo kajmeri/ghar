@@ -1,8 +1,8 @@
 import 'server-only'
-import type { BudgetLine, BudgetMonth } from '@ghar/contracts'
+import type { BudgetHistoryValue, BudgetLine, BudgetMonth } from '@ghar/contracts'
 import { todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
 import { NotFoundError } from '@ghar/core/errors'
-import { monthStart, periodEnd } from '@ghar/core/finances'
+import { addMonths, BUDGET_HISTORY_MONTHS, budgetHistory, monthStart, periodEnd } from '@ghar/core/finances'
 import * as queries from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
 import { getDb } from '@/lib/db'
@@ -48,6 +48,32 @@ export async function loadBudgetMonth(session: Session, input: { periodStart?: s
     queries.listCategories(context, db),
   ])
   return toBudgetMonth(period, { today, names: new Map(categories.map(row => [row.id, row.name])) })
+}
+
+/**
+ * The last few months against their plans, this one included. Each is read the way its own page
+ * reads it, so a closed month shows the figures it was closed with.
+ */
+export async function loadBudgetHistory(session: Session): Promise<BudgetHistoryValue> {
+  const { context } = session
+  const db = getDb()
+  const today = todayInTimeZone(session.household.timeZone)
+  const current = monthStart(today)
+  const periods = await Promise.all(
+    Array.from({ length: BUDGET_HISTORY_MONTHS }, (_, index) =>
+      queries.getBudgetPeriod(context, db, { periodStart: addMonths(current, -index), today })
+    )
+  )
+  return budgetHistory(
+    periods.map(period => ({
+      periodStart: period.periodStart,
+      planned: period.summary.lines.length > 0,
+      availableCents: period.summary.total.availableCents,
+      spentCents: period.summary.total.spentCents,
+      closed: period.budget?.closedAt != null,
+    })),
+    { currentPeriodStart: current }
+  )
 }
 
 /**

@@ -1,9 +1,10 @@
 'use client'
 
-import type { Account, Goal } from '@ghar/contracts'
+import type { Account, Goal, GoalHistoryValue } from '@ghar/contracts'
 import { formatCents } from '@ghar/core/money'
 import { useState } from 'react'
 import { GoalDetail } from './goal-detail'
+import { GoalLine } from './goal-line'
 import { GoalSheet } from './goal-sheet'
 import { SavedBar } from './saved-bar'
 
@@ -13,12 +14,14 @@ const TAPPABLE = 'transition-colors hover:bg-paper focus-visible:ring-2 focus-vi
 /** Every goal, each against the account behind it. A row opens the goal for editing. */
 export function GoalList({
   goals,
+  histories,
   accounts,
   currency,
   today,
   canManage,
 }: {
   goals: Goal[]
+  histories: GoalHistoryValue[]
   accounts: Account[]
   currency: string
   today: string
@@ -26,11 +29,13 @@ export function GoalList({
 }) {
   const [editing, setEditing] = useState<Goal | null>(null)
   const money = (cents: number) => formatCents(cents, { currency })
+  const historyOf = new Map(histories.map(history => [history.goalId, history]))
 
   return (
     <>
       <ul className='flex flex-col gap-3'>
         {goals.map(goal => {
+          const history = historyOf.get(goal.id)
           const body = (
             <>
               <SavedBar
@@ -43,6 +48,11 @@ export function GoalList({
                 detail={<GoalDetail goal={goal} currency={currency} />}
               />
               {goal.accountLabel === null ? null : <p className='mt-2 text-sm text-ink-muted'>In {goal.accountLabel}</p>}
+              {history ? (
+                <div className='mt-4 border-t border-line pt-3'>
+                  <GoalLine history={history} targetCents={goal.targetCents} reached={goal.reached} currency={currency} />
+                </div>
+              ) : null}
             </>
           )
           return (

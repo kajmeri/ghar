@@ -1,5 +1,5 @@
 import type { PGlite } from '@electric-sql/pglite'
-import type { BudgetLine, BudgetMonth, RequestContext } from '@ghar/contracts'
+import type { BudgetHistoryValue, BudgetLine, BudgetMonth, RequestContext } from '@ghar/contracts'
 import { invitationExpiresAt } from '@ghar/core/invitations'
 import {
   acceptInvitation,
@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
 import { POST as close } from '@/app/api/v1/finances/budget/close/route'
 import { POST as copy } from '@/app/api/v1/finances/budget/copy/route'
+import { GET as getHistory } from '@/app/api/v1/finances/budget/history/route'
 import { DELETE as removeLine } from '@/app/api/v1/finances/budget/lines/[lineId]/route'
 import { PUT as putLine } from '@/app/api/v1/finances/budget/lines/route'
 import { GET as getBudget } from '@/app/api/v1/finances/budget/route'
@@ -300,5 +301,38 @@ describe('copying a month and closing it', () => {
     const august = await readMonth({ periodStart: AUGUST })
     expect(august.body.canClose).toBe(false)
     expect(august.body.lines).toHaveLength(1)
+  })
+})
+
+describe('months against their plans', () => {
+  async function readHistory(): Promise<{ status: number; body: BudgetHistoryValue }> {
+    const response = await getHistory(new Request('http://localhost/api/v1/finances/budget/history'), { params: Promise.resolve({}) })
+    return { status: response.status, body: (await response.json()) as BudgetHistoryValue }
+  }
+
+  it('starts at the first month planned, and reads a closed one as it finished', async () => {
+    test.session = adult
+    const { status, body } = await readHistory()
+
+    expect(status).toBe(200)
+    // Nothing was planned before August, so the months before it aren't there to count against.
+    expect(body.months.map(month => month.periodStart)).toEqual([AUGUST, SEPTEMBER])
+    expect(body.months[0]).toMatchObject({
+      planned: true,
+      closed: true,
+      spentCents: 20_000,
+      leftCents: 10_000,
+      status: 'within',
+      partial: false,
+    })
+    expect(body.months[1]).toMatchObject({ planned: true, closed: false, spentCents: 19_000, partial: true })
+    expect(body).toMatchObject({ withinCount: 1, plannedCount: 1 })
+  })
+
+  it('keeps members out, and answers nothing at all when signed out', async () => {
+    test.session = member
+    expect((await readHistory()).status).toBe(403)
+    test.session = null
+    expect((await readHistory()).status).toBe(401)
   })
 })

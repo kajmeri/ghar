@@ -1,5 +1,5 @@
 import type { PGlite } from '@electric-sql/pglite'
-import type { Goal, RequestContext } from '@ghar/contracts'
+import type { Goal, GoalHistoryValue, RequestContext } from '@ghar/contracts'
 import { invitationExpiresAt } from '@ghar/core/invitations'
 import {
   acceptInvitation,
@@ -8,9 +8,12 @@ import {
   createHousehold,
   createInvitation,
   listAccounts,
+  takeNetWorthSnapshot,
   type Db,
 } from '@ghar/db/queries'
+import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { accountSnapshots } from '@ghar/db/schema'
 import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
 import { DELETE as removeGoal, PUT as putGoal } from '@/app/api/v1/finances/goals/[goalId]/route'
 import { GET as listGoals, POST as createGoal } from '@/app/api/v1/finances/goals/route'
@@ -41,6 +44,7 @@ let accounts: Record<string, string>
 interface GoalsBody {
   goals: Goal[]
   totals: { targetCents: number; savedCents: number }
+  histories: GoalHistoryValue[]
 }
 
 async function readGoals(): Promise<{ status: number; body: GoalsBody }> {
@@ -153,6 +157,9 @@ beforeAll(async () => {
   })
 
   accounts = Object.fromEntries((await listAccounts(owner, db)).map(row => [row.name, row.id]))
+  // A reading from July, when savings held less, so a goal on it has a line going up.
+  await takeNetWorthSnapshot({ householdId: household.id, userId: null }, db, { today: '2026-07-01', now: new Date() })
+  await db.update(accountSnapshots).set({ balanceCents: 100_000 }).where(eq(accountSnapshots.asOf, '2026-07-01'))
   test.session = owner
 }, 60_000)
 
@@ -212,6 +219,23 @@ describe('keeping goals', () => {
     const { body: all } = await readGoals()
     expect(all.goals.map(goal => goal.name).sort()).toEqual(['Emergency fund', 'New roof'])
     expect(all.totals).toEqual({ targetCents: 3_000_000, savedCents: 250_000 })
+  })
+
+  it('draws how the linked account built up, and none for a goal with nothing behind it', async () => {
+    test.session = owner
+    const { body } = await readGoals()
+    const fund = body.goals.find(goal => goal.name === 'Emergency fund')
+    expect(body.histories).toHaveLength(1)
+    expect(body.histories[0]).toMatchObject({
+      goalId: fund?.id,
+      points: [
+        { asOf: '2026-07-01', savedCents: 100_000 },
+        { asOf: '2026-09-23', savedCents: 250_000 },
+      ],
+      maxCents: 1_000_000,
+    })
+    expect(body.histories[0]?.perMonthCents).toBeGreaterThan(0)
+    expect(body.histories[0]?.projectedOn).not.toBeNull()
   })
 
   it('counts nothing for a card, because a balance owed is not money put aside', async () => {
