@@ -34,6 +34,7 @@
     "./packing": "./src/packing.ts",
     "./people": "./src/people.ts",
     "./progress": "./src/progress.ts",
+    "./quick-log": "./src/quick-log.ts",
     "./redirects": "./src/redirects.ts",
     "./renewals": "./src/renewals.ts",
     "./search": "./src/search.ts",

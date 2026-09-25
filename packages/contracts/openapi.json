@@ -81,6 +81,9 @@
       "name": "people"
     },
     {
+      "name": "quick-log"
+    },
+    {
       "name": "renewals"
     },
     {
@@ -10251,6 +10254,154 @@
                   },
                   "required": [
                     "deleted"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/quick-log/apply": {
+      "post": {
+        "operationId": "applyQuickLog",
+        "tags": [
+          "quick-log"
+        ],
+        "description": "Records it. 409 when the bill's due date was marked paid since, so an undo never takes back\nsomebody else's mark; 400 for a date in the future.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuickLogApplyBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "undo": {
+                      "$ref": "#/components/schemas/QuickLogUndo"
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "undo"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/quick-log/parse": {
+      "post": {
+        "operationId": "parseQuickLog",
+        "tags": [
+          "quick-log"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "choices": {
+                      "maxItems": 3,
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/QuickLogProposal"
+                      }
+                    },
+                    "problem": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "choices",
+                    "problem"
                   ]
                 }
               }
@@ -28090,6 +28241,193 @@
         "type": [
           "boolean",
           "string"
+        ]
+      },
+      "QuickLogApplyBody": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "bill_paid"
+              },
+              "billId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "dueOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "paidOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              }
+            },
+            "required": [
+              "action",
+              "billId",
+              "dueOn",
+              "paidOn"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "task_done"
+              },
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "completedOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "costCents": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000000,
+                    "$ref": "#/components/schemas/Cents"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "action",
+              "taskId",
+              "completedOn"
+            ]
+          }
+        ]
+      },
+      "QuickLogProposal": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "bill_paid"
+              },
+              "billId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "dueOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "paidOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "billName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "billId",
+              "dueOn",
+              "paidOn",
+              "billName"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "task_done"
+              },
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "completedOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "costCents": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Cents"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "taskTitle": {
+                "type": "string"
+              },
+              "assetName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "action",
+              "taskId",
+              "completedOn",
+              "costCents",
+              "taskTitle",
+              "assetName"
+            ]
+          }
+        ]
+      },
+      "QuickLogUndo": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "bill_paid"
+              },
+              "billId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "dueOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              }
+            },
+            "required": [
+              "action",
+              "billId",
+              "dueOn"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "task_done"
+              },
+              "taskId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "entryId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": [
+              "action",
+              "taskId",
+              "entryId"
+            ]
+          }
         ]
       },
       "RatePlan": {

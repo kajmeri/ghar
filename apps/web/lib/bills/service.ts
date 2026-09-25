@@ -121,6 +121,15 @@ export async function listBillsWithStatus(ctx: RequestContext, db: Db, timeZone:
     )
 }
 
+/** Every bill with its recent and upcoming due dates, for the quick log to settle one. */
+export async function listBillsWithOccurrences(
+  session: Session
+): Promise<{ id: string; name: string; payee: string; occurrences: BillOccurrence[] }[]> {
+  const db = getDb()
+  const { bills } = await withOccurrences(session.context, db, await queries.listBills(session.context, db), session.household.timeZone)
+  return bills.map(({ row, occurrences }) => ({ id: row.id, name: row.name, payee: row.payee, occurrences }))
+}
+
 export async function listBills(session: Session): Promise<{ currency: string; bills: Bill[] }> {
   const bills = await listBillsWithStatus(session.context, getDb(), session.household.timeZone)
   return { currency: session.household.currency, bills }

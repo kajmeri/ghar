@@ -9,10 +9,12 @@ import { getAttention } from '@/lib/attention/service'
 import { billAmountText, billTone, occurrenceText } from '@/lib/bills/display'
 import { healthDueStatus, refillStatus } from '@/lib/health/display'
 import * as households from '@/lib/households/service'
+import { canQuickLog } from '@/lib/quick-log/service'
 import { expiryHref, expiryLabel, expiryStatus } from '@/lib/renewals/display'
 import { MoneyGlance } from './_components/money-glance'
 import { EmptyState } from './_components/ui/empty-state'
 import { ChecklistIllustration, PeopleIllustration } from './_components/ui/illustrations'
+import { QuickLog } from './_components/quick-log'
 import { PageHeader } from './_components/ui/page-header'
 import { ROW_LINK } from './_components/ui/row-link'
 import { SectionHeader } from './_components/ui/section-header'
@@ -34,11 +36,13 @@ export default async function HomePage() {
   const bills = attention.bills ?? []
   const header = <PageHeader title={household.name} description={formatInstant(new Date(), household.timeZone, { dateStyle: 'full' })} />
   const moneyGlance = money === null ? null : <MoneyGlance money={money} currency={currency} />
+  const quickLog = canQuickLog(session) ? <QuickLog today={today} currency={household.currency} /> : null
 
   if (maintenance.length === 0 && bills.length === 0 && expiries.length === 0 && health.length === 0 && refills.length === 0) {
     return (
       <>
         {header}
+        {quickLog === null ? null : <div className='mb-8'>{quickLog}</div>}
         {moneyGlance === null ? null : <div className='mb-8'>{moneyGlance}</div>}
         {inviteFirst ? (
           <EmptyState
@@ -71,6 +75,7 @@ export default async function HomePage() {
     <>
       {header}
       <div className='flex flex-col gap-8'>
+        {quickLog}
         {bills.length > 0 ? (
           <section aria-labelledby='bills-heading'>
             <SectionHeader
