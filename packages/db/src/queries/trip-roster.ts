@@ -20,7 +20,9 @@ export async function loadRoster(db: Db, tripId: string): Promise<RosterEntry[]>
       .innerJoin(householdPeople, eq(householdPeople.id, tripTravellers.personId))
       .leftJoin(profiles, eq(profiles.id, householdPeople.userId))
       .where(eq(tripTravellers.tripId, tripId))
-      .orderBy(asc(tripTravellers.createdAt), asc(householdPeople.id)),
+      // The household's own order: who joined it first. Travellers added together share a
+      // createdAt on trip_travellers, so that column can't settle it.
+      .orderBy(asc(householdPeople.createdAt), asc(householdPeople.id)),
     db
       .select({
         guestId: tripGuests.id,
