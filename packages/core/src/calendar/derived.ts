@@ -1,4 +1,5 @@
 import { addCalendarDays, type CalendarDate } from '../dates'
+import { HEALTH_DUE_SOON_DAYS } from '../health'
 import type { Cents } from '../money'
 import { bookingTitle } from '../travel/bookings'
 import type { BookingFields } from '../travel/types'
@@ -43,6 +44,17 @@ export interface ExpiryDue {
   expiresOn: CalendarDate
   /** A renewal that renews on its own. Its day is a renewal, not a deadline, so it takes no colour. */
   autoRenews?: boolean
+}
+
+/** A person's checkup or shot at its next due date. */
+export interface HealthDue {
+  scheduleId: string
+  personId: string
+  /** What it's called: "Dentist", "Flu shot". */
+  name: string
+  /** Whose it is, or null when it's the reader's own. */
+  personName: string | null
+  dueOn: CalendarDate
 }
 
 /** A connected card or loan's next payment, as Plaid Liabilities last reported it. */
@@ -205,4 +217,20 @@ function expiryRef(expiry: ExpiryDue): CalendarItemRef {
     case 'renewal':
       return { kind: 'renewal', renewalId: expiry.id }
   }
+}
+
+/** Overdue is late, within a month is soon: the same line the health screen draws. */
+export function healthItems(dues: readonly HealthDue[], today: CalendarDate): CalendarItemInput[] {
+  return dues.map(due => ({
+    id: `health:${due.scheduleId}`,
+    source: 'health',
+    title: due.personName === null ? `${due.name} due` : `${due.name} due for ${due.personName}`,
+    location: null,
+    ...allDayRange(due.dueOn, due.dueOn),
+    allDay: true,
+    category: 'personal',
+    tone: due.dueOn < today ? 'negative' : due.dueOn <= addCalendarDays(today, HEALTH_DUE_SOON_DAYS) ? 'caution' : 'default',
+    recurring: false,
+    ref: { kind: 'health', scheduleId: due.scheduleId, personId: due.personId },
+  }))
 }

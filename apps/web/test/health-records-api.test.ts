@@ -1,5 +1,5 @@
 import type { PGlite } from '@electric-sql/pglite'
-import type { HealthEvent, HealthPerson, RequestContext } from '@ghar/contracts'
+import type { HealthEvent, HealthPerson, HealthSchedule, RequestContext } from '@ghar/contracts'
 import { invitationExpiresAt } from '@ghar/core/invitations'
 import { acceptInvitation, createHousehold, createInvitation, createPerson, requireOwnPerson, type Db } from '@ghar/db/queries'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
@@ -7,6 +7,8 @@ import { createAuthUser, createTestDatabase } from '../../../packages/db/test/su
 import { DELETE as deleteEvent, GET as getEvent, PUT as updateEvent } from '@/app/api/v1/health-records/events/[eventId]/route'
 import { GET as listEvents, POST as createEvent } from '@/app/api/v1/health-records/events/route'
 import { GET as listPeople } from '@/app/api/v1/health-records/people/route'
+import { DELETE as deleteSchedule, PUT as updateSchedule } from '@/app/api/v1/health-records/schedules/[scheduleId]/route'
+import { GET as listSchedules, POST as createSchedule } from '@/app/api/v1/health-records/schedules/route'
 
 // Health records through /api/v1, the way the phone will use them, against PGlite.
 
@@ -124,5 +126,50 @@ describe('health records through the API', () => {
     const everyone = (await call(listPeople, 'GET')).body.people as HealthPerson[]
     expect(everyone[0]?.name).toBe('You')
     expect(everyone.find(person => person.id === child)).toMatchObject({ eventCount: 1, lastOn: '2026-01-10', canLog: true })
+  })
+
+  it('keeps a schedule whose next date moves when a visit is logged', async () => {
+    test.session = owner
+    const created = await call(createSchedule, 'POST', {
+      body: { personId: child, kind: 'eye', cadenceMonths: 24, firstDueOn: '2026-01-01' },
+    })
+    expect(created.status).toBe(201)
+    const schedule = created.body.schedule as HealthSchedule
+    expect(schedule).toMatchObject({ name: 'Eye test', title: null, lastOn: null, dueOn: '2026-01-01', state: 'overdue', canEdit: true })
+
+    await call(createEvent, 'POST', { body: { personId: child, kind: 'eye', occurredOn: '2026-02-01' } })
+    const [moved] = (await call(listSchedules, 'GET', { search: `?personId=${child}` })).body.schedules as HealthSchedule[]
+    expect(moved).toMatchObject({ lastOn: '2026-02-01', dueOn: '2028-02-01', state: 'scheduled' })
+
+    // One schedule per person, kind and title.
+    const twice = await call(createSchedule, 'POST', {
+      body: { personId: child, kind: 'eye', cadenceMonths: 12, firstDueOn: '2026-01-01' },
+    })
+    expect(twice.status).toBe(400)
+    expect(
+      await call(createSchedule, 'POST', { body: { personId: child, kind: 'eye', cadenceMonths: 0, firstDueOn: '2026-01-01' } })
+    ).toMatchObject({
+      status: 400,
+    })
+
+    const updated = await call(updateSchedule, 'PUT', {
+      params: { scheduleId: schedule.id },
+      body: { personId: child, kind: 'eye', cadenceMonths: 12, firstDueOn: '2026-01-01' },
+    })
+    expect(updated.body.schedule).toMatchObject({ cadenceMonths: 12, dueOn: '2027-02-01' })
+
+    test.session = member
+    expect((await call(listSchedules, 'GET')).body.schedules).toEqual([])
+    expect((await call(deleteSchedule, 'DELETE', { params: { scheduleId: schedule.id } })).status).toBe(404)
+
+    test.session = viewer
+    expect(
+      (await call(createSchedule, 'POST', { body: { personId: viewerPerson, kind: 'dental', cadenceMonths: 6, firstDueOn: '2026-10-01' } }))
+        .status
+    ).toBe(403)
+
+    test.session = owner
+    expect((await call(deleteSchedule, 'DELETE', { params: { scheduleId: schedule.id } })).body).toEqual({ scheduleId: schedule.id })
+    expect((await call(listSchedules, 'GET')).body.schedules).toEqual([])
   })
 })

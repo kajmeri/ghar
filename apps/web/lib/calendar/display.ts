@@ -34,6 +34,7 @@ export const SOURCE_LABELS: Record<FeedSource, string> = {
   bills: 'Bills',
   maintenance: 'Maintenance',
   expiries: 'Expiries',
+  health: 'Health',
 }
 
 /** Color on an event says something about it, so the choices are named by meaning. */
@@ -227,6 +228,8 @@ export function itemHref(item: CalendarItem): string {
       return `/home/assets/${item.ref.assetId}`
     case 'renewal':
       return `/renewals/${item.ref.renewalId}`
+    case 'health':
+      return `/health?person=${item.ref.personId}`
   }
 }
 

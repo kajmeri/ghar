@@ -7,6 +7,7 @@ import { Pill } from '@/components/ui/pill'
 import { getPageSession } from '@/lib/api/authed'
 import { getAttention } from '@/lib/attention/service'
 import { billAmountText, billTone, occurrenceText } from '@/lib/bills/display'
+import { healthDueStatus } from '@/lib/health/display'
 import * as households from '@/lib/households/service'
 import { expiryHref, expiryLabel, expiryStatus } from '@/lib/renewals/display'
 import { MoneyGlance } from './_components/money-glance'
@@ -29,12 +30,12 @@ export default async function HomePage() {
   // The member count only matters to someone who can invite.
   const [members, attention] = await Promise.all([canInvite ? households.listMembers(ctx) : [], getAttention(session)])
   const inviteFirst = canInvite && members.length < 2
-  const { today, currency, maintenance, expiries, money } = attention
+  const { today, currency, maintenance, expiries, health, money } = attention
   const bills = attention.bills ?? []
   const header = <PageHeader title={household.name} description={formatInstant(new Date(), household.timeZone, { dateStyle: 'full' })} />
   const moneyGlance = money === null ? null : <MoneyGlance money={money} currency={currency} />
 
-  if (maintenance.length === 0 && bills.length === 0 && expiries.length === 0) {
+  if (maintenance.length === 0 && bills.length === 0 && expiries.length === 0 && health.length === 0) {
     return (
       <>
         {header}
@@ -54,7 +55,7 @@ export default async function HomePage() {
           <EmptyState
             illustration={<ChecklistIllustration />}
             title='Nothing needs you today'
-            description='Late bills, house jobs coming due and papers about to expire land here, so for now make sure everyone you live with has joined.'
+            description='Late bills, house jobs coming due, papers about to expire and checkups due land here, so for now make sure everyone you live with has joined.'
             action={
               <Button asChild variant='outline'>
                 <Link href='/settings/household'>View household</Link>
@@ -146,6 +147,41 @@ export default async function HomePage() {
                         </Link>
                       </p>
                       <p className='text-sm text-ink-muted tabular-nums'>{formatCalendarDate(expiry.expiresOn)}</p>
+                    </div>
+                    <Pill tone={status.tone}>{status.phrase}</Pill>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        ) : null}
+
+        {health.length > 0 ? (
+          <section aria-labelledby='health-heading'>
+            <SectionHeader
+              id='health-heading'
+              title='Health'
+              description='Checkups and shots due in the next month'
+              action={
+                <Button asChild variant='ghost'>
+                  <Link href='/health'>All health</Link>
+                </Button>
+              }
+            />
+            <ul aria-label='Checkups and shots coming due' className={LIST}>
+              {health.map(schedule => {
+                const status = healthDueStatus(schedule, today)
+                return (
+                  <li key={schedule.id} className={ROW}>
+                    <div className='min-w-0'>
+                      <p className='font-medium break-words'>
+                        <Link href={`/health?person=${schedule.personId}`} className={ROW_LINK}>
+                          {schedule.name}
+                        </Link>
+                      </p>
+                      <p className='text-sm text-ink-muted'>
+                        {schedule.personName} · <span className='tabular-nums'>{formatCalendarDate(schedule.dueOn)}</span>
+                      </p>
                     </div>
                     <Pill tone={status.tone}>{status.phrase}</Pill>
                   </li>

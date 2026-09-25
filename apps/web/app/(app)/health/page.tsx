@@ -6,6 +6,7 @@ import { EmptyState } from '../_components/ui/empty-state'
 import { HeartIllustration } from '../_components/ui/illustrations'
 import { PageHeader } from '../_components/ui/page-header'
 import { AddHealthEventButton } from './_components/health-event-sheet'
+import { HealthSchedules } from './_components/health-schedules'
 import { HealthTimeline } from './_components/health-timeline'
 import { PersonPicker } from './_components/person-picker'
 
@@ -31,8 +32,9 @@ export default async function HealthPage({ searchParams }: PageProps<'/health'>)
     )
   }
 
-  const [events, options] = await Promise.all([
+  const [events, schedules, options] = await Promise.all([
     health.listAllHealthEvents(session, person.id),
+    health.listHealthSchedules(session, person.id),
     person.canLog ? health.listHealthFormOptions(session) : null,
   ])
   const addButton = options ? (
@@ -49,6 +51,7 @@ export default async function HealthPage({ searchParams }: PageProps<'/health'>)
       />
       <div className='flex flex-col gap-6'>
         {people.length > 1 ? <PersonPicker people={people} currentId={person.id} /> : null}
+        <HealthSchedules schedules={schedules} personId={person.id} personName={person.name} options={options} today={today} />
         {events.length === 0 ? (
           <EmptyState
             illustration={<HeartIllustration />}

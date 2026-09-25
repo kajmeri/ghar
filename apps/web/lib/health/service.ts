@@ -1,11 +1,19 @@
 import 'server-only'
-import type { HealthEvent, HealthEventBody, HealthPerson, PageQuery } from '@ghar/contracts'
+import type {
+  HealthEvent,
+  HealthEventBody,
+  HealthPerson,
+  HealthSchedule,
+  HealthScheduleBody,
+  PageQuery,
+  RequestContext,
+} from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
-import { todayInTimeZone } from '@ghar/core/dates'
-import { canManageHealthOf } from '@ghar/core/health'
+import { todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
+import { canManageHealthOf, healthScheduleTitle } from '@ghar/core/health'
 import { comparePeople, personLabel } from '@ghar/core/people'
 import * as queries from '@ghar/db/queries'
-import type { HealthEventRow, PageRequest } from '@ghar/db/queries'
+import type { Db, HealthEventRow, HealthScheduleRow, PageRequest } from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
 import { pageRequest, pageResponse, type PageResult } from '@/lib/api/cursor'
 import * as contacts from '@/lib/contacts/service'
@@ -104,4 +112,58 @@ export async function listHealthFormOptions(session: Session): Promise<HealthFor
     contacts: people.map(contact => ({ id: contact.id, name: contact.name })),
     documents: papers.map(document => ({ id: document.id, title: document.title })),
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// What's due
+
+/** Takes the reader's context, not a session, so the digest can call it for each recipient. */
+export function toHealthSchedule(row: HealthScheduleRow, context: Pick<RequestContext, 'userId' | 'role'>): HealthSchedule {
+  return {
+    id: row.id,
+    personId: row.personId,
+    personName: personLabel({ id: row.personId, userId: row.personUserId, name: row.personName }, context.userId),
+    kind: row.kind,
+    title: row.title,
+    name: healthScheduleTitle(row),
+    cadenceMonths: row.cadenceMonths,
+    firstDueOn: row.firstDueOn,
+    lastOn: row.lastOn,
+    dueOn: row.dueOn,
+    state: row.state,
+    canEdit: canManageHealthOf(context, row.personUserId),
+  }
+}
+
+/** Soonest due first. Everyone's the caller may see, or one person's. */
+export async function listHealthSchedules(session: Session, personId?: string): Promise<HealthSchedule[]> {
+  const rows = await queries.listHealthSchedules(session.context, getDb(), { personId }, householdToday(session))
+  return rows.map(row => toHealthSchedule(row, session.context))
+}
+
+/** Every schedule the reader may see, soonest first, or none without health.view. */
+export async function listHealthDues(context: RequestContext, db: Db, today: CalendarDate): Promise<HealthSchedule[]> {
+  if (!can(context.role, 'health.view')) return []
+  const rows = await queries.listHealthSchedules(context, db, {}, today)
+  return rows.map(row => toHealthSchedule(row, context))
+}
+
+/** Overdue or due within 30 days, for the people the reader may see. For Home. */
+export async function listHealthDueSoon(context: RequestContext, db: Db, today: CalendarDate): Promise<HealthSchedule[]> {
+  return (await listHealthDues(context, db, today)).filter(schedule => schedule.state !== 'scheduled')
+}
+
+export async function createHealthSchedule(session: Session, body: HealthScheduleBody): Promise<HealthSchedule> {
+  const row = await queries.createHealthSchedule(session.context, getDb(), body, householdToday(session))
+  return toHealthSchedule(row, session.context)
+}
+
+export async function updateHealthSchedule(session: Session, scheduleId: string, body: HealthScheduleBody): Promise<HealthSchedule> {
+  const row = await queries.updateHealthSchedule(session.context, getDb(), scheduleId, body, householdToday(session))
+  return toHealthSchedule(row, session.context)
+}
+
+export async function deleteHealthSchedule(session: Session, scheduleId: string): Promise<{ scheduleId: string }> {
+  await queries.deleteHealthSchedule(session.context, getDb(), scheduleId, householdToday(session))
+  return { scheduleId }
 }

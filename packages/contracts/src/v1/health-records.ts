@@ -113,3 +113,78 @@ export const deleteHealthEvent = defineEndpoint({
   params: healthEventParamsSchema,
   response: z.object({ eventId: z.uuid() }),
 })
+
+// What's due: schedules. A schedule's next due date is worked out from the records that match it,
+// so logging a visit moves it and nothing else has to.
+
+/** HEALTH_CADENCE_MONTHS_MIN and _MAX in @ghar/core/health. */
+export const HEALTH_CADENCE_MIN = 1
+export const HEALTH_CADENCE_MAX = 120
+
+export const healthDueStateSchema = z.enum(['overdue', 'due_soon', 'scheduled'])
+
+export const healthScheduleSchema = z.object({
+  id: z.uuid(),
+  personId: z.uuid(),
+  /** "You", or their name. */
+  personName: z.string(),
+  kind: healthEventKindSchema,
+  /** Only records with this title count, like "Flu shot". Null for any record of the kind. */
+  title: z.string().nullable(),
+  /** What to call it: the title, or the kind's name. */
+  name: z.string(),
+  cadenceMonths: z.int().min(HEALTH_CADENCE_MIN).max(HEALTH_CADENCE_MAX),
+  /** It's due no earlier than this, whatever was logged before. */
+  firstDueOn: calendarDateSchema,
+  /** The newest record that matches. Null when nothing does yet. */
+  lastOn: calendarDateSchema.nullable(),
+  dueOn: calendarDateSchema,
+  /** Due soon means within 30 days. */
+  state: healthDueStateSchema,
+  canEdit: z.boolean(),
+})
+export type HealthSchedule = z.infer<typeof healthScheduleSchema>
+
+export const healthScheduleParamsSchema = z.object({ scheduleId: z.uuid() })
+
+export const healthScheduleBodySchema = z.object({
+  personId: z.uuid(),
+  kind: healthEventKindSchema,
+  /** Leave it out to count any record of the kind. */
+  title: z.string().trim().max(HEALTH_TITLE_MAX).nullable().default(null),
+  cadenceMonths: z.int().min(HEALTH_CADENCE_MIN).max(HEALTH_CADENCE_MAX),
+  firstDueOn: calendarDateSchema,
+})
+export type HealthScheduleBody = z.output<typeof healthScheduleBodySchema>
+
+/** Soonest due first. With `personId`, only theirs; someone the caller can't see gives an empty list. */
+export const listHealthSchedules = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/health-records/schedules',
+  query: z.object({ personId: z.uuid().optional() }),
+  response: z.object({ schedules: z.array(healthScheduleSchema) }),
+})
+
+/** 400 when that person already has a schedule for the same kind and title. Otherwise as createHealthEvent. */
+export const createHealthSchedule = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/health-records/schedules',
+  body: healthScheduleBodySchema,
+  response: z.object({ schedule: healthScheduleSchema }),
+})
+
+export const updateHealthSchedule = defineEndpoint({
+  method: 'PUT',
+  path: '/api/v1/health-records/schedules/:scheduleId',
+  params: healthScheduleParamsSchema,
+  body: healthScheduleBodySchema,
+  response: z.object({ schedule: healthScheduleSchema }),
+})
+
+/** The records it counted stay. */
+export const deleteHealthSchedule = defineEndpoint({
+  method: 'DELETE',
+  path: '/api/v1/health-records/schedules/:scheduleId',
+  params: healthScheduleParamsSchema,
+  response: z.object({ scheduleId: z.uuid() }),
+})

@@ -21,9 +21,12 @@ import {
   type CalendarItem as CoreCalendarItem,
   type ExpiryDue,
   type FeedSource,
+  type HealthDue,
   type MaintenanceDue,
 } from '@ghar/core/calendar'
 import { todayInTimeZone, type CalendarDate, type TimeZone } from '@ghar/core/dates'
+import { healthScheduleTitle } from '@ghar/core/health'
+import { personLabel } from '@ghar/core/people'
 import * as queries from '@ghar/db/queries'
 import type { CalendarLinkRow, EventDetail, EventInput } from '@ghar/db/queries'
 import { cache } from 'react'
@@ -56,7 +59,7 @@ function calendarLinkRows(ctx: RequestContext): Promise<CalendarLinkRow[]> {
 
 /**
  * The sources worth offering as filters: Google once anyone has linked a calendar, then trips,
- * bills, maintenance and expiries for the people who can see each.
+ * bills, maintenance, expiries and health for the people who can see each.
  */
 export function availableFeedSources(ctx: RequestContext, links: readonly Pick<CalendarLink, 'id'>[]): FeedSource[] {
   const sources: FeedSource[] = ['native']
@@ -65,14 +68,15 @@ export function availableFeedSources(ctx: RequestContext, links: readonly Pick<C
   if (can(ctx.role, 'finances.view')) sources.push('bills')
   if (can(ctx.role, 'home.view')) sources.push('maintenance')
   if (can(ctx.role, 'documents.view')) sources.push('expiries')
+  if (can(ctx.role, 'health.view')) sources.push('health')
   return sources
 }
 
 /**
  * Everything on the calendar for a range of days in the household's zone: events, trips, each
  * bill's due dates marked paid or not, connected cards' and loans' next payments, maintenance at
- * its next due date, and documents and
- * warranties on the day they run out. Sensitive documents stay off for people who can't see them.
+ * its next due date, documents and warranties on the day they run out, and checkups at their next
+ * due date for the people the reader may see. Sensitive documents stay off for people who can't see them.
  */
 export async function getCalendarFeed(
   ctx: RequestContext,
@@ -83,8 +87,9 @@ export async function getCalendarFeed(
   const window = windowForDates(input.from, input.to, timezone)
   const wants = (source: FeedSource) => input.sources.includes(source)
   const range = { from: input.from, to: input.to }
+  const today = todayInTimeZone(timezone)
 
-  const [events, bookings, bills, liabilityDues, tasks, documents, warranties, renewals, links] = await Promise.all([
+  const [events, bookings, bills, liabilityDues, tasks, documents, warranties, renewals, schedules, links] = await Promise.all([
     wants('native') || wants('google') ? queries.listEventsInWindow(ctx, db, window) : [],
     wants('trips') && can(ctx.role, 'travel.view') ? queries.listTripBookingsInRange(ctx, db, input) : [],
     wants('bills') && can(ctx.role, 'finances.view') ? listBillDues(ctx, db, { ...range, timeZone: timezone, currency }) : [],
@@ -95,6 +100,7 @@ export async function getCalendarFeed(
     wants('expiries') && can(ctx.role, 'documents.view') ? queries.listDocumentExpiries(ctx, db, range) : [],
     wants('expiries') && can(ctx.role, 'home.view') ? queries.listWarrantyExpiries(ctx, db, range) : [],
     wants('expiries') && can(ctx.role, 'documents.view') ? queries.listRenewalExpiries(ctx, db, range) : [],
+    wants('health') && can(ctx.role, 'health.view') ? queries.listHealthSchedules(ctx, db, {}, today) : [],
     // Only whether any calendar is linked, for availableSources.
     can(ctx.role, 'calendar.view') ? calendarLinkRows(ctx) : [],
   ])
@@ -121,16 +127,34 @@ export async function getCalendarFeed(
     })),
   ]
 
+  const health: HealthDue[] = schedules.flatMap(schedule =>
+    schedule.dueOn >= input.from && schedule.dueOn <= input.to
+      ? [
+          {
+            scheduleId: schedule.id,
+            personId: schedule.personId,
+            name: healthScheduleTitle(schedule),
+            personName:
+              schedule.personUserId === ctx.userId
+                ? null
+                : personLabel({ id: schedule.personId, userId: schedule.personUserId, name: schedule.personName }, ctx.userId),
+            dueOn: schedule.dueOn,
+          },
+        ]
+      : []
+  )
+
   const items = buildCalendarFeed({
     window,
     timeZone: timezone,
-    today: todayInTimeZone(timezone),
+    today,
     events,
     bookings,
     bills,
     debts: liabilityDues.map(due => ({ accountId: due.accountId, name: due.name, dueOn: due.nextPaymentDueOn, overdue: due.isOverdue })),
     maintenance,
     expiries,
+    health,
     sources: input.sources,
   })
   return {

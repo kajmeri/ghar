@@ -180,6 +180,10 @@ const september: CalendarFeedInput = {
     { kind: 'renewal', id: 'r-costco', title: 'Costco', expiresOn: '2026-09-28', autoRenews: true },
     { kind: 'renewal', id: 'r-plates', title: 'Car registration', expiresOn: '2026-09-29' },
   ],
+  health: [
+    { scheduleId: 's-dentist', personId: 'p-anika', name: 'Dentist', personName: 'Anika', dueOn: '2026-09-08' },
+    { scheduleId: 's-flu', personId: 'p-me', name: 'Flu shot', personName: null, dueOn: '2026-09-30' },
+  ],
 }
 
 describe('buildCalendarFeed', () => {
@@ -187,7 +191,9 @@ describe('buildCalendarFeed', () => {
   const titles = (date: string) => feed.filter(item => item.startDate === date).map(item => item.title)
 
   it('merges native, synced and derived items for the window', () => {
-    expect(new Set(feed.map(item => item.source))).toEqual(new Set(['native', 'google', 'trips', 'bills', 'maintenance', 'expiries']))
+    expect(new Set(feed.map(item => item.source))).toEqual(
+      new Set(['native', 'google', 'trips', 'bills', 'maintenance', 'expiries', 'health'])
+    )
     expect(feed.map(item => item.title)).not.toContain('Next month')
   })
 
@@ -287,6 +293,17 @@ describe('buildCalendarFeed', () => {
     expect(feed.find(item => item.id === 'expiries:renewal:r-plates')).toMatchObject({ title: 'Car registration expires', tone: 'caution' })
   })
 
+  it('shows checkups on their due day, named for whose they are', () => {
+    expect(feed.find(item => item.id === 'health:s-dentist')).toMatchObject({
+      title: 'Dentist due for Anika',
+      startDate: '2026-09-08',
+      tone: 'negative',
+      category: 'personal',
+      ref: { kind: 'health', scheduleId: 's-dentist', personId: 'p-anika' },
+    })
+    expect(feed.find(item => item.id === 'health:s-flu')).toMatchObject({ title: 'Flu shot due', tone: 'caution' })
+  })
+
   it('includes only the sources asked for', () => {
     const onlyBills = buildCalendarFeed({ ...september, sources: ['bills'] })
     expect(onlyBills).toHaveLength(7)
@@ -306,7 +323,7 @@ describe('parseFeedSources', () => {
   })
 
   it('falls back to every source', () => {
-    expect(parseFeedSources(undefined)).toEqual(['native', 'google', 'trips', 'bills', 'maintenance', 'expiries'])
-    expect(parseFeedSources('nope')).toHaveLength(6)
+    expect(parseFeedSources(undefined)).toEqual(['native', 'google', 'trips', 'bills', 'maintenance', 'expiries', 'health'])
+    expect(parseFeedSources('nope')).toHaveLength(7)
   })
 })

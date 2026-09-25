@@ -1,13 +1,26 @@
 import { can, requirePermission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
 import { ForbiddenError, NotFoundError, ValidationError } from '@ghar/core/errors'
-import { canManageHealthOf, healthEventTitle, requireHealthEventDate, type HealthEventKind } from '@ghar/core/health'
-import { and, asc, count, eq, getTableColumns, max, sql, type SQL } from 'drizzle-orm'
-import { contacts, documents, healthEvents, householdPeople, profiles } from '../schema'
+import {
+  canManageHealthOf,
+  compareHealthDue,
+  healthEventTitle,
+  healthScheduleDue,
+  healthScheduleTitle,
+  requireHealthEventDate,
+  requireHealthScheduleFields,
+  type HealthDue,
+  type HealthEventKind,
+} from '@ghar/core/health'
+import { and, asc, count, eq, getTableColumns, inArray, lte, max, or, sql, type SQL } from 'drizzle-orm'
+import { authUsers } from 'drizzle-orm/supabase'
+import { contacts, documents, healthEvents, healthReminders, healthSchedules, householdMembers, householdPeople, profiles } from '../schema'
 import { recordAudit } from './audit'
+import type { ReminderRecipient } from './expiry-reminders'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { personRefColumns } from './people'
-import type { Db, RequestContext } from './types'
+import { isUniqueViolation } from './pg-errors'
+import type { Db, RequestContext, SystemContext } from './types'
 
 // Health records. Owners and adults see and log everyone's; anyone else sees only the records of
 // their own person, and members log their own. A record the caller can't see is reported as
@@ -252,4 +265,235 @@ export async function deleteHealthEvent(ctx: RequestContext, db: Db, eventId: st
       metadata: { kind: deleted.kind, personId: deleted.personId },
     })
   })
+}
+
+// ---------------------------------------------------------------------------------------------
+// What's due: schedules
+// ---------------------------------------------------------------------------------------------
+
+export type HealthScheduleRow = typeof healthSchedules.$inferSelect & {
+  personName: string | null
+  personUserId: string | null
+} & HealthDue
+
+export interface HealthScheduleInput {
+  personId: string
+  kind: HealthEventKind
+  title: string | null
+  cadenceMonths: number
+  firstDueOn: CalendarDate
+}
+
+const SCHEDULE_NOT_FOUND = 'That schedule no longer exists.'
+const SCHEDULE_TAKEN = 'They already have a schedule for that.'
+
+/** What a schedule needs from a record to see whether it matches. */
+const matchColumns = {
+  personId: healthEvents.personId,
+  kind: healthEvents.kind,
+  title: healthEvents.title,
+  occurredOn: healthEvents.occurredOn,
+}
+
+/** Schedules with whose they are and when each is next due, from the records beside them. */
+async function loadSchedules(
+  db: Db,
+  where: SQL | undefined,
+  eventsWhere: SQL | undefined,
+  today: CalendarDate
+): Promise<HealthScheduleRow[]> {
+  const [schedules, events] = await Promise.all([
+    db
+      .select({ ...getTableColumns(healthSchedules), ...personRefColumns })
+      .from(healthSchedules)
+      .innerJoin(householdPeople, eq(householdPeople.id, healthSchedules.personId))
+      .leftJoin(profiles, eq(profiles.id, householdPeople.userId))
+      .where(where),
+    db.select(matchColumns).from(healthEvents).innerJoin(householdPeople, eq(householdPeople.id, healthEvents.personId)).where(eventsWhere),
+  ])
+  return schedules
+    .map(schedule => ({ ...schedule, ...healthScheduleDue(schedule, events, today) }))
+    .toSorted((a, b) =>
+      compareHealthDue({ dueOn: a.dueOn, title: healthScheduleTitle(a) }, { dueOn: b.dueOn, title: healthScheduleTitle(b) })
+    )
+}
+
+/** The caller's visible schedules, soonest due first. Everyone's they may see, or one person's. */
+export async function listHealthSchedules(
+  ctx: RequestContext,
+  db: Db,
+  filter: { personId?: string },
+  today: CalendarDate
+): Promise<HealthScheduleRow[]> {
+  requirePermission(ctx, 'health.view')
+  const person = filter.personId === undefined ? undefined : filter.personId
+  return loadSchedules(
+    db,
+    and(
+      eq(healthSchedules.householdId, ctx.householdId),
+      visibleHealth(ctx),
+      person === undefined ? undefined : eq(healthSchedules.personId, person)
+    ),
+    and(
+      eq(healthEvents.householdId, ctx.householdId),
+      visibleHealth(ctx),
+      person === undefined ? undefined : eq(healthEvents.personId, person)
+    ),
+    today
+  )
+}
+
+export async function getHealthSchedule(ctx: RequestContext, db: Db, scheduleId: string, today: CalendarDate): Promise<HealthScheduleRow> {
+  requirePermission(ctx, 'health.view')
+  const [schedule] = await db
+    .select({ personId: healthSchedules.personId })
+    .from(healthSchedules)
+    .innerJoin(householdPeople, eq(householdPeople.id, healthSchedules.personId))
+    .where(and(eq(healthSchedules.id, scheduleId), eq(healthSchedules.householdId, ctx.householdId), visibleHealth(ctx)))
+    .limit(1)
+  if (!schedule) throw new NotFoundError(SCHEDULE_NOT_FOUND)
+  const found = (await listHealthSchedules(ctx, db, { personId: schedule.personId }, today)).find(row => row.id === scheduleId)
+  if (!found) throw new NotFoundError(SCHEDULE_NOT_FOUND)
+  return found
+}
+
+async function requireManageableSchedule(ctx: RequestContext, db: Db, scheduleId: string, today: CalendarDate): Promise<HealthScheduleRow> {
+  const schedule = await getHealthSchedule(ctx, db, scheduleId, today)
+  if (!canManageHealthOf(ctx, schedule.personUserId)) throw new ForbiddenError("Your role in this household doesn't allow this.")
+  return schedule
+}
+
+function takenAsValidation(error: unknown): never {
+  if (isUniqueViolation(error, 'health_schedules_unique')) {
+    throw new ValidationError(SCHEDULE_TAKEN, { details: { fieldErrors: { title: [SCHEDULE_TAKEN] } } })
+  }
+  throw error
+}
+
+export async function createHealthSchedule(
+  ctx: RequestContext,
+  db: Db,
+  input: HealthScheduleInput,
+  today: CalendarDate
+): Promise<HealthScheduleRow> {
+  requirePermission(ctx, 'health.view')
+  const values = requireHealthScheduleFields(input)
+  await requireManageablePerson(ctx, db, input.personId)
+  const [created] = await db
+    .insert(healthSchedules)
+    .values({ householdId: ctx.householdId, ...values, addedBy: ctx.userId })
+    .returning({ id: healthSchedules.id })
+    .catch(takenAsValidation)
+  if (!created) throw new Error('The health schedule was not created')
+  return getHealthSchedule(ctx, db, created.id, today)
+}
+
+/** Replaces every field. Moving it to another person needs the right to log for both. */
+export async function updateHealthSchedule(
+  ctx: RequestContext,
+  db: Db,
+  scheduleId: string,
+  input: HealthScheduleInput,
+  today: CalendarDate
+): Promise<HealthScheduleRow> {
+  requirePermission(ctx, 'health.view')
+  await requireManageableSchedule(ctx, db, scheduleId, today)
+  const values = requireHealthScheduleFields(input)
+  await requireManageablePerson(ctx, db, input.personId)
+  const [updated] = await db
+    .update(healthSchedules)
+    .set({ ...values, updatedAt: sql`now()` })
+    .where(and(eq(healthSchedules.id, scheduleId), eq(healthSchedules.householdId, ctx.householdId)))
+    .returning({ id: healthSchedules.id })
+    .catch(takenAsValidation)
+  if (!updated) throw new NotFoundError(SCHEDULE_NOT_FOUND)
+  return getHealthSchedule(ctx, db, scheduleId, today)
+}
+
+/** The records it counted stay. */
+export async function deleteHealthSchedule(ctx: RequestContext, db: Db, scheduleId: string, today: CalendarDate): Promise<void> {
+  requirePermission(ctx, 'health.view')
+  await requireManageableSchedule(ctx, db, scheduleId, today)
+  await db.transaction(async tx => {
+    const [deleted] = await tx
+      .delete(healthSchedules)
+      .where(and(eq(healthSchedules.id, scheduleId), eq(healthSchedules.householdId, ctx.householdId)))
+      .returning({ kind: healthSchedules.kind, personId: healthSchedules.personId })
+    if (!deleted) throw new NotFoundError(SCHEDULE_NOT_FOUND)
+    await recordAudit(ctx, tx, {
+      action: 'health_schedule.deleted',
+      entity: 'health_schedule',
+      entityId: scheduleId,
+      metadata: { kind: deleted.kind, personId: deleted.personId },
+    })
+  })
+}
+
+// ---------------------------------------------------------------------------------------------
+// Reminder emails, for the daily job
+// ---------------------------------------------------------------------------------------------
+
+/** Every schedule in the household, with when it's due. Only the daily job reads everyone's this way. */
+export async function listHealthSchedulesForReminders(actor: SystemContext, db: Db, today: CalendarDate): Promise<HealthScheduleRow[]> {
+  return loadSchedules(db, eq(healthSchedules.householdId, actor.householdId), eq(healthEvents.householdId, actor.householdId), today)
+}
+
+/**
+ * Claims one reminder tier for one due date. Null when that tier, or a closer one, already went
+ * out for that date. Logging the visit moves the date, so the next round starts over.
+ */
+export async function claimHealthReminder(
+  actor: SystemContext,
+  db: Db,
+  input: { scheduleId: string; dueOn: CalendarDate; thresholdDays: number }
+): Promise<string | null> {
+  const [closer] = await db
+    .select({ id: healthReminders.id })
+    .from(healthReminders)
+    .where(
+      and(
+        eq(healthReminders.householdId, actor.householdId),
+        eq(healthReminders.scheduleId, input.scheduleId),
+        eq(healthReminders.dueOn, input.dueOn),
+        lte(healthReminders.thresholdDays, input.thresholdDays)
+      )
+    )
+    .limit(1)
+  if (closer) return null
+  const [claimed] = await db
+    .insert(healthReminders)
+    .values({ householdId: actor.householdId, ...input })
+    .onConflictDoNothing()
+    .returning({ id: healthReminders.id })
+  return claimed?.id ?? null
+}
+
+export async function releaseHealthReminder(actor: SystemContext, db: Db, reminderId: string): Promise<void> {
+  await db.delete(healthReminders).where(and(eq(healthReminders.id, reminderId), eq(healthReminders.householdId, actor.householdId)))
+}
+
+/**
+ * Who hears about one person's schedule: owners and adults, who see everyone's records, and the
+ * person themselves when they have an account. Never other members or viewers.
+ */
+export async function listHealthReminderRecipients(
+  actor: SystemContext,
+  db: Db,
+  personUserId: string | null
+): Promise<ReminderRecipient[]> {
+  const rows = await db
+    .select({ userId: householdMembers.userId, email: authUsers.email, fullName: profiles.fullName })
+    .from(householdMembers)
+    .innerJoin(profiles, eq(profiles.id, householdMembers.userId))
+    .leftJoin(authUsers, eq(authUsers.id, householdMembers.userId))
+    .where(
+      and(
+        eq(householdMembers.householdId, actor.householdId),
+        personUserId === null
+          ? inArray(householdMembers.role, ['owner', 'adult'])
+          : or(inArray(householdMembers.role, ['owner', 'adult']), eq(householdMembers.userId, personUserId))
+      )
+    )
+    .orderBy(householdMembers.joinedAt)
+  return rows.flatMap(row => (row.email === null ? [] : [{ userId: row.userId, email: row.email, fullName: row.fullName }]))
 }

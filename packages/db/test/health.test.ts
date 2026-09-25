@@ -6,7 +6,17 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { createContact } from '../src/queries/contacts'
 import { createDocument } from '../src/queries/documents'
 import {
+  claimHealthReminder,
   createHealthEvent,
+  createHealthSchedule,
+  deleteHealthSchedule,
+  getHealthSchedule,
+  listHealthReminderRecipients,
+  listHealthSchedules,
+  listHealthSchedulesForReminders,
+  releaseHealthReminder,
+  updateHealthSchedule,
+  type HealthScheduleInput,
   deleteHealthEvent,
   getHealthEvent,
   listHealthEventsPage,
@@ -226,5 +236,91 @@ describe('the database behind it', () => {
     const { rows } = await client.query<{ metadata: unknown }>(`select metadata from audit_log where entity_id = '${logged.id}'`)
     expect(JSON.stringify(rows)).not.toContain('Private detail')
     expect(JSON.stringify(rows)).not.toContain('Flu shot')
+  })
+})
+
+describe('schedules', () => {
+  function schedule(personId: string, overrides: Partial<HealthScheduleInput> = {}): HealthScheduleInput {
+    return { personId, kind: 'dental', title: null, cadenceMonths: 6, firstDueOn: '2026-01-01', ...overrides }
+  }
+
+  it('is due a cadence after the last matching record, and moves when one is logged or deleted', async () => {
+    const dentist = await createHealthSchedule(owner, db, schedule(child), today)
+    expect(dentist).toMatchObject({ personName: 'Asha', lastOn: null, dueOn: '2026-01-01', state: 'overdue' })
+
+    const visit = await createHealthEvent(owner, db, event(child, { kind: 'dental', title: 'Cleaning', occurredOn: '2026-09-01' }), today)
+    // Another kind, or someone else's, doesn't count.
+    const other = await createHealthEvent(owner, db, event(ownerPerson, { kind: 'dental', occurredOn: '2026-09-20' }), today)
+    expect(await getHealthSchedule(owner, db, dentist.id, today)).toMatchObject({
+      lastOn: '2026-09-01',
+      dueOn: '2027-03-01',
+      state: 'scheduled',
+    })
+
+    await deleteHealthEvent(owner, db, visit.id)
+    expect((await getHealthSchedule(owner, db, dentist.id, today)).dueOn).toBe('2026-01-01')
+
+    await deleteHealthEvent(owner, db, other.id)
+    await deleteHealthSchedule(owner, db, dentist.id, today)
+  })
+
+  it('refuses a second schedule for the same thing, whatever the case of its title', async () => {
+    const flu = await createHealthSchedule(owner, db, schedule(child, { kind: 'vaccine', title: 'Flu shot', cadenceMonths: 12 }), today)
+    await expect(createHealthSchedule(owner, db, schedule(child, { kind: 'vaccine', title: 'flu shot' }), today)).rejects.toThrow(
+      ValidationError
+    )
+    // A different vaccine is its own schedule.
+    const tetanus = await createHealthSchedule(owner, db, schedule(child, { kind: 'vaccine', title: 'Tetanus', cadenceMonths: 120 }), today)
+    await expect(
+      updateHealthSchedule(owner, db, tetanus.id, schedule(child, { kind: 'vaccine', title: 'FLU SHOT' }), today)
+    ).rejects.toThrow(ValidationError)
+    await deleteHealthSchedule(owner, db, flu.id, today)
+    await deleteHealthSchedule(owner, db, tetanus.id, today)
+  })
+
+  it('follows who may see and log whose records', async () => {
+    const childs = await createHealthSchedule(adult, db, schedule(child), today)
+    const own = await createHealthSchedule(member, db, schedule(memberPerson, { kind: 'eye', cadenceMonths: 24 }), today)
+    await expect(createHealthSchedule(member, db, schedule(child, { kind: 'eye' }), today)).rejects.toThrow(NotFoundError)
+    await expect(createHealthSchedule(viewer, db, schedule(viewerPerson), today)).rejects.toThrow(ForbiddenError)
+    const viewers = await createHealthSchedule(owner, db, schedule(viewerPerson), today)
+
+    expect((await listHealthSchedules(member, db, {}, today)).map(row => row.id)).toEqual([own.id])
+    await expect(getHealthSchedule(member, db, childs.id, today)).rejects.toThrow(NotFoundError)
+    await expect(deleteHealthSchedule(viewer, db, viewers.id, today)).rejects.toThrow(ForbiddenError)
+    expect(await listHealthSchedules(outsider, db, {}, today)).toEqual([])
+    const sql = `select id from health_schedules where id in ('${own.id}', '${childs.id}')`
+    expect(await queryAs<{ id: string }>(client, member.userId, sql)).toEqual([{ id: own.id }])
+
+    for (const row of [childs, viewers]) await deleteHealthSchedule(owner, db, row.id, today)
+    await deleteHealthSchedule(member, db, own.id, today)
+  })
+
+  it('claims each reminder once per due date, and tells owners, adults and the person only', async () => {
+    const own = await createHealthSchedule(owner, db, schedule(memberPerson, { firstDueOn: '2026-10-20' }), today)
+    const actor = { householdId: owner.householdId, userId: null }
+    const [due] = (await listHealthSchedulesForReminders(actor, db, today)).filter(row => row.id === own.id)
+    expect(due).toMatchObject({ dueOn: '2026-10-20', personUserId: member.userId })
+
+    const first = await claimHealthReminder(actor, db, { scheduleId: own.id, dueOn: '2026-10-20', thresholdDays: 30 })
+    expect(first).not.toBeNull()
+    expect(await claimHealthReminder(actor, db, { scheduleId: own.id, dueOn: '2026-10-20', thresholdDays: 30 })).toBeNull()
+    // A closer tier still goes; a further one after a closer never does.
+    const closer = await claimHealthReminder(actor, db, { scheduleId: own.id, dueOn: '2026-10-20', thresholdDays: 7 })
+    expect(closer).not.toBeNull()
+    if (closer !== null) await releaseHealthReminder(actor, db, closer)
+    // A new due date starts over.
+    expect(await claimHealthReminder(actor, db, { scheduleId: own.id, dueOn: '2027-04-20', thresholdDays: 30 })).not.toBeNull()
+
+    const toMember = await listHealthReminderRecipients(actor, db, member.userId)
+    expect(toMember.map(row => row.email).sort()).toEqual([
+      'health-adult@example.com',
+      'health-member@example.com',
+      'health-owner@example.com',
+    ])
+    const toNobodyElse = await listHealthReminderRecipients(actor, db, null)
+    expect(toNobodyElse.map(row => row.email).sort()).toEqual(['health-adult@example.com', 'health-owner@example.com'])
+
+    await deleteHealthSchedule(owner, db, own.id, today)
   })
 })

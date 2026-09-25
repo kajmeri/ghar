@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
 import { billSchema } from './bills'
+import { healthScheduleSchema } from './health-records'
 import { maintenanceTaskSchema } from './home'
 import { expirySchema } from './renewals'
 import { calendarDateSchema, centsSchema } from './shared'
@@ -40,6 +41,8 @@ export const attentionSchema = z.object({
   bills: z.array(billSchema).nullable(),
   /** Expiring within 60 days, or expired within the last 30. Soonest first. */
   expiries: z.array(attentionExpirySchema),
+  /** Health visits overdue or due within 30 days, for the people the caller may see. Soonest first. */
+  health: z.array(healthScheduleSchema),
   /**
    * The month's money at a glance. Null when the signed-in person's role can't see finances, or
    * the household has nothing to show yet: no accounts, no spending and no net worth.

@@ -1,11 +1,25 @@
-import { HEALTH_EVENT_KINDS, HEALTH_NOTE_MAX_LENGTH, HEALTH_TITLE_MAX_LENGTH } from '@ghar/core/health'
+import {
+  HEALTH_CADENCE_MONTHS_MAX,
+  HEALTH_CADENCE_MONTHS_MIN,
+  HEALTH_EVENT_KINDS,
+  HEALTH_NOTE_MAX_LENGTH,
+  HEALTH_TITLE_MAX_LENGTH,
+} from '@ghar/core/health'
 import { describe, expect, it } from 'vitest'
-import { HEALTH_NOTE_MAX, HEALTH_TITLE_MAX, healthEventBodySchema, healthEventKindSchema } from '../src/v1/health-records'
+import {
+  HEALTH_CADENCE_MAX,
+  HEALTH_CADENCE_MIN,
+  HEALTH_NOTE_MAX,
+  HEALTH_TITLE_MAX,
+  healthEventBodySchema,
+  healthEventKindSchema,
+} from '../src/v1/health-records'
 
 describe('health records', () => {
   it('match @ghar/core', () => {
     expect(healthEventKindSchema.options).toEqual([...HEALTH_EVENT_KINDS])
     expect([HEALTH_TITLE_MAX, HEALTH_NOTE_MAX]).toEqual([HEALTH_TITLE_MAX_LENGTH, HEALTH_NOTE_MAX_LENGTH])
+    expect([HEALTH_CADENCE_MIN, HEALTH_CADENCE_MAX]).toEqual([HEALTH_CADENCE_MONTHS_MIN, HEALTH_CADENCE_MONTHS_MAX])
   })
 
   it('need only whose, what kind and when', () => {

@@ -28,6 +28,7 @@ export function HealthEventSheet({
   personId,
   personName,
   event,
+  preset,
   options,
   today,
   open: controlledOpen,
@@ -38,6 +39,8 @@ export function HealthEventSheet({
   /** "You" or their name, for the sheet's heading. */
   personName: string
   event?: HealthEvent
+  /** For a new record: what a schedule asks for, so logging it moves that schedule on. */
+  preset?: { kind: HealthEventKind; title: string | null }
   options: HealthFormOptions
   today: CalendarDate
   /** Set by the timeline when it opens a record. Leave it out to open from `trigger`. */
@@ -48,7 +51,7 @@ export function HealthEventSheet({
   const formId = useId()
   const [ownOpen, setOwnOpen] = useState(false)
   const open = controlledOpen ?? ownOpen
-  const [kind, setKind] = useState<HealthEventKind>(event?.kind ?? 'vaccine')
+  const [kind, setKind] = useState<HealthEventKind>(event?.kind ?? preset?.kind ?? 'vaccine')
 
   const close = () => {
     setOwnOpen(false)
@@ -135,7 +138,12 @@ export function HealthEventSheet({
         </div>
 
         <Field label='Name' hint={`Leave it empty to call it “${HEALTH_KIND_LABELS[kind]}”.`}>
-          <Input name='title' maxLength={120} defaultValue={event?.title} placeholder={HEALTH_TITLE_PLACEHOLDERS[kind]} />
+          <Input
+            name='title'
+            maxLength={120}
+            defaultValue={event?.title ?? preset?.title ?? undefined}
+            placeholder={HEALTH_TITLE_PLACEHOLDERS[kind]}
+          />
         </Field>
 
         {options.contacts.length > 0 ? (

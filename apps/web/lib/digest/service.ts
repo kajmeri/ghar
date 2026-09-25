@@ -25,6 +25,8 @@ import {
   type OneTapAction,
 } from '@ghar/core/digest'
 import { manualValueReminders, monthStart, type ManualValueReminder } from '@ghar/core/finances'
+import { healthScheduleTitle } from '@ghar/core/health'
+import { personLabel } from '@ghar/core/people'
 import { alertStepCents, bookingTitle, isActionable, isWatchable, summarizePriceHistory } from '@ghar/core/travel'
 import * as queries from '@ghar/db/queries'
 import type { Db, DigestRecipient, RequestContext, SystemContext } from '@ghar/db/queries'
@@ -201,7 +203,7 @@ async function oneTapLinks(deps: Omit<DigestDeps, 'email'>, ctx: RequestContext,
     }
     if (block.section === 'upkeep') {
       for (const item of block.items) {
-        if (item.kind === 'maintenance') continue
+        if (item.kind === 'maintenance' || item.kind === 'health') continue
         const action = NOT_RENEWING_ACTIONS[item.kind]
         if (allowed(action)) notRenewing.set(notRenewingLinkKey(item), await link(action, item.id, item.dueOn))
       }
@@ -305,11 +307,12 @@ async function readManualValues(db: Db, { ctx }: DigestReader, today: CalendarDa
 async function readUpkeep(db: Db, { ctx }: DigestReader, today: CalendarDate): Promise<DigestUpkeepItem[]> {
   const range = { from: today, to: addCalendarDays(today, DIGEST_EXPIRY_DAYS) }
   const maintenanceUntil = addCalendarDays(today, DIGEST_MAINTENANCE_DAYS)
-  const [tasks, documents, warranties, renewals] = await Promise.all([
+  const [tasks, documents, warranties, renewals, schedules] = await Promise.all([
     queries.listMaintenanceTasks(ctx, db),
     can(ctx.role, 'documents.view') ? queries.listDocumentExpiries(ctx, db, range) : [],
     queries.listWarrantyExpiries(ctx, db, range),
     can(ctx.role, 'documents.view') ? queries.listRenewalExpiries(ctx, db, range) : [],
+    can(ctx.role, 'health.view') ? queries.listHealthSchedules(ctx, db, {}, today) : [],
   ])
   return [
     ...tasks.flatMap(task =>
@@ -326,22 +329,46 @@ async function readUpkeep(db: Db, { ctx }: DigestReader, today: CalendarDate): P
         : []
     ),
     // Anything someone said won't be renewed has nothing left to do.
-    ...documents.filter(document => !document.notRenewing).map(document => ({ kind: 'document' as const, id: document.id, title: document.title, dueOn: document.expiresOn, overdue: false })),
-    ...warranties.filter(asset => !asset.notRenewing).map(asset => ({
-      kind: 'warranty' as const,
-      id: asset.id,
-      title: `${asset.name} warranty`,
-      dueOn: asset.warrantyExpiresOn,
-      overdue: false,
-    })),
-    ...renewals.filter(renewal => !renewal.notRenewing).map(renewal => ({
-      kind: 'renewal' as const,
-      id: renewal.id,
-      title: renewal.title,
-      dueOn: renewal.expiresOn,
-      overdue: false,
-      autoRenews: renewal.autoRenews,
-    })),
+    ...documents
+      .filter(document => !document.notRenewing)
+      .map(document => ({ kind: 'document' as const, id: document.id, title: document.title, dueOn: document.expiresOn, overdue: false })),
+    ...warranties
+      .filter(asset => !asset.notRenewing)
+      .map(asset => ({
+        kind: 'warranty' as const,
+        id: asset.id,
+        title: `${asset.name} warranty`,
+        dueOn: asset.warrantyExpiresOn,
+        overdue: false,
+      })),
+    ...renewals
+      .filter(renewal => !renewal.notRenewing)
+      .map(renewal => ({
+        kind: 'renewal' as const,
+        id: renewal.id,
+        title: renewal.title,
+        dueOn: renewal.expiresOn,
+        overdue: false,
+        autoRenews: renewal.autoRenews,
+      })),
+    // Checkups on the same week as maintenance, and late ones until someone logs the visit.
+    ...schedules.flatMap(schedule =>
+      schedule.dueOn <= maintenanceUntil
+        ? [
+            {
+              kind: 'health' as const,
+              id: schedule.id,
+              title:
+                schedule.personUserId === ctx.userId
+                  ? healthScheduleTitle(schedule)
+                  : `${healthScheduleTitle(schedule)} for ${personLabel({ id: schedule.personId, userId: schedule.personUserId, name: schedule.personName }, ctx.userId)}`,
+              dueOn: schedule.dueOn,
+              overdue: schedule.dueOn < today,
+              personId: schedule.personId,
+            },
+          ]
+        : []
+    ),
   ]
 }
 

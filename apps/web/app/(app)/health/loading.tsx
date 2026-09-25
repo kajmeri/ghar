@@ -12,6 +12,10 @@ export default function HealthLoading() {
         </div>
         <div>
           <SectionHeaderSkeleton />
+          <DataListSkeleton rows={2} columns={1} />
+        </div>
+        <div>
+          <SectionHeaderSkeleton />
           <DataListSkeleton rows={4} columns={1} />
         </div>
       </div>

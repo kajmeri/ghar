@@ -31,7 +31,7 @@ export const DIGEST_SECTION_DESCRIPTIONS: Record<DigestSection, string> = {
   budget: 'Spent against the plan, and whether that’s ahead of the month.',
   bills: 'Unpaid bills due in the next 7 days, and any that are late.',
   manual_values: 'Accounts you track by hand, like a home estimate, that are past their reminder. Dates only, never amounts.',
-  upkeep: 'Maintenance coming due, and documents, warranties or renewals running out.',
+  upkeep: 'Maintenance and checkups coming due, and documents, warranties or renewals running out.',
   price_drops: 'Bookings that got cheaper since yesterday.',
   calendar: 'Events and trips today and tomorrow.',
 }
@@ -133,7 +133,8 @@ export interface DigestBill {
 }
 
 export interface DigestUpkeepItem {
-  kind: 'maintenance' | 'document' | 'warranty' | 'renewal'
+  kind: 'maintenance' | 'document' | 'warranty' | 'renewal' | 'health'
+  /** For health, the schedule's id. */
   id: string
   title: string
   /** When the job is due, or the day it runs out. */
@@ -141,6 +142,8 @@ export interface DigestUpkeepItem {
   overdue: boolean
   /** A renewal that renews on its own: the day it renews, not a deadline. */
   autoRenews?: boolean
+  /** For health: whose checkup it is, so the link opens their page. */
+  personId?: string
 }
 
 export interface DigestPriceDrop {

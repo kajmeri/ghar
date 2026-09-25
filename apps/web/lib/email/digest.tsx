@@ -243,7 +243,8 @@ function upkeepLine(item: DigestUpkeepItem, input: DigestEmailInput): Line {
   const when = dueWords(item.dueOn, input.digest.date)
   const { appUrl } = input
   const notRenewing = input.links.notRenewing.get(notRenewingLinkKey(item))
-  const withNotRenewing = (open: { label: string; url: string }) => (notRenewing ? [open, { label: 'Not renewing', url: notRenewing }] : [open])
+  const withNotRenewing = (open: { label: string; url: string }) =>
+    notRenewing ? [open, { label: 'Not renewing', url: notRenewing }] : [open]
   switch (item.kind) {
     case 'maintenance':
       return {
@@ -265,6 +266,13 @@ function upkeepLine(item: DigestUpkeepItem, input: DigestEmailInput): Line {
         primary: item.title,
         secondary: item.autoRenews ? `Renews ${when}` : `Expires ${when}`,
         actions: withNotRenewing({ label: 'Open renewal', url: `${appUrl}/renewals/${item.id}` }),
+      }
+    case 'health':
+      return {
+        primary: item.title,
+        secondary: item.overdue ? `Overdue since ${formatCalendarDate(item.dueOn, 'MMM d')}` : `Due ${when}`,
+        tone: item.overdue ? 'negative' : undefined,
+        actions: [{ label: 'Open health', url: `${appUrl}/health${item.personId === undefined ? '' : `?person=${item.personId}`}` }],
       }
   }
 }

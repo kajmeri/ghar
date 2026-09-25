@@ -98,7 +98,13 @@ import {
   RENEWAL_TITLE_MAX_LENGTH,
 } from '@ghar/core/renewals'
 import { REMINDER_LEAD_DAYS_MAX, REMINDER_LEAD_DAYS_MIN } from '@ghar/core/expiries'
-import { HEALTH_EVENT_KINDS, HEALTH_NOTE_MAX_LENGTH, HEALTH_TITLE_MAX_LENGTH } from '@ghar/core/health'
+import {
+  HEALTH_CADENCE_MONTHS_MAX,
+  HEALTH_CADENCE_MONTHS_MIN,
+  HEALTH_EVENT_KINDS,
+  HEALTH_NOTE_MAX_LENGTH,
+  HEALTH_TITLE_MAX_LENGTH,
+} from '@ghar/core/health'
 import { TRIP_STATUSES } from '@ghar/core/trips'
 import { DIGEST_SECTIONS, ONE_TAP_ACTIONS, oneTapActionHasDate, type DigestSection } from '@ghar/core/digest'
 import { BOOKING_DRAFT_STATUSES, MAIL_LINK_STATUSES, MAIL_MESSAGE_OUTCOMES, MAIL_SUBJECT_MAX_LENGTH } from '@ghar/core/mail'
@@ -2399,6 +2405,70 @@ export const healthEvents = pgTable(
     check('health_events_title_length', sql`char_length(${table.title}) between 1 and ${sql.raw(String(HEALTH_TITLE_MAX_LENGTH))}`),
     check('health_events_note_length', sql`char_length(${table.note}) between 1 and ${sql.raw(String(HEALTH_NOTE_MAX_LENGTH))}`),
     check('health_events_occurred_on', sql`${table.occurredOn} >= date '1900-01-01'`),
+  ]
+).enableRLS()
+
+/**
+ * How often one person should have one kind of visit. Its next due date isn't stored: it's the
+ * newest matching record plus the cadence, never before `firstDueOn` (see healthScheduleDue).
+ */
+export const healthSchedules = pgTable(
+  'health_schedules',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    personId: uuid()
+      .notNull()
+      .references(() => householdPeople.id, { onDelete: 'cascade' }),
+    kind: healthEventKind().notNull(),
+    /** Only records with this title count, like "Flu shot". Null for any record of the kind. */
+    title: text(),
+    cadenceMonths: smallint().notNull(),
+    firstDueOn: date({ mode: 'string' }).notNull(),
+    addedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('health_schedules_household_idx').on(table.householdId, table.personId),
+    uniqueIndex('health_schedules_unique').on(table.personId, table.kind, sql`lower(coalesce(${table.title}, ''))`),
+    index('health_schedules_added_by_idx')
+      .on(table.addedBy)
+      .where(sql`${table.addedBy} is not null`),
+    check('health_schedules_title_length', sql`char_length(${table.title}) between 1 and ${sql.raw(String(HEALTH_TITLE_MAX_LENGTH))}`),
+    check(
+      'health_schedules_cadence',
+      sql`${table.cadenceMonths} between ${sql.raw(String(HEALTH_CADENCE_MONTHS_MIN))} and ${sql.raw(String(HEALTH_CADENCE_MONTHS_MAX))}`
+    ),
+    check('health_schedules_first_due_on', sql`${table.firstDueOn} >= date '1900-01-01'`),
+  ]
+).enableRLS()
+
+/**
+ * A reminder email about a schedule coming due. Claimed before sending, once per tier per due date,
+ * so logging the visit moves the date and the next round starts over.
+ *
+ * No RLS policy: only the cron job reads it.
+ */
+export const healthReminders = pgTable(
+  'health_reminders',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    scheduleId: uuid()
+      .notNull()
+      .references(() => healthSchedules.id, { onDelete: 'cascade' }),
+    thresholdDays: smallint().notNull(),
+    dueOn: date({ mode: 'string' }).notNull(),
+    sentAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('health_reminders_household_idx').on(table.householdId),
+    uniqueIndex('health_reminders_unique').on(table.scheduleId, table.thresholdDays, table.dueOn),
   ]
 ).enableRLS()
 

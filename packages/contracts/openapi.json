@@ -5807,6 +5807,266 @@
         }
       }
     },
+    "/api/v1/health-records/schedules": {
+      "get": {
+        "operationId": "listHealthSchedules",
+        "tags": [
+          "health-records"
+        ],
+        "description": "Soonest due first. With `personId`, only theirs; someone the caller can't see gives an empty list.",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schedules": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/HealthSchedule"
+                      }
+                    }
+                  },
+                  "required": [
+                    "schedules"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createHealthSchedule",
+        "tags": [
+          "health-records"
+        ],
+        "description": "400 when that person already has a schedule for the same kind and title. Otherwise as createHealthEvent.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HealthScheduleBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schedule": {
+                      "$ref": "#/components/schemas/HealthSchedule"
+                    }
+                  },
+                  "required": [
+                    "schedule"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/health-records/schedules/{scheduleId}": {
+      "put": {
+        "operationId": "updateHealthSchedule",
+        "tags": [
+          "health-records"
+        ],
+        "parameters": [
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HealthScheduleBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schedule": {
+                      "$ref": "#/components/schemas/HealthSchedule"
+                    }
+                  },
+                  "required": [
+                    "schedule"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteHealthSchedule",
+        "tags": [
+          "health-records"
+        ],
+        "description": "The records it counted stay.",
+        "parameters": [
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "scheduleId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "scheduleId"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/households": {
       "post": {
         "operationId": "createHousehold",
@@ -18054,6 +18314,12 @@
               "$ref": "#/components/schemas/AttentionExpiry"
             }
           },
+          "health": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HealthSchedule"
+            }
+          },
           "money": {
             "anyOf": [
               {
@@ -18071,6 +18337,7 @@
           "maintenance",
           "bills",
           "expiries",
+          "health",
           "money"
         ]
       },
@@ -19868,6 +20135,28 @@
             "required": [
               "kind",
               "renewalId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "health"
+              },
+              "scheduleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "personId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": [
+              "kind",
+              "scheduleId",
+              "personId"
             ]
           }
         ]
@@ -22381,7 +22670,8 @@
           "trips",
           "bills",
           "maintenance",
-          "expiries"
+          "expiries",
+          "health"
         ]
       },
       "Goal": {
@@ -22662,6 +22952,14 @@
           "maybe"
         ]
       },
+      "HealthDueState": {
+        "type": "string",
+        "enum": [
+          "overdue",
+          "due_soon",
+          "scheduled"
+        ]
+      },
       "HealthEvent": {
         "type": "object",
         "properties": {
@@ -22884,6 +23182,113 @@
         "required": [
           "status",
           "time"
+        ]
+      },
+      "HealthSchedule": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "personId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "personName": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HealthEventKind"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "cadenceMonths": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120
+          },
+          "firstDueOn": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "lastOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dueOn": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "state": {
+            "$ref": "#/components/schemas/HealthDueState"
+          },
+          "canEdit": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "personId",
+          "personName",
+          "kind",
+          "title",
+          "name",
+          "cadenceMonths",
+          "firstDueOn",
+          "lastOn",
+          "dueOn",
+          "state",
+          "canEdit"
+        ]
+      },
+      "HealthScheduleBody": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HealthEventKind"
+          },
+          "title": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cadenceMonths": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120
+          },
+          "firstDueOn": {
+            "$ref": "#/components/schemas/CalendarDate"
+          }
+        },
+        "required": [
+          "personId",
+          "kind",
+          "cadenceMonths",
+          "firstDueOn"
         ]
       },
       "HoldingSlice": {

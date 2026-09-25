@@ -29,7 +29,7 @@ export type LinkStatus = (typeof LINK_STATUSES)[number]
  * Where a calendar item comes from. `native` and `google` are rows in `events`. The rest are
  * derived from other features at read time and never stored as events.
  */
-export const FEED_SOURCES = ['native', 'google', 'trips', 'bills', 'maintenance', 'expiries'] as const
+export const FEED_SOURCES = ['native', 'google', 'trips', 'bills', 'maintenance', 'expiries', 'health'] as const
 export type FeedSource = (typeof FEED_SOURCES)[number]
 
 /**

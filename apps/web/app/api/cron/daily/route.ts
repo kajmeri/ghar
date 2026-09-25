@@ -4,6 +4,7 @@ import { runCron, runJob } from '@/lib/cron'
 import { openSecret } from '@/lib/crypto'
 import { getDb } from '@/lib/db'
 import { runExpiryReminders } from '@/lib/documents/expiry-reminders'
+import { runHealthReminders } from '@/lib/health/reminders'
 import { env } from '@/lib/env'
 import { runCategorization } from '@/lib/finances/run-categorization'
 import { runMailIngest } from '@/lib/mail/ingest'
@@ -27,7 +28,8 @@ import { runTripUpdateDigest } from '@/lib/travel/update-digest'
 // message twice, and only makes drafts for a person to review. Expiry reminders first move automatic
 // renewals past their date on to their current term, which a second run finds already done, then
 // claim each reminder (at the lead time, then 30 and 7 days before) with a row before emailing, so
-// a second run sends nothing. Decision nudges claim a row per person, per thing up for a vote, per
+// a second run sends nothing. Health reminders claim a row per schedule, tier and due date the same
+// way. Decision nudges claim a row per person, per thing up for a vote, per
 // deadline, the same way. The trip update email marks what it sends as sent before sending, so a
 // second run finds nothing new. The bank jobs only read from Plaid and overwrite what they stored, and
 // the net worth snapshot comes last so it reads the balances they brought in; a second run rewrites the same day's rows rather than adding more.
@@ -96,6 +98,18 @@ export async function GET(request: Request): Promise<Response> {
         'documents.expiry_reminders',
         () =>
           runExpiryReminders({
+            db,
+            email: getEmailProvider(),
+            appUrl: env().APP_URL,
+            now: new Date(),
+          }),
+        deps
+      ),
+      await runJob(
+        db,
+        'health.reminders',
+        () =>
+          runHealthReminders({
             db,
             email: getEmailProvider(),
             appUrl: env().APP_URL,

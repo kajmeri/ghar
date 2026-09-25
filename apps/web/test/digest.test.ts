@@ -5,8 +5,10 @@ import { invitationExpiresAt } from '@ghar/core/invitations'
 import {
   acceptInvitation,
   createBill,
+  createHealthSchedule,
   createHousehold,
   createManualAccount,
+  createPerson,
   createInvitation,
   createRenewal,
   ensureDefaultCategories,
@@ -271,6 +273,29 @@ describe('the daily digest', () => {
     // A viewer hears about it, but can't say it won't be renewed.
     expect(byRecipient.get(viewer.email)).toContain('Costco membership')
     expect(byRecipient.get(viewer.email)).not.toMatch(LINK)
+  })
+
+  it('lists checkups due this week for the people each reader may see', async () => {
+    const { owner, ownerEmail, join } = await household()
+    const member = await join('member')
+    const anika = await createPerson(owner, db, { name: 'Anika' })
+    await createHealthSchedule(
+      owner,
+      db,
+      { personId: anika.id, kind: 'dental', title: null, cadenceMonths: 6, firstDueOn: addCalendarDays(TODAY, 3) },
+      TODAY
+    )
+    await prefer(owner, { sections: ['upkeep'] })
+    await prefer(member.ctx, { sections: ['upkeep'] })
+    const email = createMemoryProvider()
+
+    await runDigest(depsWith(email), { householdId: owner.householdId })
+
+    const byRecipient = new Map(email.sent.map(message => [message.to, message.text]))
+    expect(byRecipient.get(ownerEmail)).toContain('Dentist for Anika')
+    expect(byRecipient.get(ownerEmail)).toContain(`${APP_URL}/health?person=${anika.id}`)
+    // A member sees only their own health, so there's nothing to tell them.
+    expect(byRecipient.get(member.email) ?? '').not.toContain('Anika')
   })
 
   it('carries on past one person’s failure and tries them again next run', async () => {

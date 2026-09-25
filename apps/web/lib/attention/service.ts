@@ -11,10 +11,11 @@ import type { Session } from '@/lib/api/authed'
 import { listBillsWithStatus } from '@/lib/bills/service'
 import { getDb } from '@/lib/db'
 import { loadHomeMoney } from '@/lib/finances/overview'
+import { listHealthDueSoon } from '@/lib/health/service'
 import { toMaintenanceTask } from '@/lib/home/service'
 import { toExpiry } from '@/lib/renewals/service'
 
-/** What needs someone today: jobs coming due, bills late or nearly due, and things running out. */
+/** What needs someone today: jobs coming due, bills late or nearly due, things running out, and health visits due. */
 export async function getAttention(session: Session): Promise<Attention> {
   const { context, household } = session
   const db = getDb()
@@ -23,7 +24,7 @@ export async function getAttention(session: Session): Promise<Attention> {
   const range = { from: addCalendarDays(today, -EXPIRED_VISIBLE_DAYS), to: addCalendarDays(today, REMINDER_LEAD_DAYS_MAX) }
 
   const seesMoney = can(context.role, 'finances.view')
-  const [tasks, bills, documents, warranties, renewals, money] = await Promise.all([
+  const [tasks, bills, documents, warranties, renewals, money, health] = await Promise.all([
     // Only jobs already due or due within the due-soon window; the state filter below still decides.
     queries.listMaintenanceTasks(context, db, { dueTo: addCalendarDays(today, MAINTENANCE_DUE_SOON_DAYS) }),
     seesMoney ? listBillsWithStatus(context, db, household.timeZone) : null,
@@ -31,6 +32,7 @@ export async function getAttention(session: Session): Promise<Attention> {
     queries.listWarrantyExpiries(context, db, range),
     queries.listRenewalExpiries(context, db, range),
     seesMoney ? loadHomeMoney(session) : null,
+    listHealthDueSoon(context, db, today),
   ])
 
   // Something nobody is renewing needs no attention.
@@ -58,6 +60,7 @@ export async function getAttention(session: Session): Promise<Attention> {
     maintenance: tasks.map(task => toMaintenanceTask(task, today)).filter(task => task.state === 'overdue' || task.state === 'due_soon'),
     bills: bills?.filter(bill => bill.needsAttention) ?? null,
     expiries,
+    health,
     money,
   }
 }
