@@ -93,6 +93,9 @@
       "name": "trip-arrivals"
     },
     {
+      "name": "trip-costs"
+    },
+    {
       "name": "trip-guests"
     },
     {
@@ -12256,6 +12259,290 @@
         }
       }
     },
+    "/api/v1/trips/{tripId}/costs": {
+      "get": {
+        "operationId": "listTripCosts",
+        "tags": [
+          "trip-costs"
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripCostsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createTripCost",
+        "tags": [
+          "trip-costs"
+        ],
+        "description": "Adds a cost. A guest adds what they paid; the household can add what anyone paid.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveTripCostBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripCostsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/costs/{costId}": {
+      "put": {
+        "operationId": "updateTripCost",
+        "tags": [
+          "trip-costs"
+        ],
+        "description": "Replaces a cost and its split.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "costId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveTripCostBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripCostsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTripCost",
+        "tags": [
+          "trip-costs"
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "costId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripCostsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/trips/{tripId}/decisions": {
       "get": {
         "operationId": "getDecisions",
@@ -14865,6 +15152,150 @@
                   },
                   "required": [
                     "deleted"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/payments": {
+      "post": {
+        "operationId": "recordTripPayment",
+        "tags": [
+          "trip-costs"
+        ],
+        "description": "Records one party paying another back. Either of the two can, or the household.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordTripPaymentBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripCostsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/payments/{paymentId}": {
+      "delete": {
+        "operationId": "deleteTripPayment",
+        "tags": [
+          "trip-costs"
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/TripCostsValue"
+                    }
+                  },
+                  "required": [
+                    "value"
                   ]
                 }
               }
@@ -24855,6 +25286,31 @@
           "text"
         ]
       },
+      "RecordTripPaymentBody": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/TripParty"
+          },
+          "to": {
+            "$ref": "#/components/schemas/TripParty"
+          },
+          "amountCents": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          },
+          "paidOn": {
+            "$ref": "#/components/schemas/CalendarDate"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "amountCents",
+          "paidOn"
+        ]
+      },
       "RemindFromDays": {
         "anyOf": [
           {
@@ -25358,6 +25814,56 @@
           "direction",
           "mode",
           "at"
+        ]
+      },
+      "SaveTripCostBody": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "amountCents": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          },
+          "spentOn": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "paidBy": {
+            "$ref": "#/components/schemas/TripParty"
+          },
+          "shares": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "party": {
+                  "$ref": "#/components/schemas/TripParty"
+                },
+                "shares": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20
+                }
+              },
+              "required": [
+                "party",
+                "shares"
+              ]
+            }
+          }
+        },
+        "required": [
+          "description",
+          "amountCents",
+          "spentOn",
+          "paidBy",
+          "shares"
         ]
       },
       "SetArrivalRideBody": {
@@ -27674,6 +28180,161 @@
           "webcalUrl"
         ]
       },
+      "TripCost": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "description": {
+            "type": "string"
+          },
+          "amountCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "spentOn": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "paidBy": {
+            "$ref": "#/components/schemas/TripParty"
+          },
+          "shares": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripCostShare"
+            }
+          },
+          "yourCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "canEdit": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "description",
+          "amountCents",
+          "spentOn",
+          "paidBy",
+          "shares",
+          "yourCents",
+          "canEdit"
+        ]
+      },
+      "TripCostParty": {
+        "type": "object",
+        "properties": {
+          "party": {
+            "$ref": "#/components/schemas/TripParty"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "heads": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "you": {
+            "type": "boolean"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "balanceCents": {
+            "$ref": "#/components/schemas/Cents"
+          }
+        },
+        "required": [
+          "party",
+          "name",
+          "heads",
+          "you",
+          "active",
+          "balanceCents"
+        ]
+      },
+      "TripCostShare": {
+        "type": "object",
+        "properties": {
+          "party": {
+            "$ref": "#/components/schemas/TripParty"
+          },
+          "shares": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "cents": {
+            "$ref": "#/components/schemas/Cents"
+          }
+        },
+        "required": [
+          "party",
+          "shares",
+          "cents"
+        ]
+      },
+      "TripCostsValue": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "you": {
+            "$ref": "#/components/schemas/TripParty"
+          },
+          "parties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripCostParty"
+            }
+          },
+          "costs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripCost"
+            }
+          },
+          "payments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripPayment"
+            }
+          },
+          "transfers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripTransfer"
+            }
+          },
+          "totalCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "canAdd": {
+            "type": "boolean"
+          },
+          "canPickPayer": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "currency",
+          "you",
+          "parties",
+          "costs",
+          "payments",
+          "transfers",
+          "totalCents",
+          "canAdd",
+          "canPickPayer"
+        ]
+      },
       "TripDetail": {
         "type": "object",
         "properties": {
@@ -28064,6 +28725,71 @@
           "url",
           "requiresApproval",
           "createdAt"
+        ]
+      },
+      "TripParty": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "household"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "guest"
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ]
+          }
+        ]
+      },
+      "TripPayment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "from": {
+            "$ref": "#/components/schemas/TripParty"
+          },
+          "to": {
+            "$ref": "#/components/schemas/TripParty"
+          },
+          "amountCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "paidOn": {
+            "$ref": "#/components/schemas/CalendarDate"
+          },
+          "canDelete": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "from",
+          "to",
+          "amountCents",
+          "paidOn",
+          "canDelete"
         ]
       },
       "TripPerson": {
@@ -28551,6 +29277,29 @@
           "merchant",
           "amountCents",
           "tripId"
+        ]
+      },
+      "TripTransfer": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/TripParty"
+          },
+          "to": {
+            "$ref": "#/components/schemas/TripParty"
+          },
+          "amountCents": {
+            "$ref": "#/components/schemas/Cents"
+          },
+          "canRecord": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "amountCents",
+          "canRecord"
         ]
       },
       "TripUpdate": {

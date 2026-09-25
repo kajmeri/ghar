@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { TripArrivals } from '@/app/_components/trip-arrivals'
+import { TripCosts } from '@/app/_components/trip-costs'
 import { TripPolls } from '@/app/_components/trip-polls'
 import { TripRooms } from '@/app/_components/trip-rooms'
 import { TripUpdates } from '@/app/_components/trip-updates'
@@ -14,6 +15,7 @@ import { getPageSession } from '@/lib/api/authed'
 import { requireAccountSession } from '@/lib/auth/context'
 import { densityCookieName, parseDensity } from '@/lib/travel/itinerary-display'
 import { listTripArrivals, listTripRooms } from '@/lib/travel/arrivals'
+import { listTripCosts } from '@/lib/travel/costs'
 import { listTripGuests } from '@/lib/travel/guests'
 import { listTripPolls } from '@/lib/travel/polls'
 import { listTripUpdates } from '@/lib/travel/updates'
@@ -50,7 +52,7 @@ export default async function TripPage({
   const tab: TripTab = TABS.find(value => value === requested) ?? 'itinerary'
 
   const account = requireAccountSession()
-  const [detail, ideas, cookieStore, guests, polls, updates, arrivals, rooms] = await Promise.all([
+  const [detail, ideas, cookieStore, guests, polls, updates, arrivals, rooms, costs] = await Promise.all([
     loadTripDetail(session, tripId).catch((error: unknown) => {
       if (error instanceof NotFoundError) notFound()
       throw error
@@ -81,6 +83,12 @@ export default async function TripPage({
       }),
     account
       .then(signedIn => listTripRooms(signedIn, tripId))
+      .catch((error: unknown) => {
+        if (error instanceof NotFoundError) notFound()
+        throw error
+      }),
+    account
+      .then(signedIn => listTripCosts(signedIn, tripId))
       .catch((error: unknown) => {
         if (error instanceof NotFoundError) notFound()
         throw error
@@ -176,6 +184,7 @@ export default async function TripPage({
 
       <TripArrivals tripId={trip.id} value={arrivals} timeZone={detail.timeZone} />
       <TripRooms tripId={trip.id} value={rooms} />
+      <TripCosts tripId={trip.id} value={costs} today={today} />
       <TripUpdates tripId={trip.id} value={updates} timeZone={detail.timeZone} />
     </div>
   )

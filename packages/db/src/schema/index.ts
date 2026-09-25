@@ -2,6 +2,7 @@ import { HOUSEHOLD_ROLES } from '@ghar/core/auth'
 import { GUEST_RESPONSES, GUEST_SOURCES, MAX_PARTY_SIZE } from '@ghar/core/trip-guests'
 import { POLL_KINDS, POLL_PLACE_MAX_LENGTH } from '@ghar/core/trip-polls'
 import { ARRIVAL_DIRECTIONS, ARRIVAL_MODES, ARRIVAL_NUMBER_MAX_LENGTH, ARRIVAL_PLACE_MAX_LENGTH } from '@ghar/core/trip-arrivals'
+import { COST_DESCRIPTION_MAX_LENGTH, COST_MAX_CENTS, COST_SHARES_MAX } from '@ghar/core/trip-costs'
 import { ROOM_NAME_MAX_LENGTH, ROOM_SLEEPS_MAX } from '@ghar/core/trip-rooms'
 import { TRIP_POST_MAX_LENGTH, TRIP_UPDATE_KINDS } from '@ghar/core/trip-updates'
 import { BANK_ENVIRONMENTS, BANK_ITEM_STATUSES } from '@ghar/core/banking'
@@ -1090,6 +1091,8 @@ export const tripGuests = pgTable(
       .on(table.invitedBy)
       .where(sql`${table.invitedBy} is not null`),
     unique('trip_guests_token_hash_unique').on(table.tokenHash),
+    // For the shared costs' foreign keys, so a guest on a cost is on that cost's trip.
+    unique('trip_guests_id_trip_unique').on(table.id, table.tripId),
     check('trip_guests_email_lowercase', sql`${table.email} = lower(${table.email})`),
     check('trip_guests_party_size', sql`${table.partySize} between 1 and ${sql.raw(String(MAX_PARTY_SIZE))}`),
     // An emailed invitation carries a token; someone from the link is already signed in.
@@ -1513,6 +1516,126 @@ export const tripRoomAssignments = pgTable(
       .on(table.guestId)
       .where(sql`${table.guestId} is not null`),
     check('trip_room_assignments_one_person', sql`(${table.personId} is null) <> (${table.guestId} is null)`),
+  ]
+).enableRLS()
+
+/**
+ * Something paid for on a trip that the household and its guests share. A null guest is the
+ * household hosting the trip. A guest with costs or payments can't be taken off the trip until
+ * those are gone, so no one's balance moves under them (no action, not restrict, so deleting the
+ * whole trip still cascades). In the host household's currency.
+ */
+export const tripCosts = pgTable(
+  'trip_costs',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tripId: uuid()
+      .notNull()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    description: text().notNull(),
+    amountCents: cents().notNull(),
+    /** Who paid. Null is the household. */
+    paidByGuestId: uuid(),
+    spentOn: date({ mode: 'string' }).notNull(),
+    createdBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    foreignKey({
+      name: 'trip_costs_paid_by_fk',
+      columns: [table.paidByGuestId, table.tripId],
+      foreignColumns: [tripGuests.id, tripGuests.tripId],
+    }).onDelete('no action'),
+    // For trip_cost_shares' foreign key, so a share is on its cost's trip.
+    unique('trip_costs_id_trip_unique').on(table.id, table.tripId),
+    index('trip_costs_trip_idx').on(table.tripId, table.spentOn),
+    index('trip_costs_paid_by_idx')
+      .on(table.paidByGuestId, table.tripId)
+      .where(sql`${table.paidByGuestId} is not null`),
+    index('trip_costs_created_by_idx')
+      .on(table.createdBy)
+      .where(sql`${table.createdBy} is not null`),
+    check(
+      'trip_costs_description_length',
+      sql`char_length(${table.description}) between 1 and ${sql.raw(String(COST_DESCRIPTION_MAX_LENGTH))}`
+    ),
+    check('trip_costs_amount', sql`${table.amountCents} between 1 and ${sql.raw(String(COST_MAX_CENTS))}`),
+  ]
+).enableRLS()
+
+/** Who a cost is split between, and in what shares. A null guest is the household. */
+export const tripCostShares = pgTable(
+  'trip_cost_shares',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tripId: uuid()
+      .notNull()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    costId: uuid().notNull(),
+    guestId: uuid(),
+    shares: smallint().notNull(),
+  },
+  table => [
+    foreignKey({
+      name: 'trip_cost_shares_cost_fk',
+      columns: [table.costId, table.tripId],
+      foreignColumns: [tripCosts.id, tripCosts.tripId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'trip_cost_shares_guest_fk',
+      columns: [table.guestId, table.tripId],
+      foreignColumns: [tripGuests.id, tripGuests.tripId],
+    }).onDelete('no action'),
+    // The household is in a split once too.
+    unique('trip_cost_shares_party_unique').on(table.costId, table.guestId).nullsNotDistinct(),
+    index('trip_cost_shares_cost_idx').on(table.costId, table.tripId),
+    index('trip_cost_shares_trip_idx').on(table.tripId),
+    index('trip_cost_shares_guest_idx')
+      .on(table.guestId, table.tripId)
+      .where(sql`${table.guestId} is not null`),
+    check('trip_cost_shares_shares', sql`${table.shares} between 1 and ${sql.raw(String(COST_SHARES_MAX))}`),
+  ]
+).enableRLS()
+
+/** Someone paying someone else back. A null guest is the household. */
+export const tripPayments = pgTable(
+  'trip_payments',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tripId: uuid()
+      .notNull()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    fromGuestId: uuid(),
+    toGuestId: uuid(),
+    amountCents: cents().notNull(),
+    paidOn: date({ mode: 'string' }).notNull(),
+    createdBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    foreignKey({
+      name: 'trip_payments_from_fk',
+      columns: [table.fromGuestId, table.tripId],
+      foreignColumns: [tripGuests.id, tripGuests.tripId],
+    }).onDelete('no action'),
+    foreignKey({
+      name: 'trip_payments_to_fk',
+      columns: [table.toGuestId, table.tripId],
+      foreignColumns: [tripGuests.id, tripGuests.tripId],
+    }).onDelete('no action'),
+    index('trip_payments_trip_idx').on(table.tripId, table.paidOn),
+    index('trip_payments_from_idx')
+      .on(table.fromGuestId, table.tripId)
+      .where(sql`${table.fromGuestId} is not null`),
+    index('trip_payments_to_idx')
+      .on(table.toGuestId, table.tripId)
+      .where(sql`${table.toGuestId} is not null`),
+    index('trip_payments_created_by_idx')
+      .on(table.createdBy)
+      .where(sql`${table.createdBy} is not null`),
+    check('trip_payments_two_parties', sql`${table.fromGuestId} is distinct from ${table.toGuestId}`),
+    check('trip_payments_amount', sql`${table.amountCents} between 1 and ${sql.raw(String(COST_MAX_CENTS))}`),
   ]
 ).enableRLS()
 

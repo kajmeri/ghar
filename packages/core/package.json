@@ -38,6 +38,7 @@
     "./sync": "./src/sync.ts",
     "./travel": "./src/travel/index.ts",
     "./trip-arrivals": "./src/trip-arrivals.ts",
+    "./trip-costs": "./src/trip-costs.ts",
     "./trip-guests": "./src/trip-guests.ts",
     "./trip-polls": "./src/trip-polls.ts",
     "./trip-rooms": "./src/trip-rooms.ts",

@@ -21,7 +21,7 @@ import {
   type TripPerson,
 } from '@ghar/core/trip-guests'
 import { SORT_ORDER_STEP, type OptionVote } from '@ghar/core/itinerary'
-import { and, asc, count, desc, eq, inArray, isNotNull, max, ne, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNotNull, max, ne, or, sql } from 'drizzle-orm'
 import { authUsers } from 'drizzle-orm/supabase'
 import {
   householdMembers,
@@ -31,8 +31,11 @@ import {
   itinerarySlots,
   optionVotes,
   profiles,
+  tripCosts,
+  tripCostShares,
   tripGuestCalendarFeeds,
   tripGuests,
+  tripPayments,
   trips,
   tripShareLinks,
   tripTravellers,
@@ -241,6 +244,10 @@ export async function removeTripGuest(ctx: RequestContext, db: Db, input: { trip
   requirePermission(ctx, 'travel.invite')
   return db.transaction(async tx => {
     const trip = await requireTrip(ctx, tx, input.tripId)
+    // Taking them off would move everyone else's balance, so their money has to go first.
+    if (await hasSharedCosts(tx, trip.id, input.guestId)) {
+      throw new ConflictError('They have shared costs or payments on this trip. Take those off first.')
+    }
     const [row] = await tx
       .delete(tripGuests)
       .where(and(eq(tripGuests.id, input.guestId), eq(tripGuests.tripId, trip.id)))
@@ -249,6 +256,27 @@ export async function removeTripGuest(ctx: RequestContext, db: Db, input: { trip
     await recordAudit(ctx, tx, { action: 'trip_guest.removed', entity: 'trip_guest', entityId: row.id, metadata: { tripId: trip.id } })
     return { id: row.id }
   })
+}
+
+async function hasSharedCosts(db: Db, tripId: string, guestId: string): Promise<boolean> {
+  const [costs, shares, payments] = await Promise.all([
+    db
+      .select({ id: tripCosts.id })
+      .from(tripCosts)
+      .where(and(eq(tripCosts.tripId, tripId), eq(tripCosts.paidByGuestId, guestId)))
+      .limit(1),
+    db
+      .select({ id: tripCostShares.id })
+      .from(tripCostShares)
+      .where(and(eq(tripCostShares.tripId, tripId), eq(tripCostShares.guestId, guestId)))
+      .limit(1),
+    db
+      .select({ id: tripPayments.id })
+      .from(tripPayments)
+      .where(and(eq(tripPayments.tripId, tripId), or(eq(tripPayments.fromGuestId, guestId), eq(tripPayments.toGuestId, guestId))))
+      .limit(1),
+  ])
+  return costs.length + shares.length + payments.length > 0
 }
 
 async function requireGuest(db: Db, guestId: string): Promise<TripGuestWithStatus> {
