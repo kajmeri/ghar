@@ -1,10 +1,29 @@
 import { addCalendarDays, isCalendarDate } from '@ghar/core/dates'
-import type { QuickLogAnswer, QuickLogPrompt } from '@ghar/core/quick-log'
+import type { HealthEventKind } from '@ghar/core/health'
+import type { QuickLogAnswer, QuickLogPrompt, QuickLogRef } from '@ghar/core/quick-log'
 import type { QuickLogReader } from './types'
 
-// A reader for local development and tests that needs no API key. It matches words: "paid" means a
-// bill, and an item fits when a word of four letters or more from its name is in the sentence.
-// It knows "today", "yesterday" and a written-out YYYY-MM-DD, and an amount with a currency sign.
+// A reader for local development and tests that needs no API key. It matches words: "refilled"
+// means a medicine, a shot or a dentist means a health record (for the writer unless someone's
+// named), "paid" means a bill, and anything else a house job. An item fits when a word of four
+// letters or more from its name is in the sentence. It knows "today", "yesterday" and a
+// written-out YYYY-MM-DD, and an amount with a currency sign.
+
+const HEALTH_WORDS: readonly [HealthEventKind, RegExp][] = [
+  ['vaccine', /\b(shot|jab|vaccine|booster)\b/],
+  ['dental', /\b(dentist|dental)\b/],
+  ['eye', /\b(eye|optician)\b/],
+  ['checkup', /\bcheck-?up\b/],
+  ['test', /\b(blood test|scan)\b/],
+  ['visit', /\b(doctor|gp|clinic)\b/],
+]
+
+const ACTIONS: Record<QuickLogRef['kind'], QuickLogAnswer['action']> = {
+  bill: 'bill_paid',
+  task: 'task_done',
+  person: 'health_event',
+  medicine: 'medicine_refilled',
+}
 
 function wordsOf(text: string): string[] {
   return text
@@ -21,7 +40,14 @@ export function createFakeQuickLogReader(): QuickLogReader {
       const said = new Set(wordsOf(sentence))
       const lower = sentence.toLowerCase()
 
-      const kind = /\bpaid\b|\bpay\b/.test(lower) ? 'bill' : 'task'
+      const healthKind = HEALTH_WORDS.find(([, words]) => words.test(lower))?.[0] ?? null
+      const kind: QuickLogRef['kind'] = /\brefill(ed)?\b/.test(lower)
+        ? 'medicine'
+        : healthKind !== null
+          ? 'person'
+          : /\bpaid\b|\bpay\b/.test(lower)
+            ? 'bill'
+            : 'task'
       const items = [...prompt.refs]
         .filter(([, item]) => item.kind === kind)
         .map(([ref, item]) => ({ ref, score: wordsOf(item.label).filter(word => said.has(word)).length }))
@@ -38,10 +64,13 @@ export function createFakeQuickLogReader(): QuickLogReader {
             : null
 
       const answer: QuickLogAnswer = {
-        action: items.length === 0 ? 'other' : kind === 'bill' ? 'bill_paid' : 'task_done',
+        // A health record with nobody named is for the writer.
+        action: items.length === 0 && kind !== 'person' ? 'other' : ACTIONS[kind],
         items,
         date,
         amount: /[£$€]\s?\d[\d,]*(?:\.\d{1,2})?/.exec(sentence)?.[0] ?? null,
+        kind: kind === 'person' ? healthKind : null,
+        title: null,
       }
       return Promise.resolve(answer)
     },

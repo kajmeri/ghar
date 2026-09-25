@@ -22,16 +22,20 @@ function client(answer: () => Promise<unknown>): { client: Anthropic; calls: Cal
   return { client: { messages: { parse } } as unknown as Anthropic, calls }
 }
 
-const prompt = buildQuickLogPrompt('Paid the water bill yesterday, £42', {
-  today: '2026-09-25',
-  items: {
-    bills: [
-      { id: 'bill-water', name: 'Water', payee: 'Thames Water', occurrences: [] },
-      { id: 'bill-power', name: 'Electricity', payee: 'Octopus', occurrences: [] },
-    ],
-    tasks: [{ id: 'task-gutters', title: 'Clean the gutters', assetName: null, nextDueOn: null }],
-  },
-})
+const items = {
+  bills: [
+    { id: 'bill-water', name: 'Water', payee: 'Thames Water', occurrences: [] },
+    { id: 'bill-power', name: 'Electricity', payee: 'Octopus', occurrences: [] },
+  ],
+  tasks: [{ id: 'task-gutters', title: 'Clean the gutters', assetName: null, nextDueOn: null }],
+  people: [
+    { id: 'person-you', name: 'You', isYou: true, usualTitles: [] },
+    { id: 'person-asha', name: 'Asha', isYou: false, usualTitles: [] },
+  ],
+  medicines: [{ id: 'med-metformin', name: 'Metformin', personName: 'You', supplyDays: 30, lastRefilledOn: null }],
+}
+
+const prompt = buildQuickLogPrompt('Paid the water bill yesterday, £42', { today: '2026-09-25', items })
 
 describe('the Claude quick log reader', () => {
   it('sends the list and the sentence, and hands back the answer as it came', async () => {
@@ -69,6 +73,20 @@ describe('the stand-in reader', () => {
       items: ['b1'],
       date: '2026-09-24',
       amount: '£42',
+      kind: null,
+      title: null,
     })
+  })
+
+  it('reads a shot for whoever is named, and a refill', async () => {
+    const read = (text: string) => createFakeQuickLogReader().read(buildQuickLogPrompt(text, { today: '2026-09-25', items }))
+    expect(await read('Asha had her flu jab yesterday')).toMatchObject({
+      action: 'health_event',
+      items: ['p2'],
+      kind: 'vaccine',
+      date: '2026-09-24',
+    })
+    expect(await read('went to the dentist')).toMatchObject({ action: 'health_event', items: [], kind: 'dental' })
+    expect(await read('refilled the metformin')).toMatchObject({ action: 'medicine_refilled', items: ['m1'], kind: null })
   })
 })

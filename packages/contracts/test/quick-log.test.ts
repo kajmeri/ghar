@@ -27,6 +27,34 @@ describe('quick log', () => {
     expect(
       quickLogApplyBodySchema.safeParse({ action: 'task_done', taskId: billId, completedOn: '2026-09-24', costCents: -5 }).success
     ).toBe(false)
+    expect(
+      quickLogApplyBodySchema.parse({
+        action: 'health_event',
+        personId: billId,
+        personName: 'You',
+        kind: 'vaccine',
+        title: ' Flu shot ',
+        occurredOn: '2026-09-24',
+      })
+    ).toEqual({ action: 'health_event', personId: billId, kind: 'vaccine', title: 'Flu shot', occurredOn: '2026-09-24' })
+    expect(
+      quickLogApplyBodySchema.safeParse({
+        action: 'health_event',
+        personId: billId,
+        kind: 'vaccine',
+        title: 'x'.repeat(121),
+        occurredOn: '2026-09-24',
+      }).success
+    ).toBe(false)
+    expect(
+      quickLogApplyBodySchema.parse({
+        action: 'medicine_refilled',
+        medicineId: billId,
+        medicineName: 'Metformin',
+        personName: 'You',
+        refilledOn: '2026-09-24',
+      })
+    ).toEqual({ action: 'medicine_refilled', medicineId: billId, refilledOn: '2026-09-24' })
     expect(quickLogApplyBodySchema.safeParse({ action: 'paid_rent', billId }).success).toBe(false)
   })
 })

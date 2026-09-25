@@ -6155,7 +6155,7 @@
         "tags": [
           "health-records"
         ],
-        "description": "Refilled today: the next refill is `supplyDays` from now. 400 when it's stopped or has no supply length.",
+        "description": "Refilled on `refilledOn`, today if left out: the next refill is `supplyDays` after it. 400 when\nit's stopped, has no supply length, or the day is in the future or before its last refill.",
         "parameters": [
           {
             "name": "medicineId",
@@ -6167,6 +6167,125 @@
             }
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "default": {},
+                "type": "object",
+                "properties": {
+                  "refilledOn": {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "medicine": {
+                      "$ref": "#/components/schemas/HealthMedicine"
+                    }
+                  },
+                  "required": [
+                    "medicine"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/health-records/medicines/{medicineId}/refill/undo": {
+      "post": {
+        "operationId": "undoHealthMedicineRefill",
+        "tags": [
+          "health-records"
+        ],
+        "description": "Takes back the refill on `refilledOn`, putting the refill dates back as they were. 409 when it\nhas been refilled again or stopped since, so a later change is never undone with it.",
+        "parameters": [
+          {
+            "name": "medicineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "refilledOn": {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  },
+                  "previousRefillBy": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/CalendarDate"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "previousLastRefilledOn": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/CalendarDate"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "refilledOn",
+                  "previousRefillBy",
+                  "previousLastRefilledOn"
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -10286,7 +10405,7 @@
         "tags": [
           "quick-log"
         ],
-        "description": "Records it. 409 when the bill's due date was marked paid since, so an undo never takes back\nsomebody else's mark; 400 for a date in the future.",
+        "description": "Records it. 409 when the bill's due date was marked paid since, or the medicine already marked\nrefilled that day, so an undo never takes back somebody else's mark; 400 for a date in the\nfuture, or a refill older than the last one.",
         "requestBody": {
           "required": true,
           "content": {
@@ -28304,6 +28423,64 @@
               "taskId",
               "completedOn"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "health_event"
+              },
+              "personId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/HealthEventKind"
+              },
+              "title": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "occurredOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              }
+            },
+            "required": [
+              "action",
+              "personId",
+              "kind",
+              "occurredOn"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "medicine_refilled"
+              },
+              "medicineId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "refilledOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              }
+            },
+            "required": [
+              "action",
+              "medicineId",
+              "refilledOn"
+            ]
           }
         ]
       },
@@ -28380,6 +28557,71 @@
               "taskTitle",
               "assetName"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "health_event"
+              },
+              "personId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/HealthEventKind"
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "occurredOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "personName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "personId",
+              "kind",
+              "title",
+              "occurredOn",
+              "personName"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "medicine_refilled"
+              },
+              "medicineId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "refilledOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "medicineName": {
+                "type": "string"
+              },
+              "personName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "medicineId",
+              "refilledOn",
+              "medicineName",
+              "personName"
+            ]
           }
         ]
       },
@@ -28426,6 +28668,66 @@
               "action",
               "taskId",
               "entryId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "health_event"
+              },
+              "eventId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": [
+              "action",
+              "eventId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "medicine_refilled"
+              },
+              "medicineId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "refilledOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "previousRefillBy": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "previousLastRefilledOn": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "action",
+              "medicineId",
+              "refilledOn",
+              "previousRefillBy",
+              "previousLastRefilledOn"
             ]
           }
         ]

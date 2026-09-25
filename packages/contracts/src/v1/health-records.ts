@@ -290,11 +290,32 @@ export const stopHealthMedicine = defineEndpoint({
   response: z.object({ medicine: healthMedicineSchema }),
 })
 
-/** Refilled today: the next refill is `supplyDays` from now. 400 when it's stopped or has no supply length. */
+/**
+ * Refilled on `refilledOn`, today if left out: the next refill is `supplyDays` after it. 400 when
+ * it's stopped, has no supply length, or the day is in the future or before its last refill.
+ */
 export const refillHealthMedicine = defineEndpoint({
   method: 'POST',
   path: '/api/v1/health-records/medicines/:medicineId/refill',
   params: healthMedicineParamsSchema,
+  body: z.object({ refilledOn: calendarDateSchema.optional() }).prefault({}),
+  response: z.object({ medicine: healthMedicineSchema }),
+})
+
+/**
+ * Takes back the refill on `refilledOn`, putting the refill dates back as they were. 409 when it
+ * has been refilled again or stopped since, so a later change is never undone with it.
+ */
+export const undoHealthMedicineRefill = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/health-records/medicines/:medicineId/refill/undo',
+  params: healthMedicineParamsSchema,
+  body: z.object({
+    refilledOn: calendarDateSchema,
+    previousRefillBy: calendarDateSchema.nullable(),
+    /** Before `refilledOn`, or null. */
+    previousLastRefilledOn: calendarDateSchema.nullable(),
+  }),
   response: z.object({ medicine: healthMedicineSchema }),
 })
 

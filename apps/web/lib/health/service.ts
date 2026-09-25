@@ -62,6 +62,50 @@ export async function listHealthPeople(session: Session): Promise<HealthPerson[]
   }))
 }
 
+/**
+ * What the quick log may record health for: the people the caller logs for (the writer marked, and
+ * the titles their schedules count), and the medicines those people still take.
+ */
+export async function listLoggableHealth(session: Session): Promise<{
+  people: { id: string; name: string; isYou: boolean; usualTitles: string[] }[]
+  medicines: { id: string; name: string; personName: string; supplyDays: number | null; lastRefilledOn: CalendarDate | null }[]
+}> {
+  const { context } = session
+  if (!can(context.role, 'health.manage')) return { people: [], medicines: [] }
+  const db = getDb()
+  const today = householdToday(session)
+  const [people, schedules, medicines] = await Promise.all([
+    queries.listHealthPeople(context, db),
+    queries.listHealthSchedules(context, db, {}, today),
+    queries.listHealthMedicines(context, db, { current: true }),
+  ])
+  const titles = new Map<string, string[]>()
+  for (const schedule of schedules) {
+    if (schedule.title === null) continue
+    titles.set(schedule.personId, [...(titles.get(schedule.personId) ?? []), schedule.title])
+  }
+  return {
+    people: people
+      .filter(person => person.canManage)
+      .sort(comparePeople(context.userId))
+      .map(person => ({
+        id: person.id,
+        name: personLabel(person, context.userId),
+        isYou: person.userId === context.userId,
+        usualTitles: titles.get(person.id) ?? [],
+      })),
+    medicines: medicines
+      .filter(medicine => canManageHealthOf(context, medicine.personUserId))
+      .map(medicine => ({
+        id: medicine.id,
+        name: medicine.name,
+        personName: personLabel({ id: medicine.personId, userId: medicine.personUserId, name: medicine.personName }, context.userId),
+        supplyDays: medicine.supplyDays,
+        lastRefilledOn: medicine.lastRefilledOn,
+      })),
+  }
+}
+
 export async function listHealthEventsPage(session: Session, query: PageQuery & { personId?: string }): Promise<PageResult<HealthEvent>> {
   const filter = { personId: query.personId }
   const scope = { sort: 'health-events:occurred-desc', filters: filter }
@@ -240,9 +284,19 @@ export async function stopHealthMedicine(session: Session, medicineId: string): 
   return toHealthMedicine(await queries.stopHealthMedicine(session.context, getDb(), medicineId, today), session.context, today)
 }
 
-export async function refillHealthMedicine(session: Session, medicineId: string): Promise<HealthMedicine> {
+export async function refillHealthMedicine(session: Session, medicineId: string, refilledOn?: CalendarDate): Promise<HealthMedicine> {
   const today = householdToday(session)
-  return toHealthMedicine(await queries.refillHealthMedicine(session.context, getDb(), medicineId, today), session.context, today)
+  const row = await queries.refillHealthMedicine(session.context, getDb(), medicineId, today, refilledOn)
+  return toHealthMedicine(row, session.context, today)
+}
+
+export async function undoHealthMedicineRefill(
+  session: Session,
+  medicineId: string,
+  input: { refilledOn: CalendarDate; previousRefillBy: CalendarDate | null; previousLastRefilledOn: CalendarDate | null }
+): Promise<HealthMedicine> {
+  const row = await queries.undoHealthMedicineRefill(session.context, getDb(), medicineId, input)
+  return toHealthMedicine(row, session.context, householdToday(session))
 }
 
 export async function deleteHealthMedicine(session: Session, medicineId: string): Promise<{ medicineId: string }> {

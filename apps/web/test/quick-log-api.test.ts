@@ -2,26 +2,32 @@ import type { PGlite } from '@electric-sql/pglite'
 import type { QuickLogProposal, QuickLogUndo, RequestContext } from '@ghar/contracts'
 import { addCalendarDays, todayInTimeZone } from '@ghar/core/dates'
 import { invitationExpiresAt } from '@ghar/core/invitations'
-import { QUICK_LOG_NOTHING_TO_LOG, QUICK_LOG_UNCLEAR, QUICK_LOG_UNREADABLE } from '@ghar/core/quick-log'
+import { QUICK_LOG_UNCLEAR, QUICK_LOG_UNREADABLE } from '@ghar/core/quick-log'
 import {
   acceptInvitation,
   createBill,
+  createHealthMedicine,
   createHousehold,
   createInvitation,
   createMaintenanceTask,
+  createPerson,
+  getHealthEvent,
+  getHealthMedicine,
   listBillPayments,
   listMaintenanceHistory,
+  requireOwnPerson,
   type Db,
 } from '@ghar/db/queries'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
+import { POST as undoRefillRoute } from '@/app/api/v1/health-records/medicines/[medicineId]/refill/undo/route'
 import { POST as applyRoute } from '@/app/api/v1/quick-log/apply/route'
 import { POST as parseRoute } from '@/app/api/v1/quick-log/parse/route'
 import { createFakeQuickLogReader, QuickLogError, type QuickLogReader } from '@/lib/providers/quick-log'
 
 // The quick log through /api/v1, against PGlite and the word-matching reader: a sentence becomes
-// something to confirm and writes nothing, and confirming records it through the bills and house
-// services, with what undoes it.
+// something to confirm and writes nothing, and confirming records it through the bills, house and
+// health services, with what undoes it.
 
 const test = vi.hoisted(() => ({
   db: undefined as unknown,
@@ -48,6 +54,10 @@ let member: RequestContext
 let viewer: RequestContext
 let waterId: string
 let guttersId: string
+let ownerPerson: string
+let memberPerson: string
+let childPerson: string
+let metforminId: string
 
 const today = todayInTimeZone('Europe/London')
 /** The water bill falls due three days from now, so a payment yesterday settles it. */
@@ -123,6 +133,28 @@ beforeAll(async () => {
       vendorContactId: null,
     })
   ).id
+
+  ownerPerson = await requireOwnPerson(owner, db)
+  memberPerson = await requireOwnPerson(member, db)
+  childPerson = (await createPerson(owner, db, { name: 'Anika' })).id
+  metforminId = (
+    await createHealthMedicine(
+      owner,
+      db,
+      {
+        personId: ownerPerson,
+        name: 'Metformin',
+        dose: null,
+        contactId: null,
+        startedOn: null,
+        stoppedOn: null,
+        refillBy: null,
+        supplyDays: 30,
+        note: null,
+      },
+      today
+    )
+  ).id
 })
 
 beforeEach(() => {
@@ -166,7 +198,7 @@ describe('reading a sentence', () => {
     expect((await parse('cleaned the gutters')).status).toBe(403)
   })
 
-  it('says to add something first in a household with nothing to log', async () => {
+  it('logs a visit for yourself even in a new household with nothing else in it', async () => {
     const userId = await createAuthUser(client, 'quick-log-empty@example.com')
     const { household } = await createHousehold({ userId, email: 'quick-log-empty@example.com' }, db, {
       name: 'An empty household',
@@ -174,8 +206,29 @@ describe('reading a sentence', () => {
       currency: 'GBP',
     })
     test.session = { userId, householdId: household.id, role: 'owner' }
-    test.reader = { read: () => Promise.reject(new Error('The model should not be asked.')) }
-    expect((await parse('paid the rent')).body).toEqual({ choices: [], problem: QUICK_LOG_NOTHING_TO_LOG })
+    expect((await parse('paid the rent')).body).toEqual({ choices: [], problem: QUICK_LOG_UNCLEAR })
+    expect((await parse('went to the dentist')).body.choices).toMatchObject([{ action: 'health_event', personName: 'You', kind: 'dental' }])
+  })
+
+  it('suggests a shot for whoever it was, and a medicine refill', async () => {
+    expect((await parse('Anika had her flu jab yesterday')).body.choices).toEqual([
+      {
+        action: 'health_event',
+        personId: childPerson,
+        personName: 'Anika',
+        kind: 'vaccine',
+        title: null,
+        occurredOn: addCalendarDays(today, -1),
+      },
+    ])
+    expect((await parse('refilled the metformin')).body.choices).toEqual([
+      { action: 'medicine_refilled', medicineId: metforminId, medicineName: 'Metformin', personName: 'You', refilledOn: today },
+    ])
+
+    // A member logs only their own: no one else's medicine, and a checkup is theirs.
+    test.session = member
+    expect((await parse('refilled the metformin')).body.problem).toBe(QUICK_LOG_UNCLEAR)
+    expect((await parse('went for a checkup')).body.choices).toMatchObject([{ personId: memberPerson, personName: 'You' }])
   })
 })
 
@@ -200,6 +253,55 @@ describe('confirming', () => {
     expect(body.message).toMatch(/^Logged Clean the gutters as done on /)
     const log = await listMaintenanceHistory(owner, db, { taskId: guttersId })
     expect(log).toMatchObject([{ id: body.undo?.action === 'task_done' ? body.undo.entryId : '', completedOn, costCents: 8000 }])
+  })
+
+  it('adds a visit or shot to their record', async () => {
+    const occurredOn = addCalendarDays(today, -1)
+    const { status, body } = await apply({ action: 'health_event', personId: childPerson, kind: 'vaccine', title: 'Flu shot', occurredOn })
+    expect(status).toBe(200)
+    expect(body.message).toMatch(/^Added Flu shot for Anika on /)
+    const eventId = body.undo?.action === 'health_event' ? body.undo.eventId : ''
+    expect(await getHealthEvent(owner, db, eventId)).toMatchObject({
+      personId: childPerson,
+      kind: 'vaccine',
+      title: 'Flu shot',
+      occurredOn,
+    })
+
+    test.session = member
+    expect((await apply({ action: 'health_event', personId: childPerson, kind: 'dental', occurredOn })).status).toBe(404)
+  })
+
+  it('marks a medicine refilled once, and takes it back only while nothing has changed since', async () => {
+    const refilledOn = addCalendarDays(today, -2)
+    const first = await apply({ action: 'medicine_refilled', medicineId: metforminId, refilledOn })
+    expect(first.status).toBe(200)
+    expect(first.body.message).toMatch(/^Marked Metformin refilled on .+\. Next refill by .+\.$/)
+    expect(first.body.undo).toEqual({
+      action: 'medicine_refilled',
+      medicineId: metforminId,
+      refilledOn,
+      previousRefillBy: null,
+      previousLastRefilledOn: null,
+    })
+    expect(await getHealthMedicine(owner, db, metforminId)).toMatchObject({
+      lastRefilledOn: refilledOn,
+      refillBy: addCalendarDays(refilledOn, 30),
+    })
+
+    expect((await apply({ action: 'medicine_refilled', medicineId: metforminId, refilledOn })).status).toBe(409)
+    expect((await apply({ action: 'medicine_refilled', medicineId: metforminId, refilledOn: addCalendarDays(today, -3) })).status).toBe(400)
+    expect((await apply({ action: 'medicine_refilled', medicineId: metforminId, refilledOn: addCalendarDays(today, 1) })).status).toBe(400)
+
+    const { medicineId, ...undoBody } = first.body.undo?.action === 'medicine_refilled' ? first.body.undo : { medicineId: '' }
+    const undo = () =>
+      undoRefillRoute(post(`/api/v1/health-records/medicines/${medicineId}/refill/undo`, undoBody), {
+        params: Promise.resolve({ medicineId }),
+      })
+    expect((await undo()).status).toBe(200)
+    expect(await getHealthMedicine(owner, db, metforminId)).toMatchObject({ lastRefilledOn: null, refillBy: null })
+    // Taken back already, so there's nothing of it left to take back.
+    expect((await undo()).status).toBe(409)
   })
 
   it('refuses a day in the future, a date the bill isn’t due, and what the caller can’t mark', async () => {

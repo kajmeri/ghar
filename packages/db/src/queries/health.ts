@@ -1,6 +1,6 @@
 import { can, requirePermission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
-import { ForbiddenError, NotFoundError, ValidationError } from '@ghar/core/errors'
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@ghar/core/errors'
 import {
   canManageHealthOf,
   compareHealthDue,
@@ -691,12 +691,16 @@ export async function stopHealthMedicine(ctx: RequestContext, db: Db, medicineId
   return getHealthMedicine(ctx, db, medicineId)
 }
 
-/** Refilled today: the next refill is one supply from now. Needs to know how long a supply lasts. */
+/**
+ * Refilled on `refilledOn`, today unless it says: the next refill is one supply after it. Needs to
+ * know how long a supply lasts, and can't go before the last refill.
+ */
 export async function refillHealthMedicine(
   ctx: RequestContext,
   db: Db,
   medicineId: string,
-  today: CalendarDate
+  today: CalendarDate,
+  refilledOn: CalendarDate = today
 ): Promise<HealthMedicineRow> {
   requirePermission(ctx, 'health.view')
   const medicine = await requireManageableMedicine(ctx, db, medicineId)
@@ -705,10 +709,49 @@ export async function refillHealthMedicine(
     const problem = 'Say how many days a refill lasts first.'
     throw new ValidationError(problem, { details: { fieldErrors: { supplyDays: [problem] } } })
   }
+  if (refilledOn > today) {
+    const problem = 'Pick a day that isn’t in the future.'
+    throw new ValidationError(problem, { details: { fieldErrors: { refilledOn: [problem] } } })
+  }
+  if (medicine.lastRefilledOn !== null && refilledOn < medicine.lastRefilledOn) {
+    const problem = 'It was refilled after that. Pick the day of the latest refill.'
+    throw new ValidationError(problem, { details: { fieldErrors: { refilledOn: [problem] } } })
+  }
   await db
     .update(healthMedicines)
-    .set({ refillBy: nextRefillBy(today, medicine.supplyDays), lastRefilledOn: today, updatedAt: sql`now()` })
+    .set({ refillBy: nextRefillBy(refilledOn, medicine.supplyDays), lastRefilledOn: refilledOn, updatedAt: sql`now()` })
     .where(and(eq(healthMedicines.id, medicineId), eq(healthMedicines.householdId, ctx.householdId), isNull(healthMedicines.stoppedOn)))
+  return getHealthMedicine(ctx, db, medicineId)
+}
+
+/**
+ * Takes back the refill on `refilledOn`, putting the dates back as they were before it. Only while
+ * it's still the latest refill and the medicine hasn't stopped, so a later change is never lost.
+ */
+export async function undoHealthMedicineRefill(
+  ctx: RequestContext,
+  db: Db,
+  medicineId: string,
+  input: { refilledOn: CalendarDate; previousRefillBy: CalendarDate | null; previousLastRefilledOn: CalendarDate | null }
+): Promise<HealthMedicineRow> {
+  requirePermission(ctx, 'health.view')
+  await requireManageableMedicine(ctx, db, medicineId)
+  if (input.previousLastRefilledOn !== null && input.previousLastRefilledOn >= input.refilledOn) {
+    throw new ValidationError('The refill before it has to be earlier.')
+  }
+  const [undone] = await db
+    .update(healthMedicines)
+    .set({ refillBy: input.previousRefillBy, lastRefilledOn: input.previousLastRefilledOn, updatedAt: sql`now()` })
+    .where(
+      and(
+        eq(healthMedicines.id, medicineId),
+        eq(healthMedicines.householdId, ctx.householdId),
+        eq(healthMedicines.lastRefilledOn, input.refilledOn),
+        isNull(healthMedicines.stoppedOn)
+      )
+    )
+    .returning({ id: healthMedicines.id })
+  if (!undone) throw new ConflictError('It’s been refilled again or stopped since. Change it from its page.')
   return getHealthMedicine(ctx, db, medicineId)
 }
 
