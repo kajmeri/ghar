@@ -7,7 +7,7 @@ import * as queries from '@ghar/db/queries'
 import type { DocumentFile } from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
 import { getDb } from '@/lib/db'
-import { getDocumentScanner, ScanError } from '@/lib/providers/document-scan'
+import { getDocumentScanner, ScanError, type FileForScan } from '@/lib/providers/document-scan'
 import { getStorageProvider } from '@/lib/providers/storage'
 import { removeDocumentFile, verifyUploadedFile } from './service'
 
@@ -33,24 +33,29 @@ export async function scanSavedDocument(session: Session, documentId: string): P
 
 /** Null when Claude couldn't read it, or it isn't a document. Either way the person fills the form in themselves. */
 async function scanFile(file: DocumentFile): Promise<DocumentSuggestion | null> {
-  const { mimeType } = file
-  if (!isScannableMimeType(mimeType)) {
-    throw new ValidationError('Ghar can’t read the dates on a HEIC photo. Fill them in yourself, or use a JPEG or PDF.')
-  }
-  if (isImageMimeType(mimeType) && file.sizeBytes > MAX_SCAN_IMAGE_BYTES) {
-    throw new ValidationError('That photo is too big for Ghar to read. Fill in the dates yourself.')
-  }
-  const stored = await getStorageProvider().read(file.storagePath)
-  if (stored === null) throw new NotFoundError('That file is missing from storage.')
-
+  const readable = await readFileForScan(file)
   try {
-    return suggestionFromScan(await getDocumentScanner().scan({ bytes: stored.bytes, mimeType }))
+    return suggestionFromScan(await getDocumentScanner().scan(readable))
   } catch (error) {
     if (!(error instanceof ScanError)) throw error
     // The message is always ours, never anything read from the file.
     console.warn(`Reading a document scan failed: ${error.message}`)
     return null
   }
+}
+
+/** A file's bytes, if Claude can read it: a JPEG, PNG, WebP or PDF, and a photo no bigger than it takes. */
+export async function readFileForScan(file: DocumentFile): Promise<FileForScan> {
+  const { mimeType } = file
+  if (!isScannableMimeType(mimeType)) {
+    throw new ValidationError('Ghar can’t read a HEIC photo. Use a JPEG or a PDF, or fill it in yourself.')
+  }
+  if (isImageMimeType(mimeType) && file.sizeBytes > MAX_SCAN_IMAGE_BYTES) {
+    throw new ValidationError('That photo is too big for Ghar to read. Fill it in yourself.')
+  }
+  const stored = await getStorageProvider().read(file.storagePath)
+  if (stored === null) throw new NotFoundError('That file is missing from storage.')
+  return { bytes: stored.bytes, mimeType }
 }
 
 /**

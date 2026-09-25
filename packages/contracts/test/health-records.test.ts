@@ -13,6 +13,7 @@ import {
   MEDICINE_SUPPLY_DAYS_MAX as CORE_SUPPLY_MAX,
   MEDICINE_SUPPLY_DAYS_MIN as CORE_SUPPLY_MIN,
 } from '@ghar/core/health'
+import { HEALTH_SCAN_MAX_EVENTS } from '@ghar/core/health-scan'
 import { describe, expect, it } from 'vitest'
 import {
   HEALTH_CADENCE_MAX,
@@ -31,6 +32,8 @@ import {
   HEALTH_CARD_ITEM_MAX,
   HEALTH_CARD_ITEMS_MAX,
   HEALTH_CARD_NOTE_MAX,
+  HEALTH_SCAN_MAX,
+  healthScanSaveBodySchema,
 } from '../src/v1/health-records'
 
 describe('health records', () => {
@@ -46,6 +49,7 @@ describe('health records', () => {
       CORE_CARD_ITEMS_MAX,
       HEALTH_CARD_NOTE_MAX_LENGTH,
     ])
+    expect(HEALTH_SCAN_MAX).toBe(HEALTH_SCAN_MAX_EVENTS)
   })
 
   it('need only whose, what kind and when', () => {
@@ -93,5 +97,20 @@ describe('health records', () => {
     })
     expect(healthCardBodySchema.safeParse({ bloodType: 'C+' }).success).toBe(false)
     expect(healthCardBodySchema.safeParse({ allergies: Array.from({ length: 21 }, () => 'x') }).success).toBe(false)
+  })
+
+  it('save a scan only with at least one dated record, and let the file go unless asked', () => {
+    const personId = '6f1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d'
+    const storagePath = 'household/file.pdf'
+    expect(healthScanSaveBodySchema.safeParse({ personId, storagePath, events: [] }).success).toBe(false)
+    expect(healthScanSaveBodySchema.safeParse({ personId, storagePath, events: [{ kind: 'vaccine', occurredOn: null }] }).success).toBe(
+      false
+    )
+    expect(healthScanSaveBodySchema.parse({ personId, storagePath, events: [{ kind: 'vaccine', occurredOn: '2025-10-14' }] })).toEqual({
+      personId,
+      storagePath,
+      events: [{ kind: 'vaccine', title: null, occurredOn: '2025-10-14' }],
+      keepAs: null,
+    })
   })
 })

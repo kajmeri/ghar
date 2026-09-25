@@ -17,6 +17,7 @@ import {
   type HealthDue,
   type HealthEventKind,
 } from '@ghar/core/health'
+import { HEALTH_SCAN_MAX_EVENTS } from '@ghar/core/health-scan'
 import { and, asc, count, eq, getTableColumns, inArray, isNotNull, isNull, lte, max, or, sql, type SQL } from 'drizzle-orm'
 import { authUsers } from 'drizzle-orm/supabase'
 import {
@@ -247,6 +248,48 @@ export async function createHealthEvent(
 }
 
 /** Replaces every field. Moving it to another person needs the right to log for both. */
+/**
+ * Several records for one person at once, all linked to the same document: what a scan found and
+ * the person checked. Every one is checked before any is written, and they're written together,
+ * so a bad date on one saves none. Returned in the order given.
+ */
+export async function createHealthEvents(
+  ctx: RequestContext,
+  db: Db,
+  input: {
+    personId: string
+    documentId: string | null
+    events: readonly Pick<HealthEventInput, 'kind' | 'title' | 'occurredOn'>[]
+  },
+  today: CalendarDate
+): Promise<HealthEventRow[]> {
+  requirePermission(ctx, 'health.view')
+  if (input.events.length === 0) throw new ValidationError('Pick at least one record to save.')
+  if (input.events.length > HEALTH_SCAN_MAX_EVENTS) {
+    throw new ValidationError(`Save up to ${String(HEALTH_SCAN_MAX_EVENTS)} records at a time.`)
+  }
+  const values = input.events.map(event => {
+    requireHealthEventDate(event.occurredOn, today)
+    return {
+      householdId: ctx.householdId,
+      personId: input.personId,
+      kind: event.kind,
+      title: healthEventTitle(event.kind, event.title),
+      occurredOn: event.occurredOn,
+      contactId: null,
+      documentId: input.documentId,
+      note: null,
+      addedBy: ctx.userId,
+    }
+  })
+  await Promise.all([
+    requireManageablePerson(ctx, db, input.personId),
+    requireLinksInHousehold(ctx, db, { contactId: null, documentId: input.documentId }),
+  ])
+  const inserted = await db.insert(healthEvents).values(values).returning({ id: healthEvents.id })
+  return Promise.all(inserted.map(event => getHealthEvent(ctx, db, event.id)))
+}
+
 export async function updateHealthEvent(
   ctx: RequestContext,
   db: Db,

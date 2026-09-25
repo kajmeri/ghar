@@ -21,6 +21,7 @@
     "./errors": "./src/errors.ts",
     "./expiries": "./src/expiries.ts",
     "./health": "./src/health.ts",
+    "./health-scan": "./src/health-scan.ts",
     "./finances": "./src/finances/index.ts",
     "./home": "./src/home.ts",
     "./household": "./src/household.ts",

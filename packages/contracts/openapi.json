@@ -6461,6 +6461,167 @@
         }
       }
     },
+    "/api/v1/health-records/scan": {
+      "post": {
+        "operationId": "scanHealthRecord",
+        "tags": [
+          "health-records"
+        ],
+        "description": "Suggestions only. `suggestion` is null when Claude couldn't read it or it isn't health paperwork.\n404 for someone the caller can't see, 403 for someone they can't log for, 400 for a HEIC photo.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "personId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "storagePath": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "personId",
+                  "storagePath"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "suggestion": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/HealthScanSuggestion"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "suggestion"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/health-records/scan/save": {
+      "post": {
+        "operationId": "saveHealthScan",
+        "tags": [
+          "health-records"
+        ],
+        "description": "Saves all the records or none of them. Permissions as createHealthEvent.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HealthScanSaveBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/HealthEvent"
+                      }
+                    },
+                    "documentId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "events",
+                    "documentId"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/health-records/schedules": {
       "get": {
         "operationId": "listHealthSchedules",
@@ -24321,6 +24482,133 @@
         "required": [
           "status",
           "time"
+        ]
+      },
+      "HealthScanEvent": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/HealthEventKind"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "occurredOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "alreadyLogged": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "occurredOn",
+          "alreadyLogged"
+        ]
+      },
+      "HealthScanSaveBody": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "storagePath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "events": {
+            "minItems": 1,
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "#/components/schemas/HealthEventKind"
+                },
+                "title": {
+                  "default": null,
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 120
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "occurredOn": {
+                  "$ref": "#/components/schemas/CalendarDate"
+                }
+              },
+              "required": [
+                "kind",
+                "occurredOn"
+              ]
+            }
+          },
+          "keepAs": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "title"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "personId",
+          "storagePath",
+          "events"
+        ]
+      },
+      "HealthScanSuggestion": {
+        "type": "object",
+        "properties": {
+          "documentTitle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "events": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HealthScanEvent"
+            }
+          }
+        },
+        "required": [
+          "documentTitle",
+          "events"
         ]
       },
       "HealthSchedule": {

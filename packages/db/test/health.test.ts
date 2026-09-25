@@ -23,6 +23,7 @@ import {
   type HealthMedicineInput,
   claimHealthReminder,
   createHealthEvent,
+  createHealthEvents,
   createHealthSchedule,
   deleteHealthSchedule,
   getHealthSchedule,
@@ -156,6 +157,33 @@ describe('logging a record', () => {
     // A member can't link a document they can't see.
     await expect(createHealthEvent(member, db, event(memberPerson, { documentId: card.id }), today)).rejects.toThrow(ValidationError)
     await deleteHealthEvent(owner, db, created.id)
+  })
+
+  it('saves what a scan found all together, or none of it', async () => {
+    const shots = [
+      { kind: 'vaccine' as const, title: 'MMR', occurredOn: '2019-05-02' },
+      { kind: 'dental' as const, title: ' ', occurredOn: '2026-03-01' },
+    ]
+    const saved = await createHealthEvents(owner, db, { personId: child, documentId: null, events: shots }, today)
+    expect(saved.map(row => [row.title, row.occurredOn, row.personName, row.note])).toEqual([
+      ['MMR', '2019-05-02', 'Asha', null],
+      ['Dentist', '2026-03-01', 'Asha', null],
+    ])
+
+    const before = (await listHealthEventsPage(owner, db, { personId: child }, { limit: 50 })).rows.length
+    const oneBad = [...shots, { kind: 'vaccine' as const, title: 'Flu shot', occurredOn: '2026-09-26' }]
+    await expect(createHealthEvents(owner, db, { personId: child, documentId: null, events: oneBad }, today)).rejects.toThrow(
+      ValidationError
+    )
+    await expect(createHealthEvents(owner, db, { personId: child, documentId: null, events: [] }, today)).rejects.toThrow(ValidationError)
+    expect((await listHealthEventsPage(owner, db, { personId: child }, { limit: 50 })).rows).toHaveLength(before)
+
+    // The same rules as one record: a member logs only for themselves, a viewer for nobody.
+    await expect(createHealthEvents(member, db, { personId: child, documentId: null, events: shots }, today)).rejects.toThrow(NotFoundError)
+    await expect(createHealthEvents(viewer, db, { personId: viewerPerson, documentId: null, events: shots }, today)).rejects.toThrow(
+      ForbiddenError
+    )
+    await Promise.all(saved.map(row => deleteHealthEvent(owner, db, row.id)))
   })
 })
 

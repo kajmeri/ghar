@@ -387,3 +387,78 @@ export const saveHealthCard = defineEndpoint({
   body: healthCardBodySchema,
   response: z.object({ card: healthCardSchema }),
 })
+
+// Scanning a record: Claude reads a vaccine card or a visit summary into records for a person to
+// check. The file is uploaded with createDocumentUpload first, as a document's would be. Nothing is
+// saved until saveHealthScan, and a scan never reads results, diagnoses, names or ID numbers.
+
+/** HEALTH_SCAN_MAX_EVENTS in @ghar/core/health-scan. */
+export const HEALTH_SCAN_MAX = 30
+
+export const healthScanEventSchema = z.object({
+  kind: healthEventKindSchema,
+  /** Null when it read nothing better than the kind's name. */
+  title: z.string().nullable(),
+  /** Null when it couldn't read a whole date that has happened. The person fills it in. */
+  occurredOn: calendarDateSchema.nullable(),
+  /** The same kind, name and day is already on their history. */
+  alreadyLogged: z.boolean(),
+})
+export type HealthScanEvent = z.infer<typeof healthScanEventSchema>
+
+export const healthScanSuggestionSchema = z.object({
+  /** What to call the file if it's kept, like "Vaccination record". */
+  documentTitle: z.string().nullable(),
+  /** Newest first, undated ones last. */
+  events: z.array(healthScanEventSchema).max(HEALTH_SCAN_MAX),
+})
+export type HealthScanSuggestion = z.infer<typeof healthScanSuggestionSchema>
+
+const scanFileSchema = z.object({
+  /** Whose record it is. The scan never reads a name, so the caller says. */
+  personId: z.uuid(),
+  /** From createDocumentUpload, once the file is there. */
+  storagePath: z.string().min(1).max(200),
+})
+
+/**
+ * Suggestions only. `suggestion` is null when Claude couldn't read it or it isn't health paperwork.
+ * 404 for someone the caller can't see, 403 for someone they can't log for, 400 for a HEIC photo.
+ */
+export const scanHealthRecord = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/health-records/scan',
+  body: scanFileSchema,
+  response: z.object({ suggestion: healthScanSuggestionSchema.nullable() }),
+})
+
+export const healthScanSaveBodySchema = scanFileSchema.extend({
+  /** The records the person checked, each with a date. */
+  events: z
+    .array(
+      z.object({
+        kind: healthEventKindSchema,
+        title: z.string().trim().max(HEALTH_TITLE_MAX).nullable().default(null),
+        occurredOn: calendarDateSchema,
+      })
+    )
+    .min(1, 'Pick at least one record to save.')
+    .max(HEALTH_SCAN_MAX),
+  /**
+   * Keeps the file as a medical document with this title, and links every record to it. It's
+   * sensitive when the caller may mark it so. Null lets the file go once the records are saved.
+   */
+  keepAs: z
+    .object({ title: z.string().trim().min(1).max(200) })
+    .nullable()
+    .default(null),
+})
+export type HealthScanSaveBody = z.output<typeof healthScanSaveBodySchema>
+
+/** Saves all the records or none of them. Permissions as createHealthEvent. */
+export const saveHealthScan = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/health-records/scan/save',
+  body: healthScanSaveBodySchema,
+  response: z.object({ events: z.array(healthEventSchema), documentId: z.uuid().nullable() }),
+})
