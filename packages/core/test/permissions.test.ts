@@ -40,6 +40,9 @@ const APPROVED = {
   'home.manage': 'oam',
   'contacts.view': 'oamv',
   'contacts.manage': 'oam',
+  'health.view': 'oamv',
+  'health.manage': 'oam',
+  'health.everyone': 'oa',
 } satisfies Record<Permission, string>
 
 const LETTER = { owner: 'o', adult: 'a', member: 'm', viewer: 'v' } satisfies Record<HouseholdRole, string>

@@ -11,6 +11,6 @@ export const ROLE_LABELS: Record<HouseholdRole, string> = {
 export const ROLE_DESCRIPTIONS: Record<HouseholdRole, string> = {
   owner: 'Everything, including bank connections, roles and removing people.',
   adult: "Manages household data and invites people. Can't change roles, connect banks or remove people.",
-  member: 'Sees and edits everything except finances.',
-  viewer: 'Can look but not change anything. No finances.',
+  member: 'Sees and edits everything except finances and other people’s health records.',
+  viewer: 'Can look but not change anything. No finances, and only their own health records.',
 }

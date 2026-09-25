@@ -98,6 +98,7 @@ import {
   RENEWAL_TITLE_MAX_LENGTH,
 } from '@ghar/core/renewals'
 import { REMINDER_LEAD_DAYS_MAX, REMINDER_LEAD_DAYS_MIN } from '@ghar/core/expiries'
+import { HEALTH_EVENT_KINDS, HEALTH_NOTE_MAX_LENGTH, HEALTH_TITLE_MAX_LENGTH } from '@ghar/core/health'
 import { TRIP_STATUSES } from '@ghar/core/trips'
 import { DIGEST_SECTIONS, ONE_TAP_ACTIONS, oneTapActionHasDate, type DigestSection } from '@ghar/core/digest'
 import { BOOKING_DRAFT_STATUSES, MAIL_LINK_STATUSES, MAIL_MESSAGE_OUTCOMES, MAIL_SUBJECT_MAX_LENGTH } from '@ghar/core/mail'
@@ -179,6 +180,7 @@ export const mailMessageOutcome = pgEnum('mail_message_outcome', MAIL_MESSAGE_OU
 export const bookingDraftStatus = pgEnum('booking_draft_status', BOOKING_DRAFT_STATUSES)
 export const oneTapAction = pgEnum('one_tap_action', ONE_TAP_ACTIONS)
 export const renewalKind = pgEnum('renewal_kind', RENEWAL_KINDS)
+export const healthEventKind = pgEnum('health_event_kind', HEALTH_EVENT_KINDS)
 
 const timestamptz = () => timestamp({ withTimezone: true })
 const metadata = () =>
@@ -2352,6 +2354,51 @@ export const renewals = pgTable(
     check('renewals_remind_from', sql`${table.remindFromDays} between ${sql.raw(REMINDER_LEAD_RANGE)}`),
     // Moving the date on by itself needs to know how far.
     check('renewals_auto_renews_cadence', sql`not ${table.autoRenews} or ${table.cadenceMonths} is not null`),
+  ]
+).enableRLS()
+
+/**
+ * Something that happened to someone's health: a shot, a checkup, a filling. Deleting the person
+ * deletes their records: a health history that belongs to nobody is nobody's to keep. Owners and
+ * adults see everyone's; anyone else only their own (canSeeHealthOf in @ghar/core/health).
+ */
+export const healthEvents = pgTable(
+  'health_events',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    personId: uuid()
+      .notNull()
+      .references(() => householdPeople.id, { onDelete: 'cascade' }),
+    kind: healthEventKind().notNull(),
+    title: text().notNull(),
+    occurredOn: date({ mode: 'string' }).notNull(),
+    /** The doctor, dentist or clinic. */
+    contactId: uuid().references(() => contacts.id, { onDelete: 'set null' }),
+    /** A certificate or a summary, kept as a document. */
+    documentId: uuid().references(() => documents.id, { onDelete: 'set null' }),
+    note: text(),
+    addedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('health_events_person_idx').on(table.householdId, table.personId, table.occurredOn.desc(), table.id.desc()),
+    index('health_events_person_fk_idx').on(table.personId),
+    index('health_events_contact_idx')
+      .on(table.contactId)
+      .where(sql`${table.contactId} is not null`),
+    index('health_events_document_idx')
+      .on(table.documentId)
+      .where(sql`${table.documentId} is not null`),
+    index('health_events_added_by_idx')
+      .on(table.addedBy)
+      .where(sql`${table.addedBy} is not null`),
+    check('health_events_title_length', sql`char_length(${table.title}) between 1 and ${sql.raw(String(HEALTH_TITLE_MAX_LENGTH))}`),
+    check('health_events_note_length', sql`char_length(${table.note}) between 1 and ${sql.raw(String(HEALTH_NOTE_MAX_LENGTH))}`),
+    check('health_events_occurred_on', sql`${table.occurredOn} >= date '1900-01-01'`),
   ]
 ).enableRLS()
 

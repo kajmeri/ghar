@@ -20,6 +20,7 @@
     "./documents": "./src/documents.ts",
     "./errors": "./src/errors.ts",
     "./expiries": "./src/expiries.ts",
+    "./health": "./src/health.ts",
     "./finances": "./src/finances/index.ts",
     "./home": "./src/home.ts",
     "./household": "./src/household.ts",

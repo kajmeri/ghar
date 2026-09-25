@@ -15,8 +15,8 @@ const CONTRIBUTORS = ['owner', 'adult', 'member'] as const
  *
  * - owner: everything.
  * - adult: manages household data, invites people. Not connections, role changes or removal.
- * - member: everything except finances.
- * - viewer: read-only, and no finances.
+ * - member: everything except finances and other people's health records.
+ * - viewer: read-only, no finances, and only their own health records.
  */
 export const PERMISSIONS = {
   'household.view': EVERYONE,
@@ -56,6 +56,12 @@ export const PERMISSIONS = {
   'home.manage': CONTRIBUTORS,
   'contacts.view': EVERYONE,
   'contacts.manage': CONTRIBUTORS,
+  /** Your own health records. Everyone sees theirs; see `canSeeHealthOf` in @ghar/core/health. */
+  'health.view': EVERYONE,
+  /** Logging your own visits and shots. */
+  'health.manage': CONTRIBUTORS,
+  /** Seeing and logging everyone's, including the people without an account, like children. */
+  'health.everyone': OWNERS_AND_ADULTS,
 } as const satisfies Record<string, readonly HouseholdRole[]>
 
 export type Permission = keyof typeof PERMISSIONS

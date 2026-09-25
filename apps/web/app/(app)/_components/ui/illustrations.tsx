@@ -146,3 +146,13 @@ export function ChecklistIllustration() {
     </Illustration>
   )
 }
+
+export function HeartIllustration() {
+  return (
+    <Illustration>
+      <rect x='26' y='18' width='68' height='60' rx='8' className='fill-surface' />
+      <path d='M60 66c-10-7-18-13-18-22a9 9 0 0 1 18-3 9 9 0 0 1 18 3c0 9-8 15-18 22z' />
+      <path d='M34 30h10M34 36h6' className={DETAIL} />
+    </Illustration>
+  )
+}
