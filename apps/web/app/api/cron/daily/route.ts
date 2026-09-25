@@ -17,6 +17,7 @@ import { getPlaidClient } from '@/lib/providers/plaid'
 import { getPriceProviders } from '@/lib/providers/prices'
 import { runDecisionNudges } from '@/lib/travel/decision-nudges'
 import { runPriceWatch } from '@/lib/travel/price-watch'
+import { runTripRecaps } from '@/lib/travel/trip-recaps'
 import { runTripUpdateDigest } from '@/lib/travel/update-digest'
 
 // Vercel Cron calls this once a day (see apps/web/vercel.json). Each job writes a job_runs row,
@@ -115,6 +116,12 @@ export async function GET(request: Request): Promise<Response> {
         deps
       ),
       await runJob(db, 'travel.trip_updates', () => runTripUpdateDigest({ db, email: getEmailProvider(), appUrl: env().APP_URL }), deps),
+      await runJob(
+        db,
+        'travel.trip_recaps',
+        () => runTripRecaps({ db, email: getEmailProvider(), appUrl: env().APP_URL, now: new Date() }),
+        deps
+      ),
       // Transactions first: a new connection's accounts arrive with them. Then balances, whose
       // account types the liability and holding jobs use, and whose figures the snapshot uses.
       await runJob(db, 'bank.transactions_sync', () => runTransactionsSync(bankDeps(db)), deps),

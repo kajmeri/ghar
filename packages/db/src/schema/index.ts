@@ -3,6 +3,7 @@ import { GUEST_RESPONSES, GUEST_SOURCES, MAX_PARTY_SIZE } from '@ghar/core/trip-
 import { POLL_KINDS, POLL_PLACE_MAX_LENGTH } from '@ghar/core/trip-polls'
 import { ARRIVAL_DIRECTIONS, ARRIVAL_MODES, ARRIVAL_NUMBER_MAX_LENGTH, ARRIVAL_PLACE_MAX_LENGTH } from '@ghar/core/trip-arrivals'
 import { COST_DESCRIPTION_MAX_LENGTH, COST_MAX_CENTS, COST_SHARES_MAX } from '@ghar/core/trip-costs'
+import { MAX_TRIP_PHOTO_BYTES, PHOTO_CAPTION_MAX_LENGTH, TRIP_PHOTO_MIME_TYPES, type TripPhotoMimeType } from '@ghar/core/trip-photos'
 import { ROOM_NAME_MAX_LENGTH, ROOM_SLEEPS_MAX } from '@ghar/core/trip-rooms'
 import { TRIP_POST_MAX_LENGTH, TRIP_UPDATE_KINDS } from '@ghar/core/trip-updates'
 import { BANK_ENVIRONMENTS, BANK_ITEM_STATUSES } from '@ghar/core/banking'
@@ -1638,6 +1639,51 @@ export const tripPayments = pgTable(
     check('trip_payments_amount', sql`${table.amountCents} between 1 and ${sql.raw(String(COST_MAX_CENTS))}`),
   ]
 ).enableRLS()
+
+/**
+ * A photo in the trip's shared album. The file lives in the private bucket under the trip's own
+ * folder, and is only reached through a short-lived signed URL made after the caller was found to be
+ * on the trip. Whoever added it stays its owner even if they later leave the trip.
+ */
+export const tripPhotos = pgTable(
+  'trip_photos',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tripId: uuid()
+      .notNull()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    /** `trip-photos/<trip id>/<random id>.<ext>`, from tripPhotoStoragePath. Never a URL. */
+    storagePath: text().notNull(),
+    mimeType: text().$type<TripPhotoMimeType>().notNull(),
+    sizeBytes: integer().notNull(),
+    caption: text(),
+    addedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    unique('trip_photos_storage_path_unique').on(table.storagePath),
+    index('trip_photos_trip_idx').on(table.tripId, table.createdAt.desc()),
+    index('trip_photos_added_by_idx')
+      .on(table.addedBy)
+      .where(sql`${table.addedBy} is not null`),
+    check('trip_photos_caption_length', sql`char_length(${table.caption}) between 1 and ${sql.raw(String(PHOTO_CAPTION_MAX_LENGTH))}`),
+    check('trip_photos_mime_type', inList(table.mimeType, TRIP_PHOTO_MIME_TYPES)),
+    check('trip_photos_size', sql`${table.sizeBytes} between 1 and ${sql.raw(String(MAX_TRIP_PHOTO_BYTES))}`),
+    // A row can only ever point at its own trip's folder.
+    check(
+      'trip_photos_storage_path_trip',
+      sql`split_part(${table.storagePath}, '/', 1) = 'trip-photos' and split_part(${table.storagePath}, '/', 2) = ${table.tripId}::text`
+    ),
+  ]
+).enableRLS()
+
+/** The one recap email a trip gets after it ends. A row claims it, so a second run sends nothing. Only the daily job reads it. */
+export const tripRecapEmails = pgTable('trip_recap_emails', {
+  tripId: uuid()
+    .primaryKey()
+    .references(() => trips.id, { onDelete: 'cascade' }),
+  sentAt: timestamptz().notNull().defaultNow(),
+}).enableRLS()
 
 /** People who'd rather not get a trip's updates by email. They still see them on the trip. */
 export const tripUpdateMutes = pgTable(

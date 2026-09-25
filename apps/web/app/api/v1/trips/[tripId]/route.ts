@@ -2,6 +2,7 @@ import { deleteTrip, getTrip, updateTrip } from '@ghar/contracts'
 import { deleteTrip as removeTrip, updateTrip as patchTrip } from '@ghar/db/queries'
 import { authedRoute } from '@/lib/api/authed'
 import { getDb } from '@/lib/db'
+import { removeFiles } from '@/lib/travel/photos'
 import { toTrip } from '@/lib/travel/serialize'
 import { loadTripDetail } from '@/lib/travel/trips'
 
@@ -12,6 +13,8 @@ export const PATCH = authedRoute(updateTrip, async ({ params, body }, { context 
 }))
 
 export const DELETE = authedRoute(deleteTrip, async ({ params }, { context }) => {
-  await removeTrip(context, getDb(), params.tripId)
+  const { photoPaths } = await removeTrip(context, getDb(), params.tripId)
+  // The album's files go once nothing points at them.
+  await removeFiles(photoPaths)
   return { deleted: true } as const
 })

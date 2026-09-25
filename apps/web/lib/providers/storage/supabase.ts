@@ -10,6 +10,8 @@ export const DOCUMENTS_BUCKET = 'documents'
 const UPLOAD_URL_SECONDS = 2 * 60 * 60
 /** Long enough to open a file on a slow connection, short enough that a forwarded link goes dead. */
 const FILE_URL_SECONDS = 5 * 60
+/** Supabase removes up to this many files in one request. */
+const REMOVE_BATCH = 1000
 
 export function createSupabaseStorageProvider(config: { url: string; secretKey: string }): StorageProvider {
   // The secret key gets past storage policies, which is why the bucket has none: the only way to a
@@ -34,6 +36,18 @@ export function createSupabaseStorageProvider(config: { url: string; secretKey: 
         throw new StorageRequestError('Could not open the file.', error)
       }
       return { url: data.signedUrl, expiresAt }
+    },
+
+    async createFileUrls(paths, seconds) {
+      const expiresAt = new Date(Date.now() + seconds * 1000)
+      const urls = new Map<string, string>()
+      if (paths.length === 0) return { urls, expiresAt }
+      const { data, error } = await bucket.createSignedUrls([...paths], seconds)
+      if (error) throw new StorageRequestError('Could not open the files.', error)
+      for (const entry of data) {
+        if (entry.error === null && entry.path !== null && entry.signedUrl) urls.set(entry.path, entry.signedUrl)
+      }
+      return { urls, expiresAt }
     },
 
     async stat(path) {
@@ -62,6 +76,13 @@ export function createSupabaseStorageProvider(config: { url: string; secretKey: 
     async remove(path) {
       const { error } = await bucket.remove([path])
       if (error) throw new StorageRequestError('Could not delete the file.', error)
+    },
+
+    async removeMany(paths) {
+      for (let start = 0; start < paths.length; start += REMOVE_BATCH) {
+        const { error } = await bucket.remove(paths.slice(start, start + REMOVE_BATCH))
+        if (error) throw new StorageRequestError('Could not delete the files.', error)
+      }
     },
   }
 }

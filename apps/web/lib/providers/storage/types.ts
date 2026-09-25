@@ -24,12 +24,19 @@ export interface StorageProvider {
   createUploadUrl(path: string): Promise<SignedUrl>
   /** A URL that shows the file. Throws NotFoundError when nothing is at the path. */
   createFileUrl(path: string): Promise<SignedUrl>
+  /**
+   * URLs that show many files at once, good for `seconds`, keyed by path. A path with nothing at it
+   * is left out rather than failing the rest.
+   */
+  createFileUrls(paths: readonly string[], seconds: number): Promise<{ urls: Map<string, string>; expiresAt: Date }>
   /** Null when nothing is at the path. */
   stat(path: string): Promise<StoredFile | null>
   /** The file itself, for the server to read. Null when nothing is at the path. */
   read(path: string): Promise<StoredBytes | null>
   /** Succeeds when nothing is at the path. */
   remove(path: string): Promise<void>
+  /** Removes many files at once. Succeeds for paths with nothing at them. */
+  removeMany(paths: readonly string[]): Promise<void>
 }
 
 /** Storage answered with an error. The message is ours; the vendor's error stays in `cause` for the server log. */

@@ -66,7 +66,8 @@ function mimeTypeOf(file: File): DocumentMimeTypeValue | null {
   return null
 }
 
-async function compressImage(file: File): Promise<Blob | null> {
+/** The photo redrawn as a JPEG at most 2000px on its long side. Null when this browser can't draw it. */
+export async function compressImage(file: File): Promise<Blob | null> {
   let bitmap: ImageBitmap
   try {
     bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })

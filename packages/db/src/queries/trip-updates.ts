@@ -2,12 +2,14 @@ import type { CalendarDate } from '@ghar/core/dates'
 import { ForbiddenError, NotFoundError } from '@ghar/core/errors'
 import { firstName } from '@ghar/core/trip-guests'
 import { tripPostBody, TRIP_UPDATES_PAGE_SIZE, type TripUpdateKind } from '@ghar/core/trip-updates'
-import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm'
-import { authUsers } from 'drizzle-orm/supabase'
-import { householdMembers, households, profiles, tripGuests, trips, tripUpdateMutes, tripUpdates } from '../schema'
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { households, profiles, trips, tripUpdateMutes, tripUpdates } from '../schema'
 import { authorize } from './authorize'
 import { requireManager, requireParticipant, type Participant } from './trip-participant'
+import { listTripRecipients, type TripUpdateRecipient } from './trip-recipients'
 import type { Actor, Db, SessionContext } from './types'
+
+export type { TripUpdateRecipient } from './trip-recipients'
 
 // What's new on a trip, for the household and its guests alike. Posts are written by anyone who
 // can vote; the rest post themselves from trip-update-records.ts. Everything goes out by email
@@ -87,14 +89,6 @@ async function loadUpdates(db: Db, participant: Participant): Promise<TripUpdate
     canEmail: participant.canManage,
     muted: mute.length > 0,
   }
-}
-
-export interface TripUpdateRecipient {
-  userId: string
-  email: string
-  name: string | null
-  /** Where their link goes: the trip in the app, or the guest's page. */
-  access: 'household' | 'guest'
 }
 
 /** A post or a day's worth of updates, ready to email, and who to email them to. */
@@ -242,53 +236,11 @@ async function loadBatch(db: Db, householdId: string, tripId: string, updateIds:
       .leftJoin(profiles, eq(profiles.id, tripUpdates.authorUserId))
       .where(and(eq(tripUpdates.tripId, tripId), inArray(tripUpdates.id, [...updateIds])))
       .orderBy(tripUpdates.createdAt, tripUpdates.id),
-    listRecipients(db, householdId, tripId),
+    listTripRecipients(db, householdId, tripId),
   ])
   return {
     trip,
     updates: rows.map(({ authorName, ...row }) => ({ ...row, author: firstName(authorName) })),
     recipients,
   }
-}
-
-/**
- * Everyone on the trip with an address: the whole household, and guests let on who haven't said
- * they're not going. Less anyone who turned the emails off.
- */
-async function listRecipients(db: Db, householdId: string, tripId: string): Promise<TripUpdateRecipient[]> {
-  const [members, guests, mutes] = await Promise.all([
-    db
-      .select({ userId: householdMembers.userId, email: authUsers.email, name: profiles.fullName })
-      .from(householdMembers)
-      .innerJoin(authUsers, eq(authUsers.id, householdMembers.userId))
-      .leftJoin(profiles, eq(profiles.id, householdMembers.userId))
-      .where(eq(householdMembers.householdId, householdId)),
-    db
-      .select({ userId: tripGuests.userId, email: authUsers.email, name: profiles.fullName })
-      .from(tripGuests)
-      .innerJoin(authUsers, eq(authUsers.id, tripGuests.userId))
-      .leftJoin(profiles, eq(profiles.id, tripGuests.userId))
-      .where(
-        and(
-          eq(tripGuests.tripId, tripId),
-          isNotNull(tripGuests.approvedAt),
-          or(isNull(tripGuests.response), ne(tripGuests.response, 'not_going'))
-        )
-      ),
-    db.select({ userId: tripUpdateMutes.userId }).from(tripUpdateMutes).where(eq(tripUpdateMutes.tripId, tripId)),
-  ])
-  const muted = new Set(mutes.map(row => row.userId))
-  const recipients: TripUpdateRecipient[] = []
-  const seen = new Set<string>()
-  for (const member of members) {
-    if (!member.email || muted.has(member.userId) || seen.has(member.userId)) continue
-    seen.add(member.userId)
-    recipients.push({ userId: member.userId, email: member.email, name: member.name, access: 'household' })
-  }
-  for (const guest of guests) {
-    if (!guest.userId || !guest.email || muted.has(guest.userId) || seen.has(guest.userId)) continue
-    seen.add(guest.userId)
-    recipients.push({ userId: guest.userId, email: guest.email, name: guest.name, access: 'guest' })
-  }
-  return recipients
 }

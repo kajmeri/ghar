@@ -1,5 +1,6 @@
 import { assertTimeZone, todayInTimeZone } from '@ghar/core/dates'
 import { NotFoundError } from '@ghar/core/errors'
+import { tripPhase } from '@ghar/core/trips'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
@@ -7,7 +8,9 @@ import { GUEST_STATUS_LABELS, GUEST_STATUS_TONES, SharedTripFrame, SharedTripHer
 import { TripAnswerForm } from '@/app/_components/trip-answer-form'
 import { TripArrivals } from '@/app/_components/trip-arrivals'
 import { TripCosts } from '@/app/_components/trip-costs'
+import { TripPhotos } from '@/app/_components/trip-photos'
 import { TripPolls } from '@/app/_components/trip-polls'
+import { TripRecap } from '@/app/_components/trip-recap'
 import { TripRooms } from '@/app/_components/trip-rooms'
 import { TripUpdates } from '@/app/_components/trip-updates'
 import { Pill } from '@/components/ui/pill'
@@ -15,6 +18,7 @@ import { getMembership, getSessionContext } from '@/lib/auth/context'
 import * as arrivals from '@/lib/travel/arrivals'
 import * as costs from '@/lib/travel/costs'
 import * as guests from '@/lib/travel/guests'
+import * as album from '@/lib/travel/photos'
 import * as polls from '@/lib/travel/polls'
 import * as updates from '@/lib/travel/updates'
 import { updateMyAnswerAction } from '../actions'
@@ -39,6 +43,9 @@ export default async function SharedTripPage({ params }: PageProps<'/shared/[tri
     if (membership && (await guests.isHouseholdTrip(session, tripId))) redirect(`/travel/${tripId}`)
     notFound()
   }
+  const today = todayInTimeZone(assertTimeZone(trip.timeZone))
+  const phase = tripPhase(trip, today)
+  const [photos, recap] = await Promise.all([album.listTripPhotos(session, trip.id), album.getTripRecap(session, trip.id)])
 
   return (
     <SharedTripFrame home={membership ? '/' : '/shared'}>
@@ -47,6 +54,7 @@ export default async function SharedTripPage({ params }: PageProps<'/shared/[tri
           ← Shared with you
         </Link>
         <SharedTripHero trip={trip} eyebrow={`With ${trip.householdName}`} />
+        {phase === 'past' && recap ? <TripRecap recap={recap} canAddPhotos={photos.canAdd} /> : null}
         <TripPeople people={trip.people} householdName={trip.householdName} />
         <section aria-labelledby='answer-heading' className='flex flex-col gap-4 rounded-card border border-line bg-surface p-4'>
           <div className='flex items-center justify-between gap-3'>
@@ -70,11 +78,8 @@ export default async function SharedTripPage({ params }: PageProps<'/shared/[tri
         <TripPlan tripId={trip.id} days={trip.itinerary} timeZone={trip.timeZone} householdName={trip.householdName} />
         <TripArrivals tripId={trip.id} value={await arrivals.listTripArrivals(session, trip.id)} timeZone={trip.timeZone} />
         <TripRooms tripId={trip.id} value={await arrivals.listTripRooms(session, trip.id)} />
-        <TripCosts
-          tripId={trip.id}
-          value={await costs.listTripCosts(session, trip.id)}
-          today={todayInTimeZone(assertTimeZone(trip.timeZone))}
-        />
+        {phase === 'current' || phase === 'past' || photos.photos.length > 0 ? <TripPhotos tripId={trip.id} value={photos} /> : null}
+        <TripCosts tripId={trip.id} value={await costs.listTripCosts(session, trip.id)} today={today} />
         <TripUpdates tripId={trip.id} value={await updates.listTripUpdates(session, trip.id)} timeZone={trip.timeZone} />
         <section aria-labelledby='calendar-heading' className='flex flex-col gap-3 rounded-card border border-line bg-surface p-4'>
           <h2 id='calendar-heading' className='text-lg font-semibold'>

@@ -67,8 +67,8 @@ export function createFakeStorageProvider(
   state: FakeStorageState = sharedState(),
   now: () => number = Date.now
 ): StorageProvider {
-  const link = (path: string, op: Grant['op']) => {
-    const exp = now() + LINK_SECONDS * 1000
+  const link = (path: string, op: Grant['op'], seconds = LINK_SECONDS) => {
+    const exp = now() + seconds * 1000
     return { url: `${ROUTE}${sign(state, { path, op, exp })}`, expiresAt: new Date(exp) }
   }
   return {
@@ -78,6 +78,13 @@ export function createFakeStorageProvider(
     async createFileUrl(path) {
       if (!state.objects.has(path)) throw new NotFoundError('That file is missing from storage.')
       return link(path, 'read')
+    },
+    async createFileUrls(paths, seconds) {
+      const urls = new Map<string, string>()
+      for (const path of paths) {
+        if (state.objects.has(path)) urls.set(path, link(path, 'read', seconds).url)
+      }
+      return { urls, expiresAt: new Date(now() + seconds * 1000) }
     },
     async stat(path) {
       const stored = state.objects.get(path)
@@ -89,6 +96,9 @@ export function createFakeStorageProvider(
     },
     async remove(path) {
       state.objects.delete(path)
+    },
+    async removeMany(paths) {
+      for (const path of paths) state.objects.delete(path)
     },
   }
 }

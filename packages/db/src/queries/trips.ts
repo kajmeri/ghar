@@ -2,7 +2,7 @@ import { requirePermission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
 import type { TripStatus } from '@ghar/core/trips'
 import { and, count, eq, getTableColumns, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
-import { bookings, itinerarySlots, packingItems, trips, tripTravellers } from '../schema'
+import { bookings, itinerarySlots, packingItems, tripPhotos, trips, tripTravellers } from '../schema'
 import { recordAudit } from './audit'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { requireHouseholdPeople, requireOwnPerson } from './people'
@@ -178,10 +178,12 @@ export async function updateTrip(ctx: RequestContext, db: Db, tripId: string, pa
  * bookings and tagged transactions lose their trip but survive, because they are records
  * of things that happened.
  */
-export async function deleteTrip(ctx: RequestContext, db: Db, tripId: string): Promise<void> {
+/** Hands back the trip's photo files, for apps/web to remove from storage once the rows are gone. */
+export async function deleteTrip(ctx: RequestContext, db: Db, tripId: string): Promise<{ photoPaths: string[] }> {
   requirePermission(ctx, 'travel.manage')
   const trip = await requireTrip(ctx, db, tripId)
-  await db.transaction(async tx => {
+  return db.transaction(async tx => {
+    const photos = await tx.select({ storagePath: tripPhotos.storagePath }).from(tripPhotos).where(eq(tripPhotos.tripId, tripId))
     await tx.delete(trips).where(and(eq(trips.id, tripId), eq(trips.householdId, ctx.householdId)))
     await recordAudit(ctx, tx, {
       action: 'trip.deleted',
@@ -189,6 +191,7 @@ export async function deleteTrip(ctx: RequestContext, db: Db, tripId: string): P
       entityId: tripId,
       metadata: { name: trip.name },
     })
+    return { photoPaths: photos.map(photo => photo.storagePath) }
   })
 }
 

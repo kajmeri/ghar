@@ -169,6 +169,13 @@
       "when": 1790283393360,
       "tag": "0023_trip_costs",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790342253688,
+      "tag": "0024_trip_photos",
+      "breakpoints": true
     }
   ]
 }
