@@ -5,6 +5,7 @@ import { invitationExpiresAt } from '@ghar/core/invitations'
 import {
   acceptInvitation,
   createBill,
+  createHealthMedicine,
   createHealthSchedule,
   createHousehold,
   createManualAccount,
@@ -285,6 +286,22 @@ describe('the daily digest', () => {
       { personId: anika.id, kind: 'dental', title: null, cadenceMonths: 6, firstDueOn: addCalendarDays(TODAY, 3) },
       TODAY
     )
+    await createHealthMedicine(
+      owner,
+      db,
+      {
+        personId: anika.id,
+        name: 'Cetirizine',
+        dose: null,
+        contactId: null,
+        startedOn: null,
+        stoppedOn: null,
+        refillBy: addCalendarDays(TODAY, 2),
+        supplyDays: null,
+        note: null,
+      },
+      TODAY
+    )
     await prefer(owner, { sections: ['upkeep'] })
     await prefer(member.ctx, { sections: ['upkeep'] })
     const email = createMemoryProvider()
@@ -293,6 +310,7 @@ describe('the daily digest', () => {
 
     const byRecipient = new Map(email.sent.map(message => [message.to, message.text]))
     expect(byRecipient.get(ownerEmail)).toContain('Dentist for Anika')
+    expect(byRecipient.get(ownerEmail)).toContain('Refill Cetirizine for Anika')
     expect(byRecipient.get(ownerEmail)).toContain(`${APP_URL}/health?person=${anika.id}`)
     // A member sees only their own health, so there's nothing to tell them.
     expect(byRecipient.get(member.email) ?? '').not.toContain('Anika')

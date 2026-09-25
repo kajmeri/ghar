@@ -184,6 +184,7 @@ const september: CalendarFeedInput = {
     { scheduleId: 's-dentist', personId: 'p-anika', name: 'Dentist', personName: 'Anika', dueOn: '2026-09-08' },
     { scheduleId: 's-flu', personId: 'p-me', name: 'Flu shot', personName: null, dueOn: '2026-09-30' },
   ],
+  refills: [{ medicineId: 'm-cetirizine', personId: 'p-anika', name: 'Cetirizine', personName: 'Anika', refillBy: '2026-09-20' }],
 }
 
 describe('buildCalendarFeed', () => {
@@ -302,6 +303,15 @@ describe('buildCalendarFeed', () => {
       ref: { kind: 'health', scheduleId: 's-dentist', personId: 'p-anika' },
     })
     expect(feed.find(item => item.id === 'health:s-flu')).toMatchObject({ title: 'Flu shot due', tone: 'caution' })
+  })
+
+  it('shows a medicine refill under health, on its refill day', () => {
+    expect(feed.find(item => item.id === 'medicine:m-cetirizine')).toMatchObject({
+      title: 'Refill Cetirizine for Anika',
+      source: 'health',
+      startDate: '2026-09-20',
+      ref: { kind: 'medicine', medicineId: 'm-cetirizine', personId: 'p-anika' },
+    })
   })
 
   it('includes only the sources asked for', () => {

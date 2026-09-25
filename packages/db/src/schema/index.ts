@@ -104,6 +104,10 @@ import {
   HEALTH_EVENT_KINDS,
   HEALTH_NOTE_MAX_LENGTH,
   HEALTH_TITLE_MAX_LENGTH,
+  MEDICINE_DOSE_MAX_LENGTH,
+  MEDICINE_NAME_MAX_LENGTH,
+  MEDICINE_SUPPLY_DAYS_MAX,
+  MEDICINE_SUPPLY_DAYS_MIN,
 } from '@ghar/core/health'
 import { TRIP_STATUSES } from '@ghar/core/trips'
 import { DIGEST_SECTIONS, ONE_TAP_ACTIONS, oneTapActionHasDate, type DigestSection } from '@ghar/core/digest'
@@ -2469,6 +2473,90 @@ export const healthReminders = pgTable(
   table => [
     index('health_reminders_household_idx').on(table.householdId),
     uniqueIndex('health_reminders_unique').on(table.scheduleId, table.thresholdDays, table.dueOn),
+  ]
+).enableRLS()
+
+/**
+ * Something one person takes, or used to. Stopping it sets `stoppedOn` and keeps the row, so the
+ * history stays. The dose is text as the label says it; nothing adds it up.
+ */
+export const healthMedicines = pgTable(
+  'health_medicines',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    personId: uuid()
+      .notNull()
+      .references(() => householdPeople.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    dose: text(),
+    /** Who prescribed it. */
+    contactId: uuid().references(() => contacts.id, { onDelete: 'set null' }),
+    startedOn: date({ mode: 'string' }),
+    /** The first day it wasn't taken. Null while it still is. */
+    stoppedOn: date({ mode: 'string' }),
+    /** Always null once stopped. */
+    refillBy: date({ mode: 'string' }),
+    /** How long one refill lasts, so a refill can move the date on by itself. */
+    supplyDays: smallint(),
+    lastRefilledOn: date({ mode: 'string' }),
+    note: text(),
+    addedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('health_medicines_household_idx').on(table.householdId, table.personId),
+    index('health_medicines_person_fk_idx').on(table.personId),
+    index('health_medicines_refill_idx')
+      .on(table.householdId, table.refillBy)
+      .where(sql`${table.refillBy} is not null`),
+    index('health_medicines_contact_idx')
+      .on(table.contactId)
+      .where(sql`${table.contactId} is not null`),
+    index('health_medicines_added_by_idx')
+      .on(table.addedBy)
+      .where(sql`${table.addedBy} is not null`),
+    check('health_medicines_name_length', sql`char_length(${table.name}) between 1 and ${sql.raw(String(MEDICINE_NAME_MAX_LENGTH))}`),
+    check('health_medicines_dose_length', sql`char_length(${table.dose}) between 1 and ${sql.raw(String(MEDICINE_DOSE_MAX_LENGTH))}`),
+    check('health_medicines_note_length', sql`char_length(${table.note}) between 1 and ${sql.raw(String(HEALTH_NOTE_MAX_LENGTH))}`),
+    check(
+      'health_medicines_supply_days',
+      sql`${table.supplyDays} between ${sql.raw(String(MEDICINE_SUPPLY_DAYS_MIN))} and ${sql.raw(String(MEDICINE_SUPPLY_DAYS_MAX))}`
+    ),
+    check('health_medicines_started_on', sql`${table.startedOn} >= date '1900-01-01'`),
+    check('health_medicines_stopped_after_start', sql`${table.stoppedOn} >= ${table.startedOn}`),
+    check('health_medicines_refill_by', sql`${table.refillBy} >= date '1900-01-01'`),
+    // A medicine nobody takes needs no refill.
+    check('health_medicines_stopped_no_refill', sql`${table.stoppedOn} is null or ${table.refillBy} is null`),
+  ]
+).enableRLS()
+
+/**
+ * A refill reminder email that went out, claimed before sending, once per tier per refill date.
+ * Marking it refilled moves the date, so the next one starts over.
+ *
+ * No RLS policy: only the cron job reads it.
+ */
+export const healthRefillReminders = pgTable(
+  'health_refill_reminders',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    medicineId: uuid()
+      .notNull()
+      .references(() => healthMedicines.id, { onDelete: 'cascade' }),
+    thresholdDays: smallint().notNull(),
+    refillBy: date({ mode: 'string' }).notNull(),
+    sentAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('health_refill_reminders_household_idx').on(table.householdId),
+    uniqueIndex('health_refill_reminders_unique').on(table.medicineId, table.thresholdDays, table.refillBy),
   ]
 ).enableRLS()
 

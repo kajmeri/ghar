@@ -6,12 +6,14 @@ import {
   expiryItems,
   healthItems,
   maintenanceItems,
+  refillItems,
   tripItems,
   type BillDue,
   type DebtDue,
   type ExpiryDue,
   type HealthDue,
   type MaintenanceDue,
+  type RefillDue,
   type TripBooking,
 } from './derived'
 import { expandOccurrences, parseRecurrenceRule } from './recurrence'
@@ -27,7 +29,7 @@ import {
 
 // The one place calendar items come together: native events (with their repeats expanded),
 // events synced from linked calendars, and items derived from trips, bills, maintenance, expiry
-// dates and health checkups. The API and every calendar view read this, so they can't disagree about what's on
+// dates, health checkups and medicine refills. The API and every calendar view read this, so they can't disagree about what's on
 // a day.
 
 /** What an item opens. The web app turns these into links. */
@@ -41,6 +43,7 @@ export type CalendarItemRef =
   | { kind: 'asset'; assetId: string }
   | { kind: 'renewal'; renewalId: string }
   | { kind: 'health'; scheduleId: string; personId: string }
+  | { kind: 'medicine'; medicineId: string; personId: string }
 
 export interface CalendarItem {
   /** Stable across reads, so it can key a list. Unique within one feed. */
@@ -93,6 +96,8 @@ export interface CalendarFeedInput {
   expiries?: readonly ExpiryDue[]
   /** Checkups and shots at their next due date. */
   health?: readonly HealthDue[]
+  /** Current medicines on the day they need refilling. Under the health source. */
+  refills?: readonly RefillDue[]
   /** Which sources to include. Everything when omitted. */
   sources?: readonly FeedSource[]
 }
@@ -201,7 +206,7 @@ export function buildCalendarFeed(input: CalendarFeedInput): CalendarItem[] {
   if (wanted.has('bills')) raw.push(...billItems(input.bills ?? [], input.today), ...debtItems(input.debts ?? [], input.today))
   if (wanted.has('maintenance')) raw.push(...maintenanceItems(input.maintenance ?? [], input.today))
   if (wanted.has('expiries')) raw.push(...expiryItems(input.expiries ?? [], input.today))
-  if (wanted.has('health')) raw.push(...healthItems(input.health ?? [], input.today))
+  if (wanted.has('health')) raw.push(...healthItems(input.health ?? [], input.today), ...refillItems(input.refills ?? [], input.today))
 
   const seen = new Set<string>()
   const items: CalendarItem[] = []

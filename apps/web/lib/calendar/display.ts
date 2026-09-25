@@ -230,6 +230,8 @@ export function itemHref(item: CalendarItem): string {
       return `/renewals/${item.ref.renewalId}`
     case 'health':
       return `/health?person=${item.ref.personId}`
+    case 'medicine':
+      return `/health?person=${item.ref.personId}`
   }
 }
 

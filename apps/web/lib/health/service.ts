@@ -2,6 +2,8 @@ import 'server-only'
 import type {
   HealthEvent,
   HealthEventBody,
+  HealthMedicine,
+  HealthMedicineBody,
   HealthPerson,
   HealthSchedule,
   HealthScheduleBody,
@@ -10,10 +12,10 @@ import type {
 } from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
 import { todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
-import { canManageHealthOf, healthScheduleTitle } from '@ghar/core/health'
+import { canManageHealthOf, compareHealthDue, healthScheduleTitle, medicineRefillState } from '@ghar/core/health'
 import { comparePeople, personLabel } from '@ghar/core/people'
 import * as queries from '@ghar/db/queries'
-import type { Db, HealthEventRow, HealthScheduleRow, PageRequest } from '@ghar/db/queries'
+import type { Db, HealthEventRow, HealthMedicineRow, HealthScheduleRow, PageRequest } from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
 import { pageRequest, pageResponse, type PageResult } from '@/lib/api/cursor'
 import * as contacts from '@/lib/contacts/service'
@@ -166,4 +168,82 @@ export async function updateHealthSchedule(session: Session, scheduleId: string,
 export async function deleteHealthSchedule(session: Session, scheduleId: string): Promise<{ scheduleId: string }> {
   await queries.deleteHealthSchedule(session.context, getDb(), scheduleId, householdToday(session))
   return { scheduleId }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Medicines
+
+export function toHealthMedicine(
+  row: HealthMedicineRow,
+  context: Pick<RequestContext, 'userId' | 'role'>,
+  today: CalendarDate
+): HealthMedicine {
+  return {
+    id: row.id,
+    personId: row.personId,
+    personName: personLabel({ id: row.personId, userId: row.personUserId, name: row.personName }, context.userId),
+    name: row.name,
+    dose: row.dose,
+    contactId: row.contactId,
+    contactName: row.contactName,
+    startedOn: row.startedOn,
+    stoppedOn: row.stoppedOn,
+    refillBy: row.refillBy,
+    refillState: row.refillBy === null ? null : medicineRefillState(row.refillBy, today),
+    supplyDays: row.supplyDays,
+    lastRefilledOn: row.lastRefilledOn,
+    note: row.note,
+    canEdit: canManageHealthOf(context, row.personUserId),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  }
+}
+
+/** Current ones by name, then stopped ones, most recently stopped first. */
+export async function listHealthMedicines(
+  session: Session,
+  filter: { personId?: string; current?: boolean } = {}
+): Promise<HealthMedicine[]> {
+  const today = householdToday(session)
+  const rows = await queries.listHealthMedicines(session.context, getDb(), filter)
+  return rows.map(row => toHealthMedicine(row, session.context, today))
+}
+
+/** Current medicines whose refill is late or within a week, soonest first. For Home. */
+export async function listRefillsDueSoon(context: RequestContext, db: Db, today: CalendarDate): Promise<HealthMedicine[]> {
+  if (!can(context.role, 'health.view')) return []
+  const rows = await queries.listHealthMedicines(context, db, { current: true })
+  return rows
+    .map(row => toHealthMedicine(row, context, today))
+    .filter(medicine => medicine.refillState === 'overdue' || medicine.refillState === 'due_soon')
+    .toSorted((a, b) => compareHealthDue({ dueOn: a.refillBy ?? '', title: a.name }, { dueOn: b.refillBy ?? '', title: b.name }))
+}
+
+export async function getHealthMedicine(session: Session, medicineId: string): Promise<HealthMedicine> {
+  return toHealthMedicine(await queries.getHealthMedicine(session.context, getDb(), medicineId), session.context, householdToday(session))
+}
+
+export async function createHealthMedicine(session: Session, body: HealthMedicineBody): Promise<HealthMedicine> {
+  const today = householdToday(session)
+  return toHealthMedicine(await queries.createHealthMedicine(session.context, getDb(), body, today), session.context, today)
+}
+
+export async function updateHealthMedicine(session: Session, medicineId: string, body: HealthMedicineBody): Promise<HealthMedicine> {
+  const today = householdToday(session)
+  return toHealthMedicine(await queries.updateHealthMedicine(session.context, getDb(), medicineId, body, today), session.context, today)
+}
+
+export async function stopHealthMedicine(session: Session, medicineId: string): Promise<HealthMedicine> {
+  const today = householdToday(session)
+  return toHealthMedicine(await queries.stopHealthMedicine(session.context, getDb(), medicineId, today), session.context, today)
+}
+
+export async function refillHealthMedicine(session: Session, medicineId: string): Promise<HealthMedicine> {
+  const today = householdToday(session)
+  return toHealthMedicine(await queries.refillHealthMedicine(session.context, getDb(), medicineId, today), session.context, today)
+}
+
+export async function deleteHealthMedicine(session: Session, medicineId: string): Promise<{ medicineId: string }> {
+  await queries.deleteHealthMedicine(session.context, getDb(), medicineId)
+  return { medicineId }
 }

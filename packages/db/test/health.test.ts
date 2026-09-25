@@ -6,6 +6,17 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { createContact } from '../src/queries/contacts'
 import { createDocument } from '../src/queries/documents'
 import {
+  claimHealthRefillReminder,
+  createHealthMedicine,
+  deleteHealthMedicine,
+  getHealthMedicine,
+  listHealthMedicines,
+  listHealthRefillsForReminders,
+  refillHealthMedicine,
+  releaseHealthRefillReminder,
+  stopHealthMedicine,
+  updateHealthMedicine,
+  type HealthMedicineInput,
   claimHealthReminder,
   createHealthEvent,
   createHealthSchedule,
@@ -322,5 +333,97 @@ describe('schedules', () => {
     expect(toNobodyElse.map(row => row.email).sort()).toEqual(['health-adult@example.com', 'health-owner@example.com'])
 
     await deleteHealthSchedule(owner, db, own.id, today)
+  })
+})
+
+describe('medicines', () => {
+  function medicine(personId: string, overrides: Partial<HealthMedicineInput> = {}): HealthMedicineInput {
+    return {
+      personId,
+      name: 'Metformin',
+      dose: '500 mg twice a day',
+      contactId: null,
+      startedOn: '2026-01-10',
+      stoppedOn: null,
+      refillBy: '2026-10-01',
+      supplyDays: 30,
+      note: null,
+      ...overrides,
+    }
+  }
+
+  it('keeps a stopped one as history, and refills a current one a supply from today', async () => {
+    const doctor = await createContact(owner, db, {
+      name: 'Dr Iyer',
+      role: 'GP',
+      phone: null,
+      email: null,
+      url: null,
+      notes: null,
+      tags: [],
+    })
+    const created = await createHealthMedicine(owner, db, medicine(child, { contactId: doctor.id, name: '  Metformin ' }), today)
+    expect(created).toMatchObject({ name: 'Metformin', contactName: 'Dr Iyer', personName: 'Asha', refillBy: '2026-10-01' })
+
+    const refilled = await refillHealthMedicine(owner, db, created.id, today)
+    expect(refilled).toMatchObject({ refillBy: '2026-10-25', lastRefilledOn: today })
+
+    const vitamin = await createHealthMedicine(owner, db, medicine(child, { name: 'Vitamin D', refillBy: null, supplyDays: null }), today)
+    await expect(refillHealthMedicine(owner, db, vitamin.id, today)).rejects.toThrow(ValidationError)
+
+    const stopped = await stopHealthMedicine(owner, db, created.id, today)
+    expect(stopped).toMatchObject({ stoppedOn: today, refillBy: null, name: 'Metformin' })
+    await expect(refillHealthMedicine(owner, db, created.id, today)).rejects.toThrow(ValidationError)
+    expect((await listHealthMedicines(owner, db, { personId: child })).map(row => row.name)).toEqual(['Vitamin D', 'Metformin'])
+    expect((await listHealthMedicines(owner, db, { personId: child, current: true })).map(row => row.name)).toEqual(['Vitamin D'])
+
+    // Clearing the stop date starts it again.
+    const restarted = await updateHealthMedicine(owner, db, created.id, medicine(child, { refillBy: null }), today)
+    expect(restarted.stoppedOn).toBeNull()
+
+    await deleteHealthMedicine(owner, db, created.id)
+    await deleteHealthMedicine(owner, db, vitamin.id)
+    await expect(getHealthMedicine(owner, db, created.id)).rejects.toThrow(NotFoundError)
+  })
+
+  it('follows who may see and log whose records', async () => {
+    const own = await createHealthMedicine(member, db, medicine(memberPerson), today)
+    const childs = await createHealthMedicine(owner, db, medicine(child), today)
+    await expect(createHealthMedicine(member, db, medicine(child), today)).rejects.toThrow(NotFoundError)
+    await expect(createHealthMedicine(viewer, db, medicine(viewerPerson), today)).rejects.toThrow(ForbiddenError)
+    await expect(stopHealthMedicine(member, db, childs.id, today)).rejects.toThrow(NotFoundError)
+    await expect(getHealthMedicine(outsider, db, own.id)).rejects.toThrow(NotFoundError)
+    expect((await listHealthMedicines(member, db, {})).map(row => row.id)).toEqual([own.id])
+
+    const sql = `select id from health_medicines where id in ('${own.id}', '${childs.id}') order by id`
+    expect(await queryAs<{ id: string }>(client, member.userId, sql)).toEqual([{ id: own.id }])
+    expect((await queryAs<{ id: string }>(client, adult.userId, sql)).length).toBe(2)
+    expect(await queryAs(client, outsider.userId, sql)).toEqual([])
+
+    await deleteHealthMedicine(member, db, own.id)
+    await deleteHealthMedicine(owner, db, childs.id)
+  })
+
+  it('claims each refill reminder once per refill date, and skips stopped ones', async () => {
+    const current = await createHealthMedicine(owner, db, medicine(child), today)
+    const stopped = await createHealthMedicine(
+      owner,
+      db,
+      medicine(child, { name: 'Amoxicillin', stoppedOn: '2026-09-01', refillBy: null }),
+      today
+    )
+    const actor = { householdId: owner.householdId, userId: null }
+    const ids = (await listHealthRefillsForReminders(actor, db)).map(row => row.id)
+    expect(ids).toContain(current.id)
+    expect(ids).not.toContain(stopped.id)
+
+    const first = await claimHealthRefillReminder(actor, db, { medicineId: current.id, refillBy: '2026-10-01', thresholdDays: 7 })
+    expect(first).not.toBeNull()
+    expect(await claimHealthRefillReminder(actor, db, { medicineId: current.id, refillBy: '2026-10-01', thresholdDays: 7 })).toBeNull()
+    if (first !== null) await releaseHealthRefillReminder(actor, db, first)
+    expect(await claimHealthRefillReminder(actor, db, { medicineId: current.id, refillBy: '2026-10-01', thresholdDays: 7 })).not.toBeNull()
+
+    await deleteHealthMedicine(owner, db, current.id)
+    await deleteHealthMedicine(owner, db, stopped.id)
   })
 })

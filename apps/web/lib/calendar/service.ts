@@ -23,6 +23,7 @@ import {
   type FeedSource,
   type HealthDue,
   type MaintenanceDue,
+  type RefillDue,
 } from '@ghar/core/calendar'
 import { todayInTimeZone, type CalendarDate, type TimeZone } from '@ghar/core/dates'
 import { healthScheduleTitle } from '@ghar/core/health'
@@ -75,8 +76,8 @@ export function availableFeedSources(ctx: RequestContext, links: readonly Pick<C
 /**
  * Everything on the calendar for a range of days in the household's zone: events, trips, each
  * bill's due dates marked paid or not, connected cards' and loans' next payments, maintenance at
- * its next due date, documents and warranties on the day they run out, and checkups at their next
- * due date for the people the reader may see. Sensitive documents stay off for people who can't see them.
+ * its next due date, documents and warranties on the day they run out, checkups at their next due
+ * date and medicine refills for the people the reader may see. Sensitive documents stay off for people who can't see them.
  */
 export async function getCalendarFeed(
   ctx: RequestContext,
@@ -89,7 +90,7 @@ export async function getCalendarFeed(
   const range = { from: input.from, to: input.to }
   const today = todayInTimeZone(timezone)
 
-  const [events, bookings, bills, liabilityDues, tasks, documents, warranties, renewals, schedules, links] = await Promise.all([
+  const [events, bookings, bills, liabilityDues, tasks, documents, warranties, renewals, schedules, medicines, links] = await Promise.all([
     wants('native') || wants('google') ? queries.listEventsInWindow(ctx, db, window) : [],
     wants('trips') && can(ctx.role, 'travel.view') ? queries.listTripBookingsInRange(ctx, db, input) : [],
     wants('bills') && can(ctx.role, 'finances.view') ? listBillDues(ctx, db, { ...range, timeZone: timezone, currency }) : [],
@@ -101,6 +102,7 @@ export async function getCalendarFeed(
     wants('expiries') && can(ctx.role, 'home.view') ? queries.listWarrantyExpiries(ctx, db, range) : [],
     wants('expiries') && can(ctx.role, 'documents.view') ? queries.listRenewalExpiries(ctx, db, range) : [],
     wants('health') && can(ctx.role, 'health.view') ? queries.listHealthSchedules(ctx, db, {}, today) : [],
+    wants('health') && can(ctx.role, 'health.view') ? queries.listHealthMedicines(ctx, db, { current: true }) : [],
     // Only whether any calendar is linked, for availableSources.
     can(ctx.role, 'calendar.view') ? calendarLinkRows(ctx) : [],
   ])
@@ -144,6 +146,23 @@ export async function getCalendarFeed(
       : []
   )
 
+  const refills: RefillDue[] = medicines.flatMap(medicine =>
+    medicine.refillBy !== null && medicine.refillBy >= input.from && medicine.refillBy <= input.to
+      ? [
+          {
+            medicineId: medicine.id,
+            personId: medicine.personId,
+            name: medicine.name,
+            personName:
+              medicine.personUserId === ctx.userId
+                ? null
+                : personLabel({ id: medicine.personId, userId: medicine.personUserId, name: medicine.personName }, ctx.userId),
+            refillBy: medicine.refillBy,
+          },
+        ]
+      : []
+  )
+
   const items = buildCalendarFeed({
     window,
     timeZone: timezone,
@@ -155,6 +174,7 @@ export async function getCalendarFeed(
     maintenance,
     expiries,
     health,
+    refills,
     sources: input.sources,
   })
   return {

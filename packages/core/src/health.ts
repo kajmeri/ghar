@@ -1,5 +1,5 @@
 import { can, type HouseholdRole } from './auth'
-import { addCalendarMonths, daysBetween, distancePhrase, type CalendarDate } from './dates'
+import { addCalendarDays, addCalendarMonths, daysBetween, distancePhrase, type CalendarDate } from './dates'
 import { ValidationError } from './errors'
 import { reminderThreshold } from './expiries'
 
@@ -219,4 +219,111 @@ export function requireHealthScheduleFields<T extends HealthScheduleFields>(fiel
 /** Soonest first, then by title so the list holds still. */
 export function compareHealthDue(a: { dueOn: CalendarDate; title: string }, b: { dueOn: CalendarDate; title: string }): number {
   return a.dueOn.localeCompare(b.dueOn) || a.title.localeCompare(b.title)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Medicines
+// ---------------------------------------------------------------------------------------------
+
+// What someone takes now, and what they used to. A name, a dose as they'd say it ("500 mg twice a
+// day"), who prescribed it, and when to refill it. Stopping one keeps it, with the day it stopped,
+// so the history is still there. The dose is text on purpose: Ghar never does arithmetic on it.
+
+export const MEDICINE_NAME_MAX_LENGTH = 120
+export const MEDICINE_DOSE_MAX_LENGTH = 120
+export const MEDICINE_SUPPLY_DAYS_MIN = 1
+export const MEDICINE_SUPPLY_DAYS_MAX = 365
+/** A refill turns to caution this many days before it's due, and the one reminder email goes then. */
+export const MEDICINE_REFILL_SOON_DAYS = 7
+
+export interface MedicineFields {
+  readonly personId: string
+  readonly name: string
+  readonly dose: string | null
+  readonly startedOn: CalendarDate | null
+  /** The first day they no longer took it. Null while they still do. Never after today. */
+  readonly stoppedOn: CalendarDate | null
+  /** When it needs refilling next. Null when it doesn't, or nobody's tracking it. */
+  readonly refillBy: CalendarDate | null
+  /** How many days one refill lasts, so "Refilled" can work out the next date. */
+  readonly supplyDays: number | null
+  readonly note: string | null
+}
+
+/**
+ * Checks a medicine's fields and tidies them: text trimmed, blanks to null. A stopped medicine needs
+ * no refill, so its refill date is dropped. `today` is the household's.
+ */
+export function requireMedicineFields<T extends MedicineFields>(fields: T, today: CalendarDate): T {
+  const fieldErrors: Record<string, string[]> = {}
+  const name = fields.name.trim()
+  const dose = fields.dose?.trim() ?? ''
+  const note = fields.note?.trim() ?? ''
+  if (name === '') fieldErrors.name = ['Give it a name.']
+  else if (name.length > MEDICINE_NAME_MAX_LENGTH) fieldErrors.name = ['That name is too long.']
+  if (dose.length > MEDICINE_DOSE_MAX_LENGTH) fieldErrors.dose = ['That dose is too long.']
+  if (note.length > HEALTH_NOTE_MAX_LENGTH) fieldErrors.note = ['That note is too long.']
+  if (fields.startedOn !== null && fields.startedOn < HEALTH_EARLIEST_DATE) fieldErrors.startedOn = ['That date is too far back.']
+  if (fields.stoppedOn !== null) {
+    if (fields.stoppedOn > today) fieldErrors.stoppedOn = ['That date hasn’t happened yet. Stop it on the day it stops.']
+    else if (fields.startedOn !== null && fields.stoppedOn < fields.startedOn) fieldErrors.stoppedOn = ['It can’t stop before it started.']
+  }
+  if (fields.refillBy !== null && fields.refillBy < HEALTH_EARLIEST_DATE) fieldErrors.refillBy = ['That date is too far back.']
+  if (
+    fields.supplyDays !== null &&
+    (!Number.isInteger(fields.supplyDays) || fields.supplyDays < MEDICINE_SUPPLY_DAYS_MIN || fields.supplyDays > MEDICINE_SUPPLY_DAYS_MAX)
+  ) {
+    fieldErrors.supplyDays = ['Pick between 1 day and a year.']
+  }
+  const [first] = Object.values(fieldErrors)
+  if (first?.[0] !== undefined) throw new ValidationError(first[0], { details: { fieldErrors } })
+  return {
+    ...fields,
+    name,
+    dose: dose === '' ? null : dose,
+    note: note === '' ? null : note,
+    refillBy: fields.stoppedOn === null ? fields.refillBy : null,
+  }
+}
+
+/** Still being taken. A stopped one stays, as history. */
+export function isMedicineCurrent(medicine: { readonly stoppedOn: CalendarDate | null }): boolean {
+  return medicine.stoppedOn === null
+}
+
+export type MedicineRefillState = 'overdue' | 'due_soon' | 'later'
+
+export function medicineRefillState(refillBy: CalendarDate, today: CalendarDate): MedicineRefillState {
+  const daysLeft = daysBetween(today, refillBy)
+  if (daysLeft < 0) return 'overdue'
+  return daysLeft <= MEDICINE_REFILL_SOON_DAYS ? 'due_soon' : 'later'
+}
+
+/** After a refill today, when the next one is due. */
+export function nextRefillBy(today: CalendarDate, supplyDays: number): CalendarDate {
+  return addCalendarDays(today, supplyDays)
+}
+
+/** The reminder tier a refill date is in today: 7 days before, once. Null otherwise. */
+export function medicineRefillThreshold(refillBy: CalendarDate, today: CalendarDate): number | null {
+  return reminderThreshold(refillBy, today, MEDICINE_REFILL_SOON_DAYS)
+}
+
+/** "Refill today", "Refill in 5 days", "Refill 2 days overdue". */
+export function refillPhrase(refillBy: CalendarDate, today: CalendarDate): string {
+  if (refillBy === today) return 'Refill today'
+  return refillBy > today ? `Refill in ${distancePhrase(today, refillBy)}` : `Refill ${distancePhrase(refillBy, today)} overdue`
+}
+
+/**
+ * Current ones first, by name. Then stopped ones, most recently stopped first, so the history reads
+ * backwards like every other list of what happened.
+ */
+export function compareMedicines(
+  a: { readonly name: string; readonly stoppedOn: CalendarDate | null; readonly id: string },
+  b: { readonly name: string; readonly stoppedOn: CalendarDate | null; readonly id: string }
+): number {
+  if ((a.stoppedOn === null) !== (b.stoppedOn === null)) return a.stoppedOn === null ? -1 : 1
+  if (a.stoppedOn !== null && b.stoppedOn !== null && a.stoppedOn !== b.stoppedOn) return a.stoppedOn < b.stoppedOn ? 1 : -1
+  return a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
 }

@@ -296,6 +296,7 @@ Every job is idempotent, so a re-run is always safe:
 | `mail.booking_ingest`        | `mail_messages` records every message id it read; it gets a time budget |
 | `documents.expiry_reminders` | Each reminder is claimed with a row before it's sent                  |
 | `health.reminders`           | Each reminder is claimed with a row per schedule, tier and due date   |
+| `health.refill_reminders`    | Each reminder is claimed with a row per medicine and refill date      |
 | `travel.decision_nudges`     | Each nudge is claimed with a row per person and deadline before it's sent |
 | `travel.trip_updates`        | A trip's unsent updates are marked sent before the email goes          |
 

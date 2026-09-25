@@ -1,11 +1,20 @@
 import type { PGlite } from '@electric-sql/pglite'
-import type { HealthEvent, HealthPerson, HealthSchedule, RequestContext } from '@ghar/contracts'
+import type { HealthEvent, HealthMedicine, HealthPerson, HealthSchedule, RequestContext } from '@ghar/contracts'
+import { addCalendarDays, todayInTimeZone } from '@ghar/core/dates'
 import { invitationExpiresAt } from '@ghar/core/invitations'
 import { acceptInvitation, createHousehold, createInvitation, createPerson, requireOwnPerson, type Db } from '@ghar/db/queries'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
 import { DELETE as deleteEvent, GET as getEvent, PUT as updateEvent } from '@/app/api/v1/health-records/events/[eventId]/route'
 import { GET as listEvents, POST as createEvent } from '@/app/api/v1/health-records/events/route'
+import { POST as refillMedicine } from '@/app/api/v1/health-records/medicines/[medicineId]/refill/route'
+import {
+  DELETE as deleteMedicine,
+  GET as getMedicine,
+  PUT as updateMedicine,
+} from '@/app/api/v1/health-records/medicines/[medicineId]/route'
+import { POST as stopMedicine } from '@/app/api/v1/health-records/medicines/[medicineId]/stop/route'
+import { GET as listMedicines, POST as createMedicine } from '@/app/api/v1/health-records/medicines/route'
 import { GET as listPeople } from '@/app/api/v1/health-records/people/route'
 import { DELETE as deleteSchedule, PUT as updateSchedule } from '@/app/api/v1/health-records/schedules/[scheduleId]/route'
 import { GET as listSchedules, POST as createSchedule } from '@/app/api/v1/health-records/schedules/route'
@@ -171,5 +180,52 @@ describe('health records through the API', () => {
     test.session = owner
     expect((await call(deleteSchedule, 'DELETE', { params: { scheduleId: schedule.id } })).body).toEqual({ scheduleId: schedule.id })
     expect((await call(listSchedules, 'GET')).body.schedules).toEqual([])
+  })
+
+  it('keeps medicines, refills them a supply on, and keeps a stopped one as history', async () => {
+    test.session = owner
+    const today = todayInTimeZone('Asia/Kolkata')
+    const created = await call(createMedicine, 'POST', {
+      body: { personId: child, name: 'Cetirizine', dose: '5 ml at night', refillBy: addCalendarDays(today, 3), supplyDays: 30 },
+    })
+    expect(created.status).toBe(201)
+    const medicine = created.body.medicine as HealthMedicine
+    expect(medicine).toMatchObject({ personName: 'Anika', refillState: 'due_soon', canEdit: true, stoppedOn: null })
+
+    const refilled = await call(refillMedicine, 'POST', { params: { medicineId: medicine.id } })
+    expect(refilled.body.medicine).toMatchObject({ refillBy: addCalendarDays(today, 30), lastRefilledOn: today, refillState: 'later' })
+
+    const edited = await call(updateMedicine, 'PUT', {
+      params: { medicineId: medicine.id },
+      body: { personId: child, name: 'Cetirizine', dose: '10 ml at night', refillBy: null, supplyDays: 30 },
+    })
+    expect(edited.body.medicine).toMatchObject({ dose: '10 ml at night', refillBy: null, refillState: null })
+    expect(
+      (
+        await call(updateMedicine, 'PUT', {
+          params: { medicineId: medicine.id },
+          body: { personId: child, name: 'Cetirizine', stoppedOn: addCalendarDays(today, 1) },
+        })
+      ).status
+    ).toBe(400)
+
+    const stopped = await call(stopMedicine, 'POST', { params: { medicineId: medicine.id } })
+    expect(stopped.body.medicine).toMatchObject({ stoppedOn: today, refillBy: null })
+    expect((await call(refillMedicine, 'POST', { params: { medicineId: medicine.id } })).status).toBe(400)
+    expect((await call(listMedicines, 'GET', { search: `?personId=${child}&current=true` })).body.medicines).toEqual([])
+    expect(
+      ((await call(listMedicines, 'GET', { search: `?personId=${child}` })).body.medicines as HealthMedicine[]).map(row => row.id)
+    ).toEqual([medicine.id])
+
+    test.session = member
+    expect((await call(getMedicine, 'GET', { params: { medicineId: medicine.id } })).status).toBe(404)
+    expect((await call(createMedicine, 'POST', { body: { personId: memberPerson, name: 'Vitamin D' } })).status).toBe(201)
+
+    test.session = viewer
+    expect((await call(createMedicine, 'POST', { body: { personId: viewerPerson, name: 'Vitamin D' } })).status).toBe(403)
+
+    test.session = owner
+    expect((await call(deleteMedicine, 'DELETE', { params: { medicineId: medicine.id } })).body).toEqual({ medicineId: medicine.id })
+    expect((await call(getMedicine, 'GET', { params: { medicineId: medicine.id } })).status).toBe(404)
   })
 })

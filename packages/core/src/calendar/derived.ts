@@ -1,5 +1,5 @@
 import { addCalendarDays, type CalendarDate } from '../dates'
-import { HEALTH_DUE_SOON_DAYS } from '../health'
+import { HEALTH_DUE_SOON_DAYS, MEDICINE_REFILL_SOON_DAYS } from '../health'
 import type { Cents } from '../money'
 import { bookingTitle } from '../travel/bookings'
 import type { BookingFields } from '../travel/types'
@@ -55,6 +55,16 @@ export interface HealthDue {
   /** Whose it is, or null when it's the reader's own. */
   personName: string | null
   dueOn: CalendarDate
+}
+
+/** A current medicine on the day it needs refilling. */
+export interface RefillDue {
+  medicineId: string
+  personId: string
+  name: string
+  /** Whose it is, or null when it's the reader's own. */
+  personName: string | null
+  refillBy: CalendarDate
 }
 
 /** A connected card or loan's next payment, as Plaid Liabilities last reported it. */
@@ -232,5 +242,22 @@ export function healthItems(dues: readonly HealthDue[], today: CalendarDate): Ca
     tone: due.dueOn < today ? 'negative' : due.dueOn <= addCalendarDays(today, HEALTH_DUE_SOON_DAYS) ? 'caution' : 'default',
     recurring: false,
     ref: { kind: 'health', scheduleId: due.scheduleId, personId: due.personId },
+  }))
+}
+
+/** Late is late, within a week is soon: the same line the health screen draws. */
+export function refillItems(refills: readonly RefillDue[], today: CalendarDate): CalendarItemInput[] {
+  return refills.map(refill => ({
+    id: `medicine:${refill.medicineId}`,
+    source: 'health',
+    title: refill.personName === null ? `Refill ${refill.name}` : `Refill ${refill.name} for ${refill.personName}`,
+    location: null,
+    ...allDayRange(refill.refillBy, refill.refillBy),
+    allDay: true,
+    category: 'personal',
+    tone:
+      refill.refillBy < today ? 'negative' : refill.refillBy <= addCalendarDays(today, MEDICINE_REFILL_SOON_DAYS) ? 'caution' : 'default',
+    recurring: false,
+    ref: { kind: 'medicine', medicineId: refill.medicineId, personId: refill.personId },
   }))
 }

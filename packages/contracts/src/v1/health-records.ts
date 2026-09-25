@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
-import { calendarDateSchema, instantSchema, pageQuerySchema, pageSchema } from './shared'
+import { calendarDateSchema, instantSchema, pageQuerySchema, pageSchema, queryBooleanSchema } from './shared'
 
 // Health records: visits and shots, one person at a time. Owners and adults see and log everyone's;
 // anyone else sees only their own, and members log their own. A record the caller can't see is
@@ -187,4 +187,121 @@ export const deleteHealthSchedule = defineEndpoint({
   path: '/api/v1/health-records/schedules/:scheduleId',
   params: healthScheduleParamsSchema,
   response: z.object({ scheduleId: z.uuid() }),
+})
+
+// Medicines: what someone takes now, and what they used to. Stopping one keeps it as history.
+
+/** MEDICINE_NAME_MAX_LENGTH, MEDICINE_DOSE_MAX_LENGTH and MEDICINE_SUPPLY_DAYS_MIN and _MAX in @ghar/core/health. */
+export const MEDICINE_NAME_MAX = 120
+export const MEDICINE_DOSE_MAX = 120
+export const MEDICINE_SUPPLY_DAYS_MIN = 1
+export const MEDICINE_SUPPLY_DAYS_MAX = 365
+
+/** Due soon means within 7 days. */
+export const medicineRefillStateSchema = z.enum(['overdue', 'due_soon', 'later'])
+
+export const healthMedicineSchema = z.object({
+  id: z.uuid(),
+  personId: z.uuid(),
+  /** "You", or their name. */
+  personName: z.string(),
+  name: z.string(),
+  /** As the label says it: "500 mg twice a day". */
+  dose: z.string().nullable(),
+  /** Who prescribed it. */
+  contactId: z.uuid().nullable(),
+  contactName: z.string().nullable(),
+  startedOn: calendarDateSchema.nullable(),
+  /** The first day it wasn't taken. Null while it still is. */
+  stoppedOn: calendarDateSchema.nullable(),
+  /** Always null once stopped. */
+  refillBy: calendarDateSchema.nullable(),
+  /** Null without a refill date. */
+  refillState: medicineRefillStateSchema.nullable(),
+  /** How many days one refill lasts. Refilling needs it. */
+  supplyDays: z.int().min(MEDICINE_SUPPLY_DAYS_MIN).max(MEDICINE_SUPPLY_DAYS_MAX).nullable(),
+  lastRefilledOn: calendarDateSchema.nullable(),
+  note: z.string().nullable(),
+  canEdit: z.boolean(),
+  createdAt: instantSchema,
+  updatedAt: instantSchema,
+})
+export type HealthMedicine = z.infer<typeof healthMedicineSchema>
+
+export const healthMedicineParamsSchema = z.object({ medicineId: z.uuid() })
+
+/** Every field. Replaces them all on update: set `stoppedOn` to stop it, clear it to start again. */
+export const healthMedicineBodySchema = z.object({
+  personId: z.uuid(),
+  name: z.string().trim().min(1).max(MEDICINE_NAME_MAX),
+  dose: z.string().trim().max(MEDICINE_DOSE_MAX).nullable().default(null),
+  contactId: z.uuid().nullable().default(null),
+  startedOn: calendarDateSchema.nullable().default(null),
+  /** Never after today. A refill date sent with it is dropped. */
+  stoppedOn: calendarDateSchema.nullable().default(null),
+  refillBy: calendarDateSchema.nullable().default(null),
+  supplyDays: z.int().min(MEDICINE_SUPPLY_DAYS_MIN).max(MEDICINE_SUPPLY_DAYS_MAX).nullable().default(null),
+  note: z.string().trim().max(HEALTH_NOTE_MAX).nullable().default(null),
+})
+export type HealthMedicineBody = z.output<typeof healthMedicineBodySchema>
+
+/**
+ * Current ones by name, then stopped ones, most recently stopped first. With `personId`, only
+ * theirs; with `current=true`, only what's still being taken.
+ */
+export const listHealthMedicines = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/health-records/medicines',
+  query: z.object({
+    personId: z.uuid().optional(),
+    current: queryBooleanSchema.default(false),
+  }),
+  response: z.object({ medicines: z.array(healthMedicineSchema) }),
+})
+
+export const getHealthMedicine = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/health-records/medicines/:medicineId',
+  params: healthMedicineParamsSchema,
+  response: z.object({ medicine: healthMedicineSchema }),
+})
+
+/** Permissions as createHealthEvent. 400 for a stop date in the future or before it started. */
+export const createHealthMedicine = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/health-records/medicines',
+  body: healthMedicineBodySchema,
+  response: z.object({ medicine: healthMedicineSchema }),
+})
+
+export const updateHealthMedicine = defineEndpoint({
+  method: 'PUT',
+  path: '/api/v1/health-records/medicines/:medicineId',
+  params: healthMedicineParamsSchema,
+  body: healthMedicineBodySchema,
+  response: z.object({ medicine: healthMedicineSchema }),
+})
+
+/** Stopped today, where the household is. Its refill date goes; the rest stays as history. Stopping twice is a no-op. */
+export const stopHealthMedicine = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/health-records/medicines/:medicineId/stop',
+  params: healthMedicineParamsSchema,
+  response: z.object({ medicine: healthMedicineSchema }),
+})
+
+/** Refilled today: the next refill is `supplyDays` from now. 400 when it's stopped or has no supply length. */
+export const refillHealthMedicine = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/health-records/medicines/:medicineId/refill',
+  params: healthMedicineParamsSchema,
+  response: z.object({ medicine: healthMedicineSchema }),
+})
+
+/** For a mistake. Stop it instead to keep the history. */
+export const deleteHealthMedicine = defineEndpoint({
+  method: 'DELETE',
+  path: '/api/v1/health-records/medicines/:medicineId',
+  params: healthMedicineParamsSchema,
+  response: z.object({ medicineId: z.uuid() }),
 })

@@ -28,6 +28,7 @@ export const calendarItemRefSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('asset'), assetId: z.uuid() }),
   z.object({ kind: z.literal('renewal'), renewalId: z.uuid() }),
   z.object({ kind: z.literal('health'), scheduleId: z.uuid(), personId: z.uuid() }),
+  z.object({ kind: z.literal('medicine'), medicineId: z.uuid(), personId: z.uuid() }),
 ])
 export type CalendarItemRef = z.infer<typeof calendarItemRefSchema>
 

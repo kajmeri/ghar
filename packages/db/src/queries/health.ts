@@ -4,17 +4,31 @@ import { ForbiddenError, NotFoundError, ValidationError } from '@ghar/core/error
 import {
   canManageHealthOf,
   compareHealthDue,
+  compareMedicines,
   healthEventTitle,
   healthScheduleDue,
   healthScheduleTitle,
+  nextRefillBy,
   requireHealthEventDate,
   requireHealthScheduleFields,
+  requireMedicineFields,
   type HealthDue,
   type HealthEventKind,
 } from '@ghar/core/health'
-import { and, asc, count, eq, getTableColumns, inArray, lte, max, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, eq, getTableColumns, inArray, isNotNull, isNull, lte, max, or, sql, type SQL } from 'drizzle-orm'
 import { authUsers } from 'drizzle-orm/supabase'
-import { contacts, documents, healthEvents, healthReminders, healthSchedules, householdMembers, householdPeople, profiles } from '../schema'
+import {
+  contacts,
+  documents,
+  healthEvents,
+  healthMedicines,
+  healthRefillReminders,
+  healthReminders,
+  healthSchedules,
+  householdMembers,
+  householdPeople,
+  profiles,
+} from '../schema'
 import { recordAudit } from './audit'
 import type { ReminderRecipient } from './expiry-reminders'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
@@ -122,7 +136,11 @@ async function requireManageablePerson(ctx: RequestContext, db: Db, personId: st
   if (!canManageHealthOf(ctx, person.userId)) throw new ForbiddenError("Your role in this household doesn't allow this.")
 }
 
-async function requireLinksInHousehold(ctx: RequestContext, db: Db, input: HealthEventInput): Promise<void> {
+async function requireLinksInHousehold(
+  ctx: RequestContext,
+  db: Db,
+  input: Pick<HealthEventInput, 'contactId' | 'documentId'>
+): Promise<void> {
   const checks: Promise<void>[] = []
   if (input.contactId !== null) {
     const contactId = input.contactId
@@ -496,4 +514,214 @@ export async function listHealthReminderRecipients(
     )
     .orderBy(householdMembers.joinedAt)
   return rows.flatMap(row => (row.email === null ? [] : [{ userId: row.userId, email: row.email, fullName: row.fullName }]))
+}
+
+// ---------------------------------------------------------------------------------------------
+// Medicines
+// ---------------------------------------------------------------------------------------------
+
+export type HealthMedicineRow = typeof healthMedicines.$inferSelect & {
+  personName: string | null
+  personUserId: string | null
+  /** Who prescribed it. */
+  contactName: string | null
+}
+
+export interface HealthMedicineInput {
+  personId: string
+  name: string
+  dose: string | null
+  contactId: string | null
+  startedOn: CalendarDate | null
+  stoppedOn: CalendarDate | null
+  refillBy: CalendarDate | null
+  supplyDays: number | null
+  note: string | null
+}
+
+const MEDICINE_NOT_FOUND = 'That medicine no longer exists.'
+
+function selectHealthMedicines(db: Db) {
+  return db
+    .select({ ...getTableColumns(healthMedicines), ...personRefColumns, contactName: contacts.name })
+    .from(healthMedicines)
+    .innerJoin(householdPeople, eq(householdPeople.id, healthMedicines.personId))
+    .leftJoin(profiles, eq(profiles.id, householdPeople.userId))
+    .leftJoin(contacts, eq(contacts.id, healthMedicines.contactId))
+}
+
+/**
+ * The medicines the caller may see: current ones by name, then stopped ones, most recently stopped
+ * first. Everyone's, or one person's. With `current`, only the ones still being taken.
+ */
+export async function listHealthMedicines(
+  ctx: RequestContext,
+  db: Db,
+  filter: { personId?: string; current?: boolean }
+): Promise<HealthMedicineRow[]> {
+  requirePermission(ctx, 'health.view')
+  const rows = await selectHealthMedicines(db).where(
+    and(
+      eq(healthMedicines.householdId, ctx.householdId),
+      visibleHealth(ctx),
+      filter.personId === undefined ? undefined : eq(healthMedicines.personId, filter.personId),
+      filter.current === true ? isNull(healthMedicines.stoppedOn) : undefined
+    )
+  )
+  return rows.toSorted(compareMedicines)
+}
+
+export async function getHealthMedicine(ctx: RequestContext, db: Db, medicineId: string): Promise<HealthMedicineRow> {
+  requirePermission(ctx, 'health.view')
+  const [medicine] = await selectHealthMedicines(db)
+    .where(and(eq(healthMedicines.id, medicineId), eq(healthMedicines.householdId, ctx.householdId), visibleHealth(ctx)))
+    .limit(1)
+  if (!medicine) throw new NotFoundError(MEDICINE_NOT_FOUND)
+  return medicine
+}
+
+async function requireManageableMedicine(ctx: RequestContext, db: Db, medicineId: string): Promise<HealthMedicineRow> {
+  const medicine = await getHealthMedicine(ctx, db, medicineId)
+  if (!canManageHealthOf(ctx, medicine.personUserId)) throw new ForbiddenError("Your role in this household doesn't allow this.")
+  return medicine
+}
+
+async function prepareMedicine(ctx: RequestContext, db: Db, input: HealthMedicineInput, today: CalendarDate) {
+  const values = requireMedicineFields(input, today)
+  await Promise.all([
+    requireManageablePerson(ctx, db, input.personId),
+    requireLinksInHousehold(ctx, db, { contactId: input.contactId, documentId: null }),
+  ])
+  return values
+}
+
+export async function createHealthMedicine(
+  ctx: RequestContext,
+  db: Db,
+  input: HealthMedicineInput,
+  today: CalendarDate
+): Promise<HealthMedicineRow> {
+  requirePermission(ctx, 'health.view')
+  const values = await prepareMedicine(ctx, db, input, today)
+  const [created] = await db
+    .insert(healthMedicines)
+    .values({ householdId: ctx.householdId, ...values, addedBy: ctx.userId })
+    .returning({ id: healthMedicines.id })
+  if (!created) throw new Error('The medicine was not created')
+  return getHealthMedicine(ctx, db, created.id)
+}
+
+/** Replaces every field. Setting `stoppedOn` stops it, and clearing it starts it again. */
+export async function updateHealthMedicine(
+  ctx: RequestContext,
+  db: Db,
+  medicineId: string,
+  input: HealthMedicineInput,
+  today: CalendarDate
+): Promise<HealthMedicineRow> {
+  requirePermission(ctx, 'health.view')
+  await requireManageableMedicine(ctx, db, medicineId)
+  const values = await prepareMedicine(ctx, db, input, today)
+  const [updated] = await db
+    .update(healthMedicines)
+    .set({ ...values, updatedAt: sql`now()` })
+    .where(and(eq(healthMedicines.id, medicineId), eq(healthMedicines.householdId, ctx.householdId)))
+    .returning({ id: healthMedicines.id })
+  if (!updated) throw new NotFoundError(MEDICINE_NOT_FOUND)
+  return getHealthMedicine(ctx, db, medicineId)
+}
+
+/** Stopped today. Its refill date goes, and the rest stays as history. */
+export async function stopHealthMedicine(ctx: RequestContext, db: Db, medicineId: string, today: CalendarDate): Promise<HealthMedicineRow> {
+  requirePermission(ctx, 'health.view')
+  const medicine = await requireManageableMedicine(ctx, db, medicineId)
+  if (medicine.stoppedOn !== null) return medicine
+  // Started later than today (a date typed ahead) still stops today: the start moves back with it.
+  const startedOn = medicine.startedOn !== null && medicine.startedOn > today ? today : medicine.startedOn
+  await db
+    .update(healthMedicines)
+    .set({ stoppedOn: today, startedOn, refillBy: null, updatedAt: sql`now()` })
+    .where(and(eq(healthMedicines.id, medicineId), eq(healthMedicines.householdId, ctx.householdId), isNull(healthMedicines.stoppedOn)))
+  return getHealthMedicine(ctx, db, medicineId)
+}
+
+/** Refilled today: the next refill is one supply from now. Needs to know how long a supply lasts. */
+export async function refillHealthMedicine(
+  ctx: RequestContext,
+  db: Db,
+  medicineId: string,
+  today: CalendarDate
+): Promise<HealthMedicineRow> {
+  requirePermission(ctx, 'health.view')
+  const medicine = await requireManageableMedicine(ctx, db, medicineId)
+  if (medicine.stoppedOn !== null) throw new ValidationError('They’ve stopped taking it. Start it again to track refills.')
+  if (medicine.supplyDays === null) {
+    const problem = 'Say how many days a refill lasts first.'
+    throw new ValidationError(problem, { details: { fieldErrors: { supplyDays: [problem] } } })
+  }
+  await db
+    .update(healthMedicines)
+    .set({ refillBy: nextRefillBy(today, medicine.supplyDays), lastRefilledOn: today, updatedAt: sql`now()` })
+    .where(and(eq(healthMedicines.id, medicineId), eq(healthMedicines.householdId, ctx.householdId), isNull(healthMedicines.stoppedOn)))
+  return getHealthMedicine(ctx, db, medicineId)
+}
+
+/** For a mistake. Stopping it is how history is kept. */
+export async function deleteHealthMedicine(ctx: RequestContext, db: Db, medicineId: string): Promise<void> {
+  requirePermission(ctx, 'health.view')
+  await requireManageableMedicine(ctx, db, medicineId)
+  await db.transaction(async tx => {
+    const [deleted] = await tx
+      .delete(healthMedicines)
+      .where(and(eq(healthMedicines.id, medicineId), eq(healthMedicines.householdId, ctx.householdId)))
+      .returning({ personId: healthMedicines.personId })
+    if (!deleted) throw new NotFoundError(MEDICINE_NOT_FOUND)
+    // Whose it was, never its name: the audit log is for what changed, not what it said.
+    await recordAudit(ctx, tx, {
+      action: 'health_medicine.deleted',
+      entity: 'health_medicine',
+      entityId: medicineId,
+      metadata: { personId: deleted.personId },
+    })
+  })
+}
+
+/** Current medicines with a refill date, across the household. Only the daily job reads everyone's this way. */
+export async function listHealthRefillsForReminders(actor: SystemContext, db: Db): Promise<HealthMedicineRow[]> {
+  return selectHealthMedicines(db).where(
+    and(eq(healthMedicines.householdId, actor.householdId), isNull(healthMedicines.stoppedOn), isNotNull(healthMedicines.refillBy))
+  )
+}
+
+/** Claims one refill reminder tier for one refill date. Null when it, or a closer one, already went out. */
+export async function claimHealthRefillReminder(
+  actor: SystemContext,
+  db: Db,
+  input: { medicineId: string; refillBy: CalendarDate; thresholdDays: number }
+): Promise<string | null> {
+  const [closer] = await db
+    .select({ id: healthRefillReminders.id })
+    .from(healthRefillReminders)
+    .where(
+      and(
+        eq(healthRefillReminders.householdId, actor.householdId),
+        eq(healthRefillReminders.medicineId, input.medicineId),
+        eq(healthRefillReminders.refillBy, input.refillBy),
+        lte(healthRefillReminders.thresholdDays, input.thresholdDays)
+      )
+    )
+    .limit(1)
+  if (closer) return null
+  const [claimed] = await db
+    .insert(healthRefillReminders)
+    .values({ householdId: actor.householdId, ...input })
+    .onConflictDoNothing()
+    .returning({ id: healthRefillReminders.id })
+  return claimed?.id ?? null
+}
+
+export async function releaseHealthRefillReminder(actor: SystemContext, db: Db, reminderId: string): Promise<void> {
+  await db
+    .delete(healthRefillReminders)
+    .where(and(eq(healthRefillReminders.id, reminderId), eq(healthRefillReminders.householdId, actor.householdId)))
 }

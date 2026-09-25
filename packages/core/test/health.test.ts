@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canManageHealthOf,
   canSeeHealthOf,
+  compareMedicines,
   groupHealthEventsByYear,
   healthDuePhrase,
   healthEventTitle,
@@ -10,8 +11,13 @@ import {
   healthScheduleTitle,
   HEALTH_TITLE_MAX_LENGTH,
   matchesHealthSchedule,
+  medicineRefillState,
+  medicineRefillThreshold,
+  nextRefillBy,
+  refillPhrase,
   requireHealthEventDate,
   requireHealthScheduleFields,
+  requireMedicineFields,
   type HealthEventKind,
 } from '../src/health'
 import { ValidationError } from '../src/errors'
@@ -136,5 +142,63 @@ describe('health schedules', () => {
     expect(healthDuePhrase('2026-10-07', '2026-09-25')).toBe('Due in 12 days')
     expect(healthDuePhrase('2026-09-24', '2026-09-25')).toBe('1 day overdue')
     expect(healthDuePhrase('2026-03-01', '2026-09-25')).toBe('6 months overdue')
+  })
+})
+
+describe('medicines', () => {
+  const today = '2026-09-25'
+  const metformin = {
+    personId: 'p1',
+    name: ' Metformin ',
+    dose: ' 500 mg twice a day ',
+    startedOn: '2026-01-10',
+    stoppedOn: null,
+    refillBy: '2026-10-01',
+    supplyDays: 30,
+    note: '  ',
+  }
+
+  it('tidies the text, and drops the refill date once it’s stopped', () => {
+    expect(requireMedicineFields(metformin, today)).toMatchObject({
+      name: 'Metformin',
+      dose: '500 mg twice a day',
+      note: null,
+      refillBy: '2026-10-01',
+    })
+    expect(requireMedicineFields({ ...metformin, stoppedOn: today }, today).refillBy).toBeNull()
+  })
+
+  it('refuses a blank name, a stop in the future or before it started, and an odd supply', () => {
+    expect(() => requireMedicineFields({ ...metformin, name: '  ' }, today)).toThrow(ValidationError)
+    expect(() => requireMedicineFields({ ...metformin, stoppedOn: '2026-09-26' }, today)).toThrow(ValidationError)
+    expect(() => requireMedicineFields({ ...metformin, stoppedOn: '2026-01-09' }, today)).toThrow(ValidationError)
+    expect(() => requireMedicineFields({ ...metformin, supplyDays: 0 }, today)).toThrow(ValidationError)
+    expect(() => requireMedicineFields({ ...metformin, supplyDays: 366 }, today)).toThrow(ValidationError)
+  })
+
+  it('turns to caution a week before the refill, and reminds once then', () => {
+    expect(medicineRefillState('2026-10-03', today)).toBe('later')
+    expect(medicineRefillState('2026-10-02', today)).toBe('due_soon')
+    expect(medicineRefillState('2026-09-24', today)).toBe('overdue')
+    expect(medicineRefillThreshold('2026-10-03', today)).toBeNull()
+    expect(medicineRefillThreshold('2026-10-02', today)).toBe(7)
+    expect(medicineRefillThreshold('2026-09-24', today)).toBeNull()
+  })
+
+  it('works out the next refill and says when it is', () => {
+    expect(nextRefillBy(today, 30)).toBe('2026-10-25')
+    expect(refillPhrase(today, today)).toBe('Refill today')
+    expect(refillPhrase('2026-09-30', today)).toBe('Refill in 5 days')
+    expect(refillPhrase('2026-09-23', today)).toBe('Refill 2 days overdue')
+  })
+
+  it('lists current ones by name, then stopped ones newest first', () => {
+    const list = [
+      { id: 'a', name: 'Vitamin D', stoppedOn: null },
+      { id: 'b', name: 'Amoxicillin', stoppedOn: '2026-03-01' },
+      { id: 'c', name: 'Cetirizine', stoppedOn: '2026-08-01' },
+      { id: 'd', name: 'Metformin', stoppedOn: null },
+    ]
+    expect(list.toSorted(compareMedicines).map(item => item.id)).toEqual(['d', 'a', 'c', 'b'])
   })
 })

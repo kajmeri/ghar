@@ -307,12 +307,13 @@ async function readManualValues(db: Db, { ctx }: DigestReader, today: CalendarDa
 async function readUpkeep(db: Db, { ctx }: DigestReader, today: CalendarDate): Promise<DigestUpkeepItem[]> {
   const range = { from: today, to: addCalendarDays(today, DIGEST_EXPIRY_DAYS) }
   const maintenanceUntil = addCalendarDays(today, DIGEST_MAINTENANCE_DAYS)
-  const [tasks, documents, warranties, renewals, schedules] = await Promise.all([
+  const [tasks, documents, warranties, renewals, schedules, medicines] = await Promise.all([
     queries.listMaintenanceTasks(ctx, db),
     can(ctx.role, 'documents.view') ? queries.listDocumentExpiries(ctx, db, range) : [],
     queries.listWarrantyExpiries(ctx, db, range),
     can(ctx.role, 'documents.view') ? queries.listRenewalExpiries(ctx, db, range) : [],
     can(ctx.role, 'health.view') ? queries.listHealthSchedules(ctx, db, {}, today) : [],
+    can(ctx.role, 'health.view') ? queries.listHealthMedicines(ctx, db, { current: true }) : [],
   ])
   return [
     ...tasks.flatMap(task =>
@@ -365,6 +366,24 @@ async function readUpkeep(db: Db, { ctx }: DigestReader, today: CalendarDate): P
               dueOn: schedule.dueOn,
               overdue: schedule.dueOn < today,
               personId: schedule.personId,
+            },
+          ]
+        : []
+    ),
+    // Refills on the same week, and late ones until someone marks it refilled.
+    ...medicines.flatMap(medicine =>
+      medicine.refillBy !== null && medicine.refillBy <= maintenanceUntil
+        ? [
+            {
+              kind: 'health' as const,
+              id: medicine.id,
+              title:
+                medicine.personUserId === ctx.userId
+                  ? `Refill ${medicine.name}`
+                  : `Refill ${medicine.name} for ${personLabel({ id: medicine.personId, userId: medicine.personUserId, name: medicine.personName }, ctx.userId)}`,
+              dueOn: medicine.refillBy,
+              overdue: medicine.refillBy < today,
+              personId: medicine.personId,
             },
           ]
         : []
