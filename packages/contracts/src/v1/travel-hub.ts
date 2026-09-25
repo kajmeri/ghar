@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
+import { healthCardSchema } from './health-records'
 import { bookingSchema } from './travel'
 import { tripIdeaSchema } from './ideas'
 import { itinerarySlotSchema } from './itinerary'
@@ -46,6 +47,11 @@ export const travelModeSchema = z.object({
   slots: z.array(itinerarySlotSchema),
   /** Linked bookings, so a confirmation code is there even for a booking not on the itinerary. */
   bookings: z.array(bookingSchema),
+  /**
+   * The health cards of the travellers the caller may see, for a doctor abroad. Only ones with
+   * something on them, and none at all for someone without health.view.
+   */
+  healthCards: z.array(healthCardSchema),
 })
 export type TravelMode = z.infer<typeof travelModeSchema>
 

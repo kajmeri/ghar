@@ -11,7 +11,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { getPageSession } from '@/lib/api/authed'
 import { agendaFor } from '@/lib/travel/itinerary-display'
 import { loadTravelMode } from '@/lib/travel/trips'
-import { PrintButton } from './_components/print-button'
+import { PrintButton } from '@/app/(app)/_components/ui/print-button'
 
 export const metadata = { title: 'Day sheet' }
 

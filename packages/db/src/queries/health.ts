@@ -9,9 +9,11 @@ import {
   healthScheduleDue,
   healthScheduleTitle,
   nextRefillBy,
+  requireHealthCardFields,
   requireHealthEventDate,
   requireHealthScheduleFields,
   requireMedicineFields,
+  type BloodType,
   type HealthDue,
   type HealthEventKind,
 } from '@ghar/core/health'
@@ -20,6 +22,7 @@ import { authUsers } from 'drizzle-orm/supabase'
 import {
   contacts,
   documents,
+  healthCards,
   healthEvents,
   healthMedicines,
   healthRefillReminders,
@@ -724,4 +727,126 @@ export async function releaseHealthRefillReminder(actor: SystemContext, db: Db, 
   await db
     .delete(healthRefillReminders)
     .where(and(eq(healthRefillReminders.id, reminderId), eq(healthRefillReminders.householdId, actor.householdId)))
+}
+
+// ---------------------------------------------------------------------------------------------
+// Health cards
+// ---------------------------------------------------------------------------------------------
+
+/** One person's card. Everyone the caller may see has one, blank until something goes on it. */
+export interface HealthCardRow {
+  personId: string
+  personName: string | null
+  personUserId: string | null
+  bloodType: BloodType | null
+  allergies: string[]
+  conditions: string[]
+  doctorContactId: string | null
+  doctorName: string | null
+  doctorPhone: string | null
+  insuranceDocumentId: string | null
+  /** Null when the document is gone, or the caller can't see it. */
+  insuranceDocumentTitle: string | null
+  emergencyNote: string | null
+  /** Null until something has been saved. */
+  updatedAt: Date | null
+}
+
+export interface HealthCardInput {
+  bloodType: BloodType | null
+  allergies: string[]
+  conditions: string[]
+  doctorContactId: string | null
+  insuranceDocumentId: string | null
+  emergencyNote: string | null
+}
+
+function selectHealthCards(ctx: RequestContext, db: Db) {
+  return db
+    .select({
+      personId: householdPeople.id,
+      ...personRefColumns,
+      bloodType: healthCards.bloodType,
+      allergies: healthCards.allergies,
+      conditions: healthCards.conditions,
+      doctorContactId: healthCards.doctorContactId,
+      doctorName: contacts.name,
+      doctorPhone: contacts.phone,
+      insuranceDocumentId: healthCards.insuranceDocumentId,
+      insuranceDocumentTitle: documents.title,
+      emergencyNote: healthCards.emergencyNote,
+      updatedAt: healthCards.updatedAt,
+    })
+    .from(householdPeople)
+    .leftJoin(profiles, eq(profiles.id, householdPeople.userId))
+    .leftJoin(healthCards, eq(healthCards.personId, householdPeople.id))
+    .leftJoin(contacts, eq(contacts.id, healthCards.doctorContactId))
+    .leftJoin(documents, and(eq(documents.id, healthCards.insuranceDocumentId), visibleDocuments(ctx)))
+}
+
+type SelectedCard = Awaited<ReturnType<ReturnType<typeof selectHealthCards>['where']>>[number]
+
+function toCardRow(row: SelectedCard): HealthCardRow {
+  return { ...row, allergies: row.allergies ?? [], conditions: row.conditions ?? [] }
+}
+
+/**
+ * The cards of the people the caller may see, oldest person first. With `personIds`, only theirs:
+ * anyone the caller can't see is left out rather than refused, as a trip's travellers may include them.
+ */
+export async function listHealthCards(ctx: RequestContext, db: Db, filter: { personIds?: readonly string[] }): Promise<HealthCardRow[]> {
+  requirePermission(ctx, 'health.view')
+  if (filter.personIds?.length === 0) return []
+  const rows = await selectHealthCards(ctx, db)
+    .where(
+      and(
+        eq(householdPeople.householdId, ctx.householdId),
+        visibleHealth(ctx),
+        filter.personIds === undefined ? undefined : inArray(householdPeople.id, [...filter.personIds])
+      )
+    )
+    .orderBy(asc(householdPeople.createdAt), asc(householdPeople.id))
+  return rows.map(toCardRow)
+}
+
+export async function getHealthCard(ctx: RequestContext, db: Db, personId: string): Promise<HealthCardRow> {
+  requirePermission(ctx, 'health.view')
+  const [row] = await selectHealthCards(ctx, db)
+    .where(and(eq(householdPeople.id, personId), eq(householdPeople.householdId, ctx.householdId), visibleHealth(ctx)))
+    .limit(1)
+  if (!row) throw new NotFoundError(PERSON_NOT_FOUND)
+  return toCardRow(row)
+}
+
+/** Replaces the whole card. Saving a blank one keeps the row, blank. */
+export async function saveHealthCard(ctx: RequestContext, db: Db, personId: string, input: HealthCardInput): Promise<HealthCardRow> {
+  requirePermission(ctx, 'health.view')
+  const values = requireHealthCardFields(input)
+  await requireManageablePerson(ctx, db, personId)
+  // A document already on the card stays, even one the caller can't see: a member keeps the
+  // insurance card an adult linked for them without being able to open it.
+  const [saved] = await db
+    .select({ insuranceDocumentId: healthCards.insuranceDocumentId })
+    .from(healthCards)
+    .where(and(eq(healthCards.personId, personId), eq(healthCards.householdId, ctx.householdId)))
+    .limit(1)
+  const keptDocument = values.insuranceDocumentId !== null && values.insuranceDocumentId === saved?.insuranceDocumentId
+  await requireLinksInHousehold(ctx, db, {
+    contactId: values.doctorContactId,
+    documentId: keptDocument ? null : values.insuranceDocumentId,
+  })
+  const fields = {
+    bloodType: values.bloodType,
+    allergies: values.allergies,
+    conditions: values.conditions,
+    doctorContactId: values.doctorContactId,
+    insuranceDocumentId: values.insuranceDocumentId,
+    emergencyNote: values.emergencyNote,
+    updatedBy: ctx.userId,
+  }
+  await db
+    .insert(healthCards)
+    .values({ personId, householdId: ctx.householdId, ...fields })
+    .onConflictDoUpdate({ target: healthCards.personId, set: { ...fields, updatedAt: sql`now()` } })
+  return getHealthCard(ctx, db, personId)
 }

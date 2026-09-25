@@ -99,8 +99,11 @@ import {
 } from '@ghar/core/renewals'
 import { REMINDER_LEAD_DAYS_MAX, REMINDER_LEAD_DAYS_MIN } from '@ghar/core/expiries'
 import {
+  BLOOD_TYPES,
   HEALTH_CADENCE_MONTHS_MAX,
   HEALTH_CADENCE_MONTHS_MIN,
+  HEALTH_CARD_ITEMS_MAX,
+  HEALTH_CARD_NOTE_MAX_LENGTH,
   HEALTH_EVENT_KINDS,
   HEALTH_NOTE_MAX_LENGTH,
   HEALTH_TITLE_MAX_LENGTH,
@@ -191,6 +194,7 @@ export const bookingDraftStatus = pgEnum('booking_draft_status', BOOKING_DRAFT_S
 export const oneTapAction = pgEnum('one_tap_action', ONE_TAP_ACTIONS)
 export const renewalKind = pgEnum('renewal_kind', RENEWAL_KINDS)
 export const healthEventKind = pgEnum('health_event_kind', HEALTH_EVENT_KINDS)
+export const bloodType = pgEnum('blood_type', BLOOD_TYPES)
 
 const timestamptz = () => timestamp({ withTimezone: true })
 const metadata = () =>
@@ -2531,6 +2535,59 @@ export const healthMedicines = pgTable(
     check('health_medicines_refill_by', sql`${table.refillBy} >= date '1900-01-01'`),
     // A medicine nobody takes needs no refill.
     check('health_medicines_stopped_no_refill', sql`${table.stoppedOn} is null or ${table.refillBy} is null`),
+  ]
+).enableRLS()
+
+/**
+ * One person's health card: what someone helping them would need to know. One row per person, made
+ * the first time anything goes on it. Current medicines aren't copied here; the card reads them.
+ * Visible to whoever may see that person's health records.
+ */
+export const healthCards = pgTable(
+  'health_cards',
+  {
+    personId: uuid()
+      .primaryKey()
+      .references(() => householdPeople.id, { onDelete: 'cascade' }),
+    householdId: uuid()
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    bloodType: bloodType(),
+    /** Short phrases, as people say them. Tidied by requireHealthCardFields. */
+    allergies: text()
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    conditions: text()
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    doctorContactId: uuid().references(() => contacts.id, { onDelete: 'set null' }),
+    /** A photo or scan of the insurance card. */
+    insuranceDocumentId: uuid().references(() => documents.id, { onDelete: 'set null' }),
+    /** For whoever's helping, like "Carries an EpiPen in her bag". */
+    emergencyNote: text(),
+    updatedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+    updatedAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    index('health_cards_household_idx').on(table.householdId),
+    index('health_cards_doctor_idx')
+      .on(table.doctorContactId)
+      .where(sql`${table.doctorContactId} is not null`),
+    index('health_cards_insurance_idx')
+      .on(table.insuranceDocumentId)
+      .where(sql`${table.insuranceDocumentId} is not null`),
+    index('health_cards_updated_by_idx')
+      .on(table.updatedBy)
+      .where(sql`${table.updatedBy} is not null`),
+    check('health_cards_allergies_count', sql`cardinality(${table.allergies}) <= ${sql.raw(String(HEALTH_CARD_ITEMS_MAX))}`),
+    check('health_cards_conditions_count', sql`cardinality(${table.conditions}) <= ${sql.raw(String(HEALTH_CARD_ITEMS_MAX))}`),
+    check(
+      'health_cards_note_length',
+      sql`char_length(${table.emergencyNote}) between 1 and ${sql.raw(String(HEALTH_CARD_NOTE_MAX_LENGTH))}`
+    ),
   ]
 ).enableRLS()
 

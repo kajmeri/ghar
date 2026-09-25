@@ -1,4 +1,8 @@
 import {
+  BLOOD_TYPES,
+  HEALTH_CARD_ITEM_MAX_LENGTH,
+  HEALTH_CARD_ITEMS_MAX as CORE_CARD_ITEMS_MAX,
+  HEALTH_CARD_NOTE_MAX_LENGTH,
   HEALTH_CADENCE_MONTHS_MAX,
   HEALTH_CADENCE_MONTHS_MIN,
   HEALTH_EVENT_KINDS,
@@ -22,6 +26,11 @@ import {
   healthEventBodySchema,
   healthMedicineBodySchema,
   healthEventKindSchema,
+  bloodTypeSchema,
+  healthCardBodySchema,
+  HEALTH_CARD_ITEM_MAX,
+  HEALTH_CARD_ITEMS_MAX,
+  HEALTH_CARD_NOTE_MAX,
 } from '../src/v1/health-records'
 
 describe('health records', () => {
@@ -31,6 +40,12 @@ describe('health records', () => {
     expect([HEALTH_CADENCE_MIN, HEALTH_CADENCE_MAX]).toEqual([HEALTH_CADENCE_MONTHS_MIN, HEALTH_CADENCE_MONTHS_MAX])
     expect([MEDICINE_NAME_MAX, MEDICINE_DOSE_MAX]).toEqual([MEDICINE_NAME_MAX_LENGTH, MEDICINE_DOSE_MAX_LENGTH])
     expect([MEDICINE_SUPPLY_DAYS_MIN, MEDICINE_SUPPLY_DAYS_MAX]).toEqual([CORE_SUPPLY_MIN, CORE_SUPPLY_MAX])
+    expect(bloodTypeSchema.options).toEqual([...BLOOD_TYPES])
+    expect([HEALTH_CARD_ITEM_MAX, HEALTH_CARD_ITEMS_MAX, HEALTH_CARD_NOTE_MAX]).toEqual([
+      HEALTH_CARD_ITEM_MAX_LENGTH,
+      CORE_CARD_ITEMS_MAX,
+      HEALTH_CARD_NOTE_MAX_LENGTH,
+    ])
   })
 
   it('need only whose, what kind and when', () => {
@@ -65,5 +80,18 @@ describe('health records', () => {
     })
     expect(healthMedicineBodySchema.safeParse({ personId, name: '  ' }).success).toBe(false)
     expect(healthMedicineBodySchema.safeParse({ personId, name: 'X', supplyDays: 0 }).success).toBe(false)
+  })
+
+  it('take a blank card as empty lists and nulls', () => {
+    expect(healthCardBodySchema.parse({})).toEqual({
+      bloodType: null,
+      allergies: [],
+      conditions: [],
+      doctorContactId: null,
+      insuranceDocumentId: null,
+      emergencyNote: null,
+    })
+    expect(healthCardBodySchema.safeParse({ bloodType: 'C+' }).success).toBe(false)
+    expect(healthCardBodySchema.safeParse({ allergies: Array.from({ length: 21 }, () => 'x') }).success).toBe(false)
   })
 })

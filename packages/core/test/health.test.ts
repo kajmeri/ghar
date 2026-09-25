@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  bloodTypeLabel,
   canManageHealthOf,
   canSeeHealthOf,
   compareMedicines,
   groupHealthEventsByYear,
+  hasHealthCardDetails,
+  HEALTH_CARD_ITEMS_MAX,
   healthDuePhrase,
   healthEventTitle,
   healthReminderThreshold,
@@ -15,6 +18,7 @@ import {
   medicineRefillThreshold,
   nextRefillBy,
   refillPhrase,
+  requireHealthCardFields,
   requireHealthEventDate,
   requireHealthScheduleFields,
   requireMedicineFields,
@@ -200,5 +204,47 @@ describe('medicines', () => {
       { id: 'd', name: 'Metformin', stoppedOn: null },
     ]
     expect(list.toSorted(compareMedicines).map(item => item.id)).toEqual(['d', 'a', 'c', 'b'])
+  })
+})
+
+describe('health card', () => {
+  const blank = {
+    bloodType: null,
+    allergies: [],
+    conditions: [],
+    doctorContactId: null,
+    insuranceDocumentId: null,
+    emergencyNote: null,
+  }
+
+  it('tidies the lists and the note', () => {
+    const card = requireHealthCardFields({
+      ...blank,
+      allergies: [' Penicillin ', '', 'penicillin', 'Tree  nuts'],
+      conditions: ['Asthma'],
+      emergencyNote: '   ',
+    })
+    expect(card.allergies).toEqual(['Penicillin', 'Tree nuts'])
+    expect(card.conditions).toEqual(['Asthma'])
+    expect(card.emergencyNote).toBeNull()
+  })
+
+  it('turns away too many, too long, or a blood type that isn’t one', () => {
+    const many = Array.from({ length: HEALTH_CARD_ITEMS_MAX + 1 }, (_, index) => `Thing ${String(index)}`)
+    expect(() => requireHealthCardFields({ ...blank, allergies: many })).toThrow(ValidationError)
+    expect(() => requireHealthCardFields({ ...blank, conditions: ['x'.repeat(81)] })).toThrow('Keep each one short.')
+    expect(() => requireHealthCardFields({ ...blank, bloodType: 'C+' as never })).toThrow(ValidationError)
+    expect(() => requireHealthCardFields({ ...blank, emergencyNote: 'x'.repeat(301) })).toThrow('That note is too long.')
+  })
+
+  it('says whether there’s anything to show', () => {
+    expect(hasHealthCardDetails({ ...blank, medicines: [] })).toBe(false)
+    expect(hasHealthCardDetails({ ...blank, medicines: [{}] })).toBe(true)
+    expect(hasHealthCardDetails({ ...blank, bloodType: 'O-', medicines: [] })).toBe(true)
+  })
+
+  it('writes blood types with a real minus', () => {
+    expect(bloodTypeLabel('O-')).toBe('O−')
+    expect(bloodTypeLabel('AB+')).toBe('AB+')
   })
 })

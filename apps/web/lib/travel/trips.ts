@@ -26,6 +26,7 @@ import {
 import type { Session } from '../api/authed'
 import { pageRequest, pageResponse } from '../api/cursor'
 import { getDb } from '../db'
+import * as health from '../health/service'
 import { toPerson } from '../people/service'
 import { decisionsFor, itineraryView, travelersOn } from './itinerary'
 import {
@@ -211,12 +212,14 @@ export async function loadTravelMode(session: Session, tripId: string): Promise<
     listTripBookings(context, db, { tripId }),
   ])
 
+  const shown = toTrip(trip)
   return {
-    trip: toTrip(trip),
+    trip: shown,
     timeZone: household.timeZone,
     today: todayInTimeZone(household.timeZone),
     generatedAt: new Date().toISOString(),
     slots: itinerary.slots.map(toItinerarySlot),
     bookings: bookings.map(toBooking),
+    healthCards: await health.listTravellerHealthCards(session, shown.travellerIds),
   }
 }

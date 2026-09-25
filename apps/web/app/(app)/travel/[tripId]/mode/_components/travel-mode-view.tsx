@@ -5,8 +5,10 @@ import { addCalendarDays, formatCalendarDate, formatInstant } from '@ghar/core/d
 import { dayPlan } from '@ghar/core/itinerary'
 import { bookingTitle } from '@ghar/core/travel'
 import { tripDayNumber, tripDays } from '@ghar/core/trips'
+import { ChevronDown } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { HealthCardDetails } from '@/app/(app)/_components/health-card-details'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -162,6 +164,42 @@ export function TravelModeView({ initial }: { initial: TravelMode }) {
                   <p className='font-medium'>{bookingTitle(booking)}</p>
                   {booking.confirmationCode ? <ConfirmationCode code={booking.confirmationCode} /> : null}
                 </Card>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {mode.healthCards.length > 0 ? (
+        <section aria-labelledby='travel-health-cards' className='flex flex-col gap-3'>
+          <div className='flex flex-wrap items-end justify-between gap-3'>
+            <h2 id='travel-health-cards' className='text-xl font-semibold'>
+              Health cards
+            </h2>
+            <Link
+              href={`/health/cards?trip=${mode.trip.id}`}
+              className='inline-flex min-h-tap items-center text-base text-ink-muted underline underline-offset-4'
+            >
+              Print them
+            </Link>
+          </div>
+          <ul className='flex flex-col gap-2'>
+            {mode.healthCards.map(card => (
+              <li key={card.personId}>
+                <details className='group rounded-card border border-line bg-surface'>
+                  <summary className='flex min-h-tap cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-medium [&::-webkit-details-marker]:hidden'>
+                    <span className='min-w-0 break-words'>
+                      {card.personName}
+                      {card.allergies.length > 0 ? (
+                        <span className='block text-base font-normal text-ink-muted'>Allergic to {card.allergies.join(', ')}</span>
+                      ) : null}
+                    </span>
+                    <ChevronDown aria-hidden className='size-5 shrink-0 group-open:rotate-180' />
+                  </summary>
+                  <div className='border-t border-line p-4'>
+                    <HealthCardDetails card={card} large />
+                  </div>
+                </details>
               </li>
             ))}
           </ul>

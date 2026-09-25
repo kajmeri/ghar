@@ -1,5 +1,7 @@
 import 'server-only'
 import type {
+  HealthCard,
+  HealthCardBody,
   HealthEvent,
   HealthEventBody,
   HealthMedicine,
@@ -12,10 +14,10 @@ import type {
 } from '@ghar/contracts'
 import { can } from '@ghar/core/auth'
 import { todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
-import { canManageHealthOf, compareHealthDue, healthScheduleTitle, medicineRefillState } from '@ghar/core/health'
+import { canManageHealthOf, compareHealthDue, hasHealthCardDetails, healthScheduleTitle, medicineRefillState } from '@ghar/core/health'
 import { comparePeople, personLabel } from '@ghar/core/people'
 import * as queries from '@ghar/db/queries'
-import type { Db, HealthEventRow, HealthMedicineRow, HealthScheduleRow, PageRequest } from '@ghar/db/queries'
+import type { Db, HealthCardRow, HealthEventRow, HealthMedicineRow, HealthScheduleRow, PageRequest } from '@ghar/db/queries'
 import type { Session } from '@/lib/api/authed'
 import { pageRequest, pageResponse, type PageResult } from '@/lib/api/cursor'
 import * as contacts from '@/lib/contacts/service'
@@ -246,4 +248,77 @@ export async function refillHealthMedicine(session: Session, medicineId: string)
 export async function deleteHealthMedicine(session: Session, medicineId: string): Promise<{ medicineId: string }> {
   await queries.deleteHealthMedicine(session.context, getDb(), medicineId)
   return { medicineId }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Health cards
+
+type CardMedicine = HealthCard['medicines'][number]
+
+function toHealthCard(row: HealthCardRow, session: Session, medicines: readonly CardMedicine[]): HealthCard {
+  const { context } = session
+  return {
+    personId: row.personId,
+    personName: personLabel({ id: row.personId, userId: row.personUserId, name: row.personName }, context.userId),
+    bloodType: row.bloodType,
+    allergies: row.allergies,
+    conditions: row.conditions,
+    doctorContactId: row.doctorContactId,
+    doctorName: row.doctorName,
+    doctorPhone: row.doctorPhone,
+    insuranceDocumentId: row.insuranceDocumentId,
+    insuranceDocumentTitle: row.insuranceDocumentTitle,
+    emergencyNote: row.emergencyNote,
+    medicines: [...medicines],
+    canEdit: canManageHealthOf(context, row.personUserId),
+    updatedAt: row.updatedAt?.toISOString() ?? null,
+  }
+}
+
+/** Current medicines by person, as the card lists them. */
+async function currentMedicinesByPerson(session: Session, personId?: string): Promise<Map<string, CardMedicine[]>> {
+  const rows = await queries.listHealthMedicines(session.context, getDb(), { personId, current: true })
+  const byPerson = new Map<string, CardMedicine[]>()
+  for (const row of rows) {
+    const list = byPerson.get(row.personId) ?? []
+    list.push({ id: row.id, name: row.name, dose: row.dose })
+    byPerson.set(row.personId, list)
+  }
+  return byPerson
+}
+
+/** You first, then by name. Blank cards included. With `personIds`, only those the caller may see. */
+export async function listHealthCards(session: Session, filter: { personIds?: readonly string[] } = {}): Promise<HealthCard[]> {
+  const [rows, medicines] = await Promise.all([
+    queries.listHealthCards(session.context, getDb(), filter),
+    currentMedicinesByPerson(session, filter.personIds?.length === 1 ? filter.personIds[0] : undefined),
+  ])
+  return rows
+    .toSorted((a, b) =>
+      comparePeople(session.context.userId)(
+        { id: a.personId, userId: a.personUserId, name: a.personName },
+        { id: b.personId, userId: b.personUserId, name: b.personName }
+      )
+    )
+    .map(row => toHealthCard(row, session, medicines.get(row.personId) ?? []))
+}
+
+/** The cards of a trip's travellers worth showing: ones the caller may see with something on them. */
+export async function listTravellerHealthCards(session: Session, travellerIds: readonly string[]): Promise<HealthCard[]> {
+  if (!can(session.context.role, 'health.view') || travellerIds.length === 0) return []
+  return (await listHealthCards(session, { personIds: travellerIds })).filter(hasHealthCardDetails)
+}
+
+export async function getHealthCard(session: Session, personId: string): Promise<HealthCard> {
+  const [row, medicines] = await Promise.all([
+    queries.getHealthCard(session.context, getDb(), personId),
+    currentMedicinesByPerson(session, personId),
+  ])
+  return toHealthCard(row, session, medicines.get(personId) ?? [])
+}
+
+export async function saveHealthCard(session: Session, personId: string, body: HealthCardBody): Promise<HealthCard> {
+  const row = await queries.saveHealthCard(session.context, getDb(), personId, body)
+  const medicines = await currentMedicinesByPerson(session, personId)
+  return toHealthCard(row, session, medicines.get(personId) ?? [])
 }

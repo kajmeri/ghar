@@ -5,6 +5,7 @@ import * as health from '@/lib/health/service'
 import { EmptyState } from '../_components/ui/empty-state'
 import { HeartIllustration } from '../_components/ui/illustrations'
 import { PageHeader } from '../_components/ui/page-header'
+import { HealthCard } from './_components/health-card'
 import { AddHealthEventButton } from './_components/health-event-sheet'
 import { HealthMedicines } from './_components/health-medicines'
 import { HealthSchedules } from './_components/health-schedules'
@@ -33,7 +34,8 @@ export default async function HealthPage({ searchParams }: PageProps<'/health'>)
     )
   }
 
-  const [events, schedules, medicines, options] = await Promise.all([
+  const [card, events, schedules, medicines, options] = await Promise.all([
+    health.getHealthCard(session, person.id),
     health.listAllHealthEvents(session, person.id),
     health.listHealthSchedules(session, person.id),
     health.listHealthMedicines(session, { personId: person.id }),
@@ -49,12 +51,15 @@ export default async function HealthPage({ searchParams }: PageProps<'/health'>)
       <PageHeader
         title='Health'
         description={
-          people.length > 1 ? 'Visits, shots, checkups and medicines for everyone at home.' : 'Your visits, shots, checkups and medicines.'
+          people.length > 1
+            ? 'Health cards, visits, shots, checkups and medicines for everyone at home.'
+            : 'Your health card, visits, shots, checkups and medicines.'
         }
         action={addButton}
       />
       <div className='flex flex-col gap-6'>
         {people.length > 1 ? <PersonPicker people={people} currentId={person.id} /> : null}
+        <HealthCard card={card} options={options} />
         <HealthSchedules schedules={schedules} personId={person.id} personName={person.name} options={options} today={today} />
         <HealthMedicines medicines={medicines} personId={person.id} personName={person.name} options={options} today={today} />
         {events.length === 0 ? (

@@ -6,6 +6,10 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { createContact } from '../src/queries/contacts'
 import { createDocument } from '../src/queries/documents'
 import {
+  getHealthCard,
+  listHealthCards,
+  saveHealthCard,
+  type HealthCardInput,
   claimHealthRefillReminder,
   createHealthMedicine,
   deleteHealthMedicine,
@@ -425,5 +429,95 @@ describe('medicines', () => {
 
     await deleteHealthMedicine(owner, db, current.id)
     await deleteHealthMedicine(owner, db, stopped.id)
+  })
+})
+
+describe('health cards', () => {
+  const blank: HealthCardInput = {
+    bloodType: null,
+    allergies: [],
+    conditions: [],
+    doctorContactId: null,
+    insuranceDocumentId: null,
+    emergencyNote: null,
+  }
+
+  it('starts blank, saves and replaces the whole card', async () => {
+    const empty = await getHealthCard(owner, db, child)
+    expect(empty).toMatchObject({ personName: 'Asha', bloodType: null, allergies: [], updatedAt: null })
+
+    const doctor = await createContact(owner, db, {
+      name: 'Dr Mehta',
+      role: 'Paediatrician',
+      phone: '+1 555 0100',
+      email: null,
+      url: null,
+      notes: null,
+      tags: [],
+    })
+    const saved = await saveHealthCard(owner, db, child, {
+      ...blank,
+      bloodType: 'O-',
+      allergies: ['Peanuts', ' peanuts '],
+      conditions: ['Asthma'],
+      doctorContactId: doctor.id,
+      emergencyNote: ' Inhaler in the front pocket ',
+    })
+    expect(saved).toMatchObject({
+      bloodType: 'O-',
+      allergies: ['Peanuts'],
+      conditions: ['Asthma'],
+      doctorName: 'Dr Mehta',
+      doctorPhone: '+1 555 0100',
+      emergencyNote: 'Inhaler in the front pocket',
+    })
+    expect(saved.updatedAt).toBeInstanceOf(Date)
+
+    const replaced = await saveHealthCard(owner, db, child, { ...blank, allergies: ['Penicillin'] })
+    expect(replaced).toMatchObject({ bloodType: null, allergies: ['Penicillin'], conditions: [], doctorContactId: null })
+  })
+
+  it('follows who may see and edit whose records', async () => {
+    await saveHealthCard(member, db, memberPerson, { ...blank, allergies: ['Latex'] })
+    await expect(saveHealthCard(member, db, child, blank)).rejects.toThrow(NotFoundError)
+    await expect(saveHealthCard(viewer, db, viewerPerson, blank)).rejects.toThrow(ForbiddenError)
+    await expect(getHealthCard(outsider, db, memberPerson)).rejects.toThrow(NotFoundError)
+    expect((await listHealthCards(member, db, {})).map(card => card.personId)).toEqual([memberPerson])
+    // A trip's travellers can include people the caller can't see; they're left out, not refused.
+    expect((await listHealthCards(member, db, { personIds: [memberPerson, child] })).map(card => card.personId)).toEqual([memberPerson])
+    expect(await listHealthCards(owner, db, { personIds: [] })).toEqual([])
+
+    const sql = `select person_id from health_cards where person_id in ('${memberPerson}', '${child}') order by person_id`
+    expect((await queryAs(client, member.userId, sql)).length).toBe(1)
+    expect((await queryAs(client, adult.userId, sql)).length).toBe(2)
+    expect(await queryAs(client, outsider.userId, sql)).toEqual([])
+  })
+
+  it('keeps an insurance card the editor can’t open, but won’t link a new one', async () => {
+    const insurance = await createDocument(owner, db, {
+      title: 'Insurance card',
+      kind: 'medical',
+      issuedOn: null,
+      expiresOn: null,
+      remindFromDays: null,
+      issuer: null,
+      referenceNumber: null,
+      assetId: null,
+      personId: memberPerson,
+      notes: null,
+      isSensitive: true,
+      storagePath: documentStoragePath(owner.householdId, crypto.randomUUID(), 'application/pdf'),
+      mimeType: 'application/pdf',
+      sizeBytes: 100,
+    })
+    await saveHealthCard(owner, db, memberPerson, { ...blank, insuranceDocumentId: insurance.id })
+    const seen = await getHealthCard(member, db, memberPerson)
+    expect(seen).toMatchObject({ insuranceDocumentId: insurance.id, insuranceDocumentTitle: null })
+
+    const kept = await saveHealthCard(member, db, memberPerson, { ...blank, insuranceDocumentId: insurance.id, bloodType: 'A+' })
+    expect(kept.insuranceDocumentId).toBe(insurance.id)
+
+    await saveHealthCard(member, db, memberPerson, blank)
+    await expect(saveHealthCard(member, db, memberPerson, { ...blank, insuranceDocumentId: insurance.id })).rejects.toThrow(ValidationError)
   })
 })

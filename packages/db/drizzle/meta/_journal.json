@@ -197,6 +197,13 @@
       "when": 1790350450949,
       "tag": "0027_health_medicines",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790351450750,
+      "tag": "0028_health_cards",
+      "breakpoints": true
     }
   ]
 }

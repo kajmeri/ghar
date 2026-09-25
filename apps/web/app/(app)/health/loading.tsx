@@ -12,6 +12,10 @@ export default function HealthLoading() {
         </div>
         <div>
           <SectionHeaderSkeleton />
+          <div className='h-32 rounded-card border border-line bg-surface' />
+        </div>
+        <div>
+          <SectionHeaderSkeleton />
           <DataListSkeleton rows={2} columns={1} />
         </div>
         <div>

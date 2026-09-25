@@ -64,6 +64,7 @@ const EXEMPT: Record<string, string> = {
   listHealthPeople: 'the household’s own people the caller may see, a handful of rows, read whole to pick one',
   listHealthSchedules: 'a few schedules per person, read whole so each shows beside its own records',
   listHealthMedicines: 'what one household takes and took, a handful per person, read whole so current and stopped show together',
+  listHealthCards: 'one card per person in the household, and a household has a handful of people',
   listTripGuests: 'one trip’s guest list, capped at MAX_TRIP_GUESTS, with its headcount',
   listSharedTrips: 'the trips other households let this account onto, a handful, read whole for one screen',
   syncChanges: 'it has its own cursor',

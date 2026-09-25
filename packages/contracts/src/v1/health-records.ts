@@ -305,3 +305,85 @@ export const deleteHealthMedicine = defineEndpoint({
   params: healthMedicineParamsSchema,
   response: z.object({ medicineId: z.uuid() }),
 })
+
+// ---------------------------------------------------------------------------------------------
+// Health card
+// ---------------------------------------------------------------------------------------------
+
+/** Mirrors BLOOD_TYPES in @ghar/core/health. A test keeps them equal. */
+export const bloodTypeSchema = z.enum(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])
+export type BloodTypeValue = z.infer<typeof bloodTypeSchema>
+
+/** HEALTH_CARD_ITEM_MAX_LENGTH, HEALTH_CARD_ITEMS_MAX and HEALTH_CARD_NOTE_MAX_LENGTH in @ghar/core/health. */
+export const HEALTH_CARD_ITEM_MAX = 80
+export const HEALTH_CARD_ITEMS_MAX = 20
+export const HEALTH_CARD_NOTE_MAX = 300
+
+/**
+ * What someone helping a person would need to know. Every person the caller may see has one, blank
+ * until something goes on it. Current medicines come from their medicines, not from the card.
+ */
+export const healthCardSchema = z.object({
+  personId: z.uuid(),
+  /** "You", or their name. */
+  personName: z.string(),
+  bloodType: bloodTypeSchema.nullable(),
+  allergies: z.array(z.string()),
+  conditions: z.array(z.string()),
+  /** Their doctor, as a contact. */
+  doctorContactId: z.uuid().nullable(),
+  doctorName: z.string().nullable(),
+  doctorPhone: z.string().nullable(),
+  /** A photo or scan of their insurance card. Its title is null when the caller can't open it. */
+  insuranceDocumentId: z.uuid().nullable(),
+  insuranceDocumentTitle: z.string().nullable(),
+  /** For whoever's helping, like "Carries an EpiPen in her bag". */
+  emergencyNote: z.string().nullable(),
+  /** What they take now, by name. */
+  medicines: z.array(z.object({ id: z.uuid(), name: z.string(), dose: z.string().nullable() })),
+  canEdit: z.boolean(),
+  /** Null until something has been saved. */
+  updatedAt: instantSchema.nullable(),
+})
+export type HealthCard = z.infer<typeof healthCardSchema>
+
+const healthCardItemsSchema = z.array(z.string().trim().max(HEALTH_CARD_ITEM_MAX)).max(HEALTH_CARD_ITEMS_MAX).default([])
+
+/** The whole card. Replaces every field; blanks and repeats in the lists are dropped. */
+export const healthCardBodySchema = z.object({
+  bloodType: bloodTypeSchema.nullable().default(null),
+  allergies: healthCardItemsSchema,
+  conditions: healthCardItemsSchema,
+  doctorContactId: z.uuid().nullable().default(null),
+  /** One the caller can't open may stay when it's already on the card, but can't be newly linked. */
+  insuranceDocumentId: z.uuid().nullable().default(null),
+  emergencyNote: z.string().trim().max(HEALTH_CARD_NOTE_MAX).nullable().default(null),
+})
+export type HealthCardBody = z.output<typeof healthCardBodySchema>
+
+export const healthPersonParamsSchema = z.object({ personId: z.uuid() })
+
+/** Everyone's cards the caller may see, oldest person first, blank ones included. With `personId`, only theirs. */
+export const listHealthCards = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/health-records/cards',
+  query: z.object({ personId: z.uuid().optional() }),
+  response: z.object({ cards: z.array(healthCardSchema) }),
+})
+
+/** 404 for someone the caller can't see. */
+export const getHealthCard = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/health-records/people/:personId/card',
+  params: healthPersonParamsSchema,
+  response: z.object({ card: healthCardSchema }),
+})
+
+/** Permissions as createHealthEvent. */
+export const saveHealthCard = defineEndpoint({
+  method: 'PUT',
+  path: '/api/v1/health-records/people/:personId/card',
+  params: healthPersonParamsSchema,
+  body: healthCardBodySchema,
+  response: z.object({ card: healthCardSchema }),
+})

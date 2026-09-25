@@ -1,8 +1,8 @@
 import type { PGlite } from '@electric-sql/pglite'
-import type { HealthEvent, HealthMedicine, HealthPerson, HealthSchedule, RequestContext } from '@ghar/contracts'
+import type { HealthCard, HealthEvent, HealthMedicine, HealthPerson, HealthSchedule, RequestContext, TravelMode } from '@ghar/contracts'
 import { addCalendarDays, todayInTimeZone } from '@ghar/core/dates'
 import { invitationExpiresAt } from '@ghar/core/invitations'
-import { acceptInvitation, createHousehold, createInvitation, createPerson, requireOwnPerson, type Db } from '@ghar/db/queries'
+import { acceptInvitation, createHousehold, createInvitation, createPerson, createTrip, requireOwnPerson, type Db } from '@ghar/db/queries'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
 import { DELETE as deleteEvent, GET as getEvent, PUT as updateEvent } from '@/app/api/v1/health-records/events/[eventId]/route'
@@ -15,7 +15,10 @@ import {
 } from '@/app/api/v1/health-records/medicines/[medicineId]/route'
 import { POST as stopMedicine } from '@/app/api/v1/health-records/medicines/[medicineId]/stop/route'
 import { GET as listMedicines, POST as createMedicine } from '@/app/api/v1/health-records/medicines/route'
+import { GET as listCards } from '@/app/api/v1/health-records/cards/route'
+import { GET as getCard, PUT as saveCard } from '@/app/api/v1/health-records/people/[personId]/card/route'
 import { GET as listPeople } from '@/app/api/v1/health-records/people/route'
+import { GET as getTravelMode } from '@/app/api/v1/trips/[tripId]/travel-mode/route'
 import { DELETE as deleteSchedule, PUT as updateSchedule } from '@/app/api/v1/health-records/schedules/[scheduleId]/route'
 import { GET as listSchedules, POST as createSchedule } from '@/app/api/v1/health-records/schedules/route'
 
@@ -227,5 +230,53 @@ describe('health records through the API', () => {
     test.session = owner
     expect((await call(deleteMedicine, 'DELETE', { params: { medicineId: medicine.id } })).body).toEqual({ medicineId: medicine.id })
     expect((await call(getMedicine, 'GET', { params: { medicineId: medicine.id } })).status).toBe(404)
+  })
+
+  it('keeps a health card with current medicines, and shows it in travel mode to those who may see it', async () => {
+    test.session = owner
+    const blank = await call(getCard, 'GET', { params: { personId: child } })
+    expect(blank.body.card).toMatchObject({ personName: 'Anika', bloodType: null, allergies: [], medicines: [], updatedAt: null })
+
+    const medicine = await call(createMedicine, 'POST', { body: { personId: child, name: 'Salbutamol', dose: '2 puffs as needed' } })
+    const saved = await call(saveCard, 'PUT', {
+      params: { personId: child },
+      body: { bloodType: 'B+', allergies: ['Peanuts', ''], conditions: ['Asthma'], emergencyNote: 'Inhaler in her bag' },
+    })
+    expect(saved.status).toBe(200)
+    const card = saved.body.card as HealthCard
+    expect(card).toMatchObject({ bloodType: 'B+', allergies: ['Peanuts'], canEdit: true })
+    expect(card.medicines).toEqual([{ id: (medicine.body.medicine as HealthMedicine).id, name: 'Salbutamol', dose: '2 puffs as needed' }])
+    expect((await call(saveCard, 'PUT', { params: { personId: child }, body: { bloodType: 'C+' } })).status).toBe(400)
+
+    const listed = (await call(listCards, 'GET')).body.cards as HealthCard[]
+    expect(listed.map(row => row.personName)[0]).toBe('You')
+    expect(listed.map(row => row.personId)).toContain(child)
+
+    const trip = await createTrip(owner, db, {
+      name: 'Goa',
+      destination: 'Goa',
+      startsOn: null,
+      endsOn: null,
+      status: 'planned',
+      coverImageUrl: null,
+      budgetCents: null,
+      notes: null,
+      travellerIds: [child, memberPerson],
+    })
+    const mode = (await call(getTravelMode, 'GET', { params: { tripId: trip.id } })).body as unknown as TravelMode
+    // The owner's own card is blank, so it's left out. The member's has the Vitamin D they added earlier.
+    expect(mode.healthCards.map(row => row.personId).toSorted()).toEqual([child, memberPerson].toSorted())
+
+    test.session = member
+    expect((await call(getCard, 'GET', { params: { personId: child } })).status).toBe(404)
+    const theirs = (await call(getTravelMode, 'GET', { params: { tripId: trip.id } })).body as unknown as TravelMode
+    expect(theirs.healthCards.map(row => row.personId)).toEqual([memberPerson])
+    expect(((await call(listCards, 'GET')).body.cards as HealthCard[]).map(row => row.personId)).toEqual([memberPerson])
+
+    test.session = viewer
+    expect((await call(saveCard, 'PUT', { params: { personId: viewerPerson }, body: {} })).status).toBe(403)
+
+    test.session = owner
+    await call(deleteMedicine, 'DELETE', { params: { medicineId: (medicine.body.medicine as HealthMedicine).id } })
   })
 })

@@ -5405,6 +5405,72 @@
         }
       }
     },
+    "/api/v1/health-records/cards": {
+      "get": {
+        "operationId": "listHealthCards",
+        "tags": [
+          "health-records"
+        ],
+        "description": "Everyone's cards the caller may see, oldest person first, blank ones included. With `personId`, only theirs.",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cards": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/HealthCard"
+                      }
+                    }
+                  },
+                  "required": [
+                    "cards"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/health-records/events": {
       "get": {
         "operationId": "listHealthEvents",
@@ -6235,6 +6301,140 @@
                   },
                   "required": [
                     "people"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/health-records/people/{personId}/card": {
+      "get": {
+        "operationId": "getHealthCard",
+        "tags": [
+          "health-records"
+        ],
+        "description": "404 for someone the caller can't see.",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "card": {
+                      "$ref": "#/components/schemas/HealthCard"
+                    }
+                  },
+                  "required": [
+                    "card"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "saveHealthCard",
+        "tags": [
+          "health-records"
+        ],
+        "description": "Permissions as createHealthEvent.",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HealthCardBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "card": {
+                      "$ref": "#/components/schemas/HealthCard"
+                    }
+                  },
+                  "required": [
+                    "card"
                   ]
                 }
               }
@@ -19559,6 +19759,19 @@
           "overdue"
         ]
       },
+      "BloodType": {
+        "type": "string",
+        "enum": [
+          "A+",
+          "A-",
+          "B+",
+          "B-",
+          "AB+",
+          "AB-",
+          "O+",
+          "O-"
+        ]
+      },
       "Booking": {
         "type": "object",
         "properties": {
@@ -23434,6 +23647,211 @@
           "going",
           "maybe"
         ]
+      },
+      "HealthCard": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "personName": {
+            "type": "string"
+          },
+          "bloodType": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BloodType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "allergies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "doctorContactId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "doctorName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "doctorPhone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "insuranceDocumentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "insuranceDocumentTitle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "emergencyNote": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "medicines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "dose": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "dose"
+              ]
+            }
+          },
+          "canEdit": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Instant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "personId",
+          "personName",
+          "bloodType",
+          "allergies",
+          "conditions",
+          "doctorContactId",
+          "doctorName",
+          "doctorPhone",
+          "insuranceDocumentId",
+          "insuranceDocumentTitle",
+          "emergencyNote",
+          "medicines",
+          "canEdit",
+          "updatedAt"
+        ]
+      },
+      "HealthCardBody": {
+        "type": "object",
+        "properties": {
+          "bloodType": {
+            "default": null,
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BloodType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "allergies": {
+            "default": [],
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 80
+            }
+          },
+          "conditions": {
+            "default": [],
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 80
+            }
+          },
+          "doctorContactId": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "insuranceDocumentId": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "emergencyNote": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
       },
       "HealthDueState": {
         "type": "string",
@@ -29798,6 +30216,12 @@
             "items": {
               "$ref": "#/components/schemas/Booking"
             }
+          },
+          "healthCards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HealthCard"
+            }
           }
         },
         "required": [
@@ -29806,7 +30230,8 @@
           "today",
           "generatedAt",
           "slots",
-          "bookings"
+          "bookings",
+          "healthCards"
         ]
       },
       "TrendCategory": {

@@ -327,3 +327,83 @@ export function compareMedicines(
   if (a.stoppedOn !== null && b.stoppedOn !== null && a.stoppedOn !== b.stoppedOn) return a.stoppedOn < b.stoppedOn ? 1 : -1
   return a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
 }
+
+// ---------------------------------------------------------------------------------------------
+// Health card: what a stranger helping would need to know. One per person, all of it optional.
+// Allergies and conditions are short phrases as people say them ("Penicillin", "Asthma"), not codes.
+// ---------------------------------------------------------------------------------------------
+
+export const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const
+export type BloodType = (typeof BLOOD_TYPES)[number]
+
+/** One allergy or condition. */
+export const HEALTH_CARD_ITEM_MAX_LENGTH = 80
+/** Allergies, or conditions, per person. */
+export const HEALTH_CARD_ITEMS_MAX = 20
+/** The note for whoever's helping, like "Carries an EpiPen in her bag". */
+export const HEALTH_CARD_NOTE_MAX_LENGTH = 300
+
+/** "A+", "O−", with a real minus sign. */
+export function bloodTypeLabel(bloodType: BloodType): string {
+  return bloodType.replace('-', '−')
+}
+
+export interface HealthCardFields {
+  readonly bloodType: BloodType | null
+  readonly allergies: readonly string[]
+  readonly conditions: readonly string[]
+  /** Their doctor, as a contact. */
+  readonly doctorContactId: string | null
+  /** A photo or scan of their insurance card, as a document. */
+  readonly insuranceDocumentId: string | null
+  readonly emergencyNote: string | null
+}
+
+/** Trimmed, blanks dropped, and each one once however it was capitalised. */
+function tidyItems(items: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const kept: string[] = []
+  for (const item of items) {
+    const trimmed = item.trim().replace(/\s+/g, ' ')
+    const key = trimmed.toLowerCase()
+    if (trimmed === '' || seen.has(key)) continue
+    seen.add(key)
+    kept.push(trimmed)
+  }
+  return kept
+}
+
+/** Checks a health card and tidies it: lists trimmed and deduplicated, a blank note to null. */
+export function requireHealthCardFields<T extends HealthCardFields>(fields: T): T {
+  const fieldErrors: Record<string, string[]> = {}
+  const allergies = tidyItems(fields.allergies)
+  const conditions = tidyItems(fields.conditions)
+  const note = fields.emergencyNote?.trim() ?? ''
+  for (const [key, items, noun] of [
+    ['allergies', allergies, 'allergies'],
+    ['conditions', conditions, 'conditions'],
+  ] as const) {
+    if (items.length > HEALTH_CARD_ITEMS_MAX) fieldErrors[key] = [`Keep it to ${String(HEALTH_CARD_ITEMS_MAX)} ${noun}.`]
+    else if (items.some(item => item.length > HEALTH_CARD_ITEM_MAX_LENGTH)) fieldErrors[key] = ['Keep each one short.']
+  }
+  if (fields.bloodType !== null && !(BLOOD_TYPES as readonly string[]).includes(fields.bloodType)) {
+    fieldErrors.bloodType = ['Pick a blood type from the list.']
+  }
+  if (note.length > HEALTH_CARD_NOTE_MAX_LENGTH) fieldErrors.emergencyNote = ['That note is too long.']
+  const [first] = Object.values(fieldErrors)
+  if (first?.[0] !== undefined) throw new ValidationError(first[0], { details: { fieldErrors } })
+  return { ...fields, allergies, conditions, emergencyNote: note === '' ? null : note }
+}
+
+/** Whether there's anything on the card worth showing someone. Current medicines count too. */
+export function hasHealthCardDetails(card: HealthCardFields & { readonly medicines: readonly unknown[] }): boolean {
+  return (
+    card.bloodType !== null ||
+    card.allergies.length > 0 ||
+    card.conditions.length > 0 ||
+    card.doctorContactId !== null ||
+    card.insuranceDocumentId !== null ||
+    card.emergencyNote !== null ||
+    card.medicines.length > 0
+  )
+}
