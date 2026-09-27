@@ -2,7 +2,7 @@ import type { HouseholdRole } from '@ghar/core/auth'
 import { ConflictError, NotFoundError } from '@ghar/core/errors'
 import { validateHouseholdSettings, type HouseholdSettings } from '@ghar/core/households'
 import { assertInvitationAcceptable, normalizeEmail } from '@ghar/core/invitations'
-import { eq } from 'drizzle-orm'
+import { and, desc, eq, gt, isNull, type SQL } from 'drizzle-orm'
 import { householdMembers, households, invitations, profiles } from '../schema'
 import { addMemberPerson } from './people'
 import { recordAudit } from './audit'
@@ -99,11 +99,55 @@ export async function previewInvitation(ctx: SessionContext, db: Db, input: { to
   return { ...row, forYou: ctx.email !== null && normalizeEmail(ctx.email) === row.email }
 }
 
+export interface OpenInvitationRow {
+  id: string
+  householdName: string
+  role: HouseholdRole
+  invitedByName: string | null
+  expiresAt: Date
+}
+
+/**
+ * Open invitations to the signed-in address, newest first, for someone who signs in without the
+ * emailed link. Empty without an email on the session.
+ */
+export async function listOpenInvitations(ctx: SessionContext, db: Db, input: { now: Date }): Promise<OpenInvitationRow[]> {
+  if (!ctx.email) return []
+  return db
+    .select({
+      id: invitations.id,
+      householdName: households.name,
+      role: invitations.role,
+      invitedByName: profiles.fullName,
+      expiresAt: invitations.expiresAt,
+    })
+    .from(invitations)
+    .innerJoin(households, eq(households.id, invitations.householdId))
+    .leftJoin(profiles, eq(profiles.id, invitations.invitedBy))
+    .where(and(eq(invitations.email, normalizeEmail(ctx.email)), isNull(invitations.acceptedAt), gt(invitations.expiresAt, input.now)))
+    .orderBy(desc(invitations.createdAt))
+}
+
+/**
+ * Which invitation to accept: the token's hash from the emailed link, or an id from
+ * listOpenInvitations. An id only finds an invitation to the signed-in address, so someone else's
+ * id reads as missing rather than naming who it was for.
+ */
+export type InvitationLookup = { tokenHash: string } | { invitationId: string }
+
+function lookupCondition(ctx: SessionContext, lookup: InvitationLookup): SQL | undefined {
+  if ('tokenHash' in lookup) return eq(invitations.tokenHash, lookup.tokenHash)
+  if (!ctx.email) return undefined
+  return and(eq(invitations.id, lookup.invitationId), eq(invitations.email, normalizeEmail(ctx.email)))
+}
+
 /** Joins the household the invitation is for. Single use. */
-export async function acceptInvitation(ctx: SessionContext, db: Db, input: { tokenHash: string; now: Date }): Promise<JoinedHousehold> {
+export async function acceptInvitation(ctx: SessionContext, db: Db, input: InvitationLookup & { now: Date }): Promise<JoinedHousehold> {
+  const condition = lookupCondition(ctx, input)
+  if (!condition) throw new NotFoundError(INVALID_INVITATION)
   try {
     return await db.transaction(async tx => {
-      const [invitation] = await tx.select().from(invitations).where(eq(invitations.tokenHash, input.tokenHash)).limit(1).for('update')
+      const [invitation] = await tx.select().from(invitations).where(condition).limit(1).for('update')
       if (!invitation) throw new NotFoundError(INVALID_INVITATION)
 
       const existing = await findMembership(ctx, tx)

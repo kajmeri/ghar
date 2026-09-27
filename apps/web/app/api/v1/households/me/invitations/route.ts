@@ -10,7 +10,7 @@ export const POST = route(
   async ({ body }) => {
     const session = await requireSession()
     const ctx = await getRequestContext()
-    return { invitation: await households.inviteMember(ctx, session, body) }
+    return households.inviteMember(ctx, session, body)
   },
   { status: 201 }
 )

@@ -7295,7 +7295,7 @@
         "tags": [
           "invitations"
         ],
-        "description": "Owners and adults. Emails a single-use link that expires in seven days. Inviting an address\nthat already has a pending invitation replaces it, so the old link stops working.",
+        "description": "Owners and adults. Emails a single-use link that expires in seven days. Inviting an address\nthat already has a pending invitation replaces it, so the old link stops working. When the email\ncan't be sent the invitation is still created, and the response carries the link instead.",
         "requestBody": {
           "required": true,
           "content": {
@@ -7317,15 +7317,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "invitation": {
-                      "$ref": "#/components/schemas/Invitation"
-                    }
-                  },
-                  "required": [
-                    "invitation"
-                  ]
+                  "$ref": "#/components/schemas/CreateInvitationResponse"
                 }
               }
             }
@@ -7740,6 +7732,61 @@
         }
       }
     },
+    "/api/v1/invitations/mine": {
+      "get": {
+        "operationId": "listMyInvitations",
+        "tags": [
+          "invitations"
+        ],
+        "description": "Open invitations to the signed-in address, newest first, so someone who signs in without the\nemailed link can still join. Needs a session but no household. Empty once they're in one.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "invitations": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MyInvitation"
+                      }
+                    }
+                  },
+                  "required": [
+                    "invitations"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/invitations/preview": {
       "post": {
         "operationId": "previewInvitation",
@@ -7777,6 +7824,61 @@
                   "required": [
                     "invitation"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/invitations/{invitationId}/accept": {
+      "post": {
+        "operationId": "acceptMyInvitation",
+        "tags": [
+          "invitations"
+        ],
+        "description": "Joins the household from one of listMyInvitations. 404 unless it's open and to the signed-in address.",
+        "parameters": [
+          {
+            "name": "invitationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyHouseholdResponse"
                 }
               }
             }
@@ -22372,6 +22474,33 @@
           "role"
         ]
       },
+      "CreateInvitationResponse": {
+        "type": "object",
+        "properties": {
+          "invitation": {
+            "$ref": "#/components/schemas/Invitation"
+          },
+          "emailed": {
+            "type": "boolean"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "invitation",
+          "emailed",
+          "link"
+        ]
+      },
       "CreateManualAccountBody": {
         "type": "object",
         "properties": {
@@ -27242,6 +27371,39 @@
         "required": [
           "household",
           "me"
+        ]
+      },
+      "MyInvitation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "householdName": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/HouseholdRole"
+          },
+          "invitedByName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "householdName",
+          "role",
+          "invitedByName",
+          "expiresAt"
         ]
       },
       "MyTripAnswer": {

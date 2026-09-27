@@ -1,6 +1,6 @@
 'use server'
 
-import { createHouseholdBodySchema } from '@ghar/contracts'
+import { acceptMyInvitation, createHouseholdBodySchema } from '@ghar/contracts'
 import { redirect } from 'next/navigation'
 import { parseForm, runAction } from '@/lib/actions/run'
 import type { ActionState } from '@/lib/actions/state'
@@ -11,6 +11,15 @@ export async function createHouseholdAction(_previous: ActionState, formData: Fo
   return runAction(formData, async () => {
     const session = await requireSession()
     await households.createHousehold(session, parseForm(createHouseholdBodySchema, formData))
+    redirect('/')
+  })
+}
+
+export async function joinHouseholdAction(_previous: ActionState, formData: FormData): Promise<ActionState> {
+  return runAction(formData, async () => {
+    const session = await requireSession()
+    const { invitationId } = parseForm(acceptMyInvitation.params, formData)
+    await households.acceptMyInvitation(session, invitationId)
     redirect('/')
   })
 }

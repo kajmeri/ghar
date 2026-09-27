@@ -8,7 +8,7 @@ import { auditLog, jobRuns } from '../src/schema'
 import { getHousehold } from '../src/queries/households'
 import { createInvitation, listPendingInvitations, revokeInvitation } from '../src/queries/invitations'
 import { changeMemberRole, listMembers, removeMember } from '../src/queries/members'
-import { acceptInvitation, createHousehold, findMembership, previewInvitation } from '../src/queries/session'
+import { acceptInvitation, createHousehold, findMembership, listOpenInvitations, previewInvitation } from '../src/queries/session'
 import type { Db } from '../src/queries/types'
 import { createAuthUser, createTestDatabase, queryAs } from './support/database'
 
@@ -181,6 +181,34 @@ describe('membership rules against the database', () => {
         currency: 'USD',
       })
     ).rejects.toBeInstanceOf(ConflictError)
+  })
+
+  it('offers open invitations to someone who signs in without the link, and lets only them accept by id', async () => {
+    // A household of its own, so the rest of this file's counts stay as they are.
+    const ownerC = { userId: await createAuthUser(client, 'owner-c@example.com'), email: 'owner-c@example.com' }
+    const householdC = await createHousehold(ownerC, db, { name: 'Household C', timezone: 'UTC', currency: 'USD' })
+    const c: RequestContext = { userId: ownerC.userId, householdId: householdC.household.id, role: 'owner' }
+    const newcomer = { userId: await createAuthUser(client, 'newcomer@example.com'), email: 'Newcomer@Example.com' }
+    const fromC = await createInvitation(c, db, { email: 'newcomer@example.com', role: 'member', tokenHash: 'hash-newcomer-c', expiresAt })
+    const fromB = await createInvitation(b, db, { email: 'newcomer@example.com', role: 'viewer', tokenHash: 'hash-newcomer-b', expiresAt })
+
+    const open = await listOpenInvitations(newcomer, db, { now })
+    expect(open.map(invitation => invitation.id)).toEqual([fromB.id, fromC.id])
+    expect(open[1]).toMatchObject({ householdName: 'Household C', role: 'member' })
+    expect(await listOpenInvitations({ userId: newcomer.userId, email: null }, db, { now })).toEqual([])
+    expect(await listOpenInvitations(newcomer, db, { now: new Date(expiresAt.getTime() + 1) })).toEqual([])
+
+    // Someone else's id reads as missing, even to a person with no household.
+    const stranger = { userId: await createAuthUser(client, 'stranger@example.com'), email: 'stranger@example.com' }
+    await expect(acceptInvitation(stranger, db, { invitationId: fromC.id, now })).rejects.toBeInstanceOf(NotFoundError)
+    await expect(acceptInvitation({ ...newcomer, email: null }, db, { invitationId: fromC.id, now })).rejects.toBeInstanceOf(NotFoundError)
+
+    const joined = await acceptInvitation(newcomer, db, { invitationId: fromC.id, now })
+    expect(joined.membership).toEqual({ householdId: c.householdId, role: 'member' })
+    expect(await findMembership(newcomer, db)).toEqual({ householdId: c.householdId, role: 'member' })
+    await expect(acceptInvitation(newcomer, db, { invitationId: fromC.id, now })).rejects.toBeInstanceOf(ConflictError)
+    await expect(acceptInvitation(newcomer, db, { invitationId: fromB.id, now })).rejects.toBeInstanceOf(ConflictError)
+    expect((await listOpenInvitations(newcomer, db, { now })).map(invitation => invitation.id)).toEqual([fromB.id])
   })
 })
 

@@ -2,11 +2,13 @@ import 'server-only'
 import type {
   CreateHouseholdBody,
   CreateInvitationBody,
+  CreateInvitationResponse,
   Household,
   Invitation,
   InvitationPreview,
   Member,
   MyHouseholdResponse,
+  MyInvitation,
   PageQuery,
   RequestContext,
 } from '@ghar/contracts'
@@ -19,6 +21,7 @@ import { getDb } from '@/lib/db'
 import { invitationEmail } from '@/lib/email/invitation'
 import { env } from '@/lib/env'
 import { getEmailProvider } from '@/lib/providers/email'
+import { getMonitoring } from '@/lib/providers/monitoring'
 import { currentHousehold } from './current'
 import { createInvitationToken, hashInvitationToken } from './tokens'
 
@@ -67,8 +70,16 @@ export async function listInvitationsPage(ctx: RequestContext, query: PageQuery)
   return pageResponse(page, scope, toInvitation)
 }
 
-/** Creates or replaces the invitation, then emails the link. Only the token's hash is stored. */
-export async function inviteMember(ctx: RequestContext, session: SessionContext, body: CreateInvitationBody): Promise<Invitation> {
+/**
+ * Creates or replaces the invitation, then emails the link. Only the token's hash is stored. When
+ * the email can't go out the invitation still stands, and the link comes back for the inviter to
+ * send themselves.
+ */
+export async function inviteMember(
+  ctx: RequestContext,
+  session: SessionContext,
+  body: CreateInvitationBody
+): Promise<CreateInvitationResponse> {
   const db = getDb()
   const { token, tokenHash } = createInvitationToken()
   const invitation = await queries.createInvitation(ctx, db, {
@@ -81,16 +92,23 @@ export async function inviteMember(ctx: RequestContext, session: SessionContext,
 
   const url = new URL('/invite', env().APP_URL)
   url.searchParams.set('token', token)
-  await getEmailProvider().send(
-    invitationEmail({
-      to: invitation.email,
-      householdName: household.name,
-      inviterName: invitation.invitedByName ?? session.email ?? 'Someone in your household',
-      role: invitation.role,
-      url: url.toString(),
-    })
-  )
-  return toInvitation(invitation)
+  const link = url.toString()
+  try {
+    await getEmailProvider().send(
+      invitationEmail({
+        to: invitation.email,
+        householdName: household.name,
+        inviterName: invitation.invitedByName ?? session.email ?? 'Someone in your household',
+        role: invitation.role,
+        url: link,
+      })
+    )
+  } catch (error) {
+    // Email is down or misconfigured. Worth knowing about, but not worth losing the invitation.
+    getMonitoring().captureException(error, { level: 'warning', tags: { stage: 'invitation_email' } })
+    return { invitation: toInvitation(invitation), emailed: false, link }
+  }
+  return { invitation: toInvitation(invitation), emailed: true, link: null }
 }
 
 export async function revokeInvitation(ctx: RequestContext, input: { invitationId: string }): Promise<{ invitationId: string }> {
@@ -117,6 +135,20 @@ export async function acceptInvitation(session: SessionContext, token: string): 
     tokenHash: hashInvitationToken(token),
     now: new Date(),
   })
+  return toMyHousehold(household, session, membership.role)
+}
+
+/** Open invitations to the signed-in address. None once they're in a household, since they couldn't accept one. */
+export async function listMyInvitations(session: SessionContext): Promise<MyInvitation[]> {
+  const db = getDb()
+  if (await queries.findMembership(session, db)) return []
+  const rows = await queries.listOpenInvitations(session, db, { now: new Date() })
+  return rows.map(row => ({ ...row, expiresAt: row.expiresAt.toISOString() }))
+}
+
+/** Accepts one of listMyInvitations by id, for someone who signed in without the emailed link. */
+export async function acceptMyInvitation(session: SessionContext, invitationId: string): Promise<MyHouseholdResponse> {
+  const { household, membership } = await queries.acceptInvitation(session, getDb(), { invitationId, now: new Date() })
   return toMyHousehold(household, session, membership.role)
 }
 

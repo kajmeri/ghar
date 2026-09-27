@@ -67,6 +67,7 @@ const EXEMPT: Record<string, string> = {
   listHealthCards: 'one card per person in the household, and a household has a handful of people',
   listTripGuests: 'one trip’s guest list, capped at MAX_TRIP_GUESTS, with its headcount',
   listSharedTrips: 'the trips other households let this account onto, a handful, read whole for one screen',
+  listMyInvitations: 'open invitations to one address, one per household at most, read whole for one screen',
   syncChanges: 'it has its own cursor',
 }
 

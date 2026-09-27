@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { useFocusFirstInvalid } from '@/hooks/use-focus-first-invalid'
 import { fieldError, IDLE, submittedValue } from '@/lib/actions/state'
-import { inviteAction } from '../actions'
+import { inviteAction, type InviteState } from '../actions'
+import { UnsentInvitation } from './unsent-invitation'
 
 export interface RoleOption {
   value: string
@@ -17,13 +18,19 @@ export interface RoleOption {
 }
 
 export function InviteForm({ roles }: { roles: RoleOption[] }) {
-  const [state, formAction, pending] = useActionState(inviteAction, IDLE)
+  const [state, formAction, pending] = useActionState<InviteState, FormData>(inviteAction, IDLE)
   const formRef = useRef<HTMLFormElement>(null)
-  useFocusFirstInvalid(formRef, state)
-  const errors = { email: fieldError(state, 'email'), role: fieldError(state, 'role') }
+  const formState = state.status === 'unsent' ? IDLE : state
+  useFocusFirstInvalid(formRef, formState)
+  const errors = { email: fieldError(formState, 'email'), role: fieldError(formState, 'role') }
 
   return (
-    <form ref={formRef} action={formAction} noValidate className='flex flex-col gap-4 rounded-card border border-line bg-surface p-4 md:p-6'>
+    <form
+      ref={formRef}
+      action={formAction}
+      noValidate
+      className='flex flex-col gap-4 rounded-card border border-line bg-surface p-4 md:p-6'
+    >
       <div className='grid gap-4 md:grid-cols-[minmax(0,1fr)_14rem]'>
         <Field id='invite-email' label='Email' error={errors.email}>
           <Input
@@ -33,7 +40,7 @@ export function InviteForm({ roles }: { roles: RoleOption[] }) {
             inputMode='email'
             autoComplete='off'
             required
-            defaultValue={submittedValue(state, 'email')}
+            defaultValue={submittedValue(formState, 'email')}
             aria-invalid={Boolean(errors.email)}
             aria-describedby={describedBy('invite-email', errors.email)}
           />
@@ -42,7 +49,7 @@ export function InviteForm({ roles }: { roles: RoleOption[] }) {
           <NativeSelect
             id='invite-role'
             name='role'
-            defaultValue={submittedValue(state, 'role') ?? roles[0]?.value}
+            defaultValue={submittedValue(formState, 'role') ?? roles[0]?.value}
             aria-invalid={Boolean(errors.role)}
             aria-describedby={describedBy('invite-role', errors.role)}
           >
@@ -67,8 +74,9 @@ export function InviteForm({ roles }: { roles: RoleOption[] }) {
           <Mail aria-hidden />
           {pending ? 'Sending…' : 'Send invitation'}
         </Button>
-        <FormMessage state={state} />
+        <FormMessage state={formState} />
       </div>
+      {state.status === 'unsent' ? <UnsentInvitation message={state.message} link={state.link} /> : null}
     </form>
   )
 }

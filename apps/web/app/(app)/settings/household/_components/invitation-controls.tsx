@@ -4,11 +4,12 @@ import { useActionState } from 'react'
 import { Button } from '@/components/ui/button'
 import { FormMessage } from '@/components/ui/field'
 import { IDLE } from '@/lib/actions/state'
-import { inviteAction, revokeInvitationAction } from '../actions'
+import { inviteAction, revokeInvitationAction, type InviteState } from '../actions'
+import { UnsentInvitation } from './unsent-invitation'
 
 /** Resend replaces the invitation with a fresh link and expiry; revoke deletes it. */
 export function InvitationControls({ invitationId, email, role }: { invitationId: string; email: string; role: string }) {
-  const [resendState, resendAction, resending] = useActionState(inviteAction, IDLE)
+  const [resendState, resendAction, resending] = useActionState<InviteState, FormData>(inviteAction, IDLE)
   const [revokeState, revokeAction, revoking] = useActionState(revokeInvitationAction, IDLE)
   const message = revokeState.status === 'error' ? revokeState : resendState
 
@@ -31,7 +32,7 @@ export function InvitationControls({ invitationId, email, role }: { invitationId
           </Button>
         </form>
       </div>
-      <FormMessage state={message} />
+      {message.status === 'unsent' ? <UnsentInvitation message={message.message} link={message.link} /> : <FormMessage state={message} />}
     </div>
   )
 }

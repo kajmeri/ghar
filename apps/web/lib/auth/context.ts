@@ -1,7 +1,7 @@
 import 'server-only'
 import type { RequestContext } from '@ghar/contracts'
 import { NotFoundError, UnauthorizedError } from '@ghar/core/errors'
-import { countSharedTrips, findMembership, type SessionContext } from '@ghar/db/queries'
+import { countSharedTrips, findMembership, listOpenInvitations, type SessionContext } from '@ghar/db/queries'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { cache } from 'react'
@@ -77,15 +77,18 @@ export async function getRequestContext(): Promise<RequestContext> {
   return { userId: session.userId, householdId: membership.householdId, role: membership.role }
 }
 
-/** For layouts and pages: the same context, redirecting to sign-in, trips shared with them, or onboarding instead of throwing. */
+/** For layouts and pages: the same context, redirecting to sign-in, onboarding (which offers open invitations) or trips shared with them instead of throwing. */
 export async function getPageContext(): Promise<{ ctx: RequestContext; session: WebSession }> {
   const session = await getSessionContext()
   if (!session) redirect('/login')
   const membership = await getMembership(session)
   if (outsideTokenScope(session, membership?.householdId ?? null)) redirect('/login')
   if (!membership) {
-    // Someone who came for another household's trip has somewhere to be before they have a home.
-    redirect((await countSharedTrips(session, getDb())) > 0 ? '/shared' : '/onboarding')
+    // Onboarding offers any open invitation to join, so that comes first. Otherwise someone who came
+    // for another household's trip has somewhere to be before they have a home.
+    const db = getDb()
+    const invited = (await listOpenInvitations(session, db, { now: new Date() })).length > 0
+    redirect(invited || (await countSharedTrips(session, db)) === 0 ? '/onboarding' : '/shared')
   }
   return {
     session,

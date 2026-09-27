@@ -31,15 +31,25 @@ export const createInvitationBodySchema = z.object({
 })
 export type CreateInvitationBody = z.infer<typeof createInvitationBodySchema>
 
+export const createInvitationResponseSchema = z.object({
+  invitation: invitationSchema,
+  /** False when the email couldn't go out. The invitation still stands. */
+  emailed: z.boolean(),
+  /** The link to send them yourself when `emailed` is false. Null when it was emailed. */
+  link: z.url().nullable(),
+})
+export type CreateInvitationResponse = z.infer<typeof createInvitationResponseSchema>
+
 /**
  * Owners and adults. Emails a single-use link that expires in seven days. Inviting an address
- * that already has a pending invitation replaces it, so the old link stops working.
+ * that already has a pending invitation replaces it, so the old link stops working. When the email
+ * can't be sent the invitation is still created, and the response carries the link instead.
  */
 export const createInvitation = defineEndpoint({
   method: 'POST',
   path: '/api/v1/households/me/invitations',
   body: createInvitationBodySchema,
-  response: z.object({ invitation: invitationSchema }),
+  response: createInvitationResponseSchema,
 })
 
 export const revokeInvitation = defineEndpoint({
@@ -77,5 +87,33 @@ export const acceptInvitation = defineEndpoint({
   method: 'POST',
   path: '/api/v1/invitations/accept',
   body: invitationTokenBodySchema,
+  response: myHouseholdResponseSchema,
+})
+
+/** An open invitation to the signed-in address, as it shows before someone has a household. */
+export const myInvitationSchema = z.object({
+  id: z.uuid(),
+  householdName: z.string(),
+  role: householdRoleSchema,
+  invitedByName: z.string().nullable(),
+  expiresAt: z.iso.datetime(),
+})
+export type MyInvitation = z.infer<typeof myInvitationSchema>
+
+/**
+ * Open invitations to the signed-in address, newest first, so someone who signs in without the
+ * emailed link can still join. Needs a session but no household. Empty once they're in one.
+ */
+export const listMyInvitations = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/invitations/mine',
+  response: z.object({ invitations: z.array(myInvitationSchema) }),
+})
+
+/** Joins the household from one of listMyInvitations. 404 unless it's open and to the signed-in address. */
+export const acceptMyInvitation = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/invitations/:invitationId/accept',
+  params: z.object({ invitationId: z.uuid() }),
   response: myHouseholdResponseSchema,
 })

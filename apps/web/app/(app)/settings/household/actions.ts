@@ -18,15 +18,26 @@ const HOUSEHOLD_PATH = '/settings/household'
 const changeRoleFormSchema = memberParamsSchema.extend({ role: householdRoleSchema })
 const invitationFormSchema = z.object({ invitationId: z.uuid() })
 
-export async function inviteAction(_previous: ActionState, formData: FormData): Promise<ActionState> {
-  return runAction(formData, async () => {
+/** ActionState, plus the case where the invitation was made but its email couldn't be sent. */
+export type InviteState = ActionState | { status: 'unsent'; message: string; link: string }
+
+export async function inviteAction(_previous: InviteState, formData: FormData): Promise<InviteState> {
+  let unsent: { email: string; link: string } | undefined
+  const state = await runAction(formData, async () => {
     const ctx = await getRequestContext()
     const session = await requireSession()
     const body = parseForm(createInvitationBodySchema, formData)
-    const invitation = await households.inviteMember(ctx, session, body)
+    const { invitation, link } = await households.inviteMember(ctx, session, body)
     revalidatePath(HOUSEHOLD_PATH)
+    if (link !== null) unsent = { email: invitation.email, link }
     return `Invitation sent to ${invitation.email}. The link works for ${INVITATION_TTL_DAYS} days.`
   })
+  if (!unsent) return state
+  return {
+    status: 'unsent',
+    message: `We couldn’t email the invitation to ${unsent.email}. Copy the link and send it to them yourself. It works for ${INVITATION_TTL_DAYS} days.`,
+    link: unsent.link,
+  }
 }
 
 export async function changeRoleAction(_previous: ActionState, formData: FormData): Promise<ActionState> {
