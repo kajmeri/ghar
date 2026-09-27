@@ -6,7 +6,7 @@ import { HEALTH_EVENT_KINDS, HEALTH_KIND_LABELS, HEALTH_TITLE_MAX_LENGTH, type H
 import { formatCents, parseMoneyInput, type Cents } from './money'
 
 // The quick log: someone types what happened in a sentence, like "paid the water bill yesterday",
-// and Ghar suggests the one thing to record for a person to confirm. The model sees a numbered
+// and Ghar suggests what to record, up to three things, for a person to confirm one by one. The model sees a numbered
 // list of what the caller may log against (b1, j2, p1, m3, c4, r5, ...) and picks from it by
 // number, so it never sees an id or makes one up. interpretQuickLog checks everything it says
 // again: the number has to be on the list, the date real and not in the future, a bill still
@@ -20,6 +20,8 @@ export const QUICK_LOG_TEXT_MAX_LENGTH = 200
 export const QUICK_LOG_ITEMS_MAX = 150
 /** When more than one thing fits, up to this many are offered to pick from. */
 export const QUICK_LOG_CHOICES_MAX = 3
+/** One sentence can log up to this many things, like "paid the water bill and cleaned the gutters". */
+export const QUICK_LOG_ENTRIES_MAX = 3
 /** How far back a quick log reaches. Anything older is logged from its own page. */
 export const QUICK_LOG_DAYS_BACK = 366
 /** The largest cost a house job or a cash spend takes, as the completion form allows. */
@@ -139,8 +141,26 @@ export type QuickLogProposal =
     }
   | { action: 'not_renewing'; kind: ExpirySubjectKind; subjectId: string; name: string; expiresOn: CalendarDate }
 
-/** Either something to confirm (the first choice is the best fit) or why there's nothing. */
+/** One thing the sentence mentions: either something to confirm (the first choice is the best fit) or why it can't be. */
+export interface QuickLogEntry {
+  /** The words it came from, like "paid the water bill", to show which part of the sentence it is. */
+  said: string | null
+  choices: QuickLogProposal[]
+  problem: string | null
+}
+
+/**
+ * What the sentence comes to, in the order it was said. When nothing in it can be logged,
+ * `entries` is empty and `problem` says why; otherwise `problem` is null, and an entry that can't
+ * be logged keeps its own reason.
+ */
 export interface QuickLogResult {
+  entries: QuickLogEntry[]
+  problem: string | null
+}
+
+/** What interpreting one entry comes to, before it's labelled with its words. */
+interface EntryResult {
   choices: QuickLogProposal[]
   problem: string | null
 }
@@ -154,8 +174,9 @@ const TOO_OLD = 'That’s more than a year ago. Log it from its page instead.'
 const NO_AMOUNT = 'Say how much it was, like “£12 cash for lunch”.'
 const NO_SPENDING = 'Only owners and adults can log spending.'
 
-/** What the model answers. Loose on purpose: interpretQuickLog does the real checking. */
-export const quickLogAnswerSchema = z.object({
+/** One thing that happened, as the model answers it. Loose on purpose: interpretQuickLog does the real checking. */
+export const quickLogEntryAnswerSchema = z.object({
+  said: z.string().describe('The words of the sentence this one is about, as they wrote them, like "paid the water bill yesterday".'),
   action: z
     .enum([...QUICK_LOG_ACTIONS, 'other'])
     .describe(
@@ -192,6 +213,16 @@ export const quickLogAnswerSchema = z.object({
       'For a health_event, a short title when they named it, like "Flu shot" or "Blood test", using one of the person’s usual titles when it fits. For a cash_spent, a short description of what it was for, like "Lunch" or "Haircut". Null otherwise.'
     ),
 })
+export type QuickLogEntryAnswer = z.infer<typeof quickLogEntryAnswerSchema>
+
+/** What the model answers: one entry per thing that happened. */
+export const quickLogAnswerSchema = z.object({
+  entries: z
+    .array(quickLogEntryAnswerSchema)
+    .describe(
+      `One entry per thing that happened, in the order they said them, at most ${String(QUICK_LOG_ENTRIES_MAX)}. Usually just one.`
+    ),
+})
 export type QuickLogAnswer = z.infer<typeof quickLogAnswerSchema>
 
 export interface QuickLogPrompt {
@@ -207,9 +238,11 @@ export interface QuickLogRef {
   label: string
 }
 
-const SYSTEM_PROMPT = `You help a household log something that already happened, from one sentence they typed. You answer with the output format you've been given.
+const SYSTEM_PROMPT = `You help a household log what already happened, from one sentence they typed. You answer with the output format you've been given.
 
-They paid a bill, did a house job, had a health visit or shot, refilled a medicine, spent some cash, or renewed something (or decided not to). You're given today's date and the household's bills (b1, b2, ...), house jobs (j1, j2, ...), people (p1, p2, ...), medicines (m1, m2, ...), spending categories (c1, c2, ...) and things that run out (r1, r2, ...). Pick the ones they mean by reference, best fit first. Never invent a reference. When nothing on the list fits, or they're describing something else, answer other with no items.
+The sentence usually says one thing, but it can say up to ${String(QUICK_LOG_ENTRIES_MAX)}, like "paid the water bill and cleaned the gutters". Give one entry for each, in the order they said them, each with the words it came from. Don't split one thing into several: "£12 cash for bread and milk" is one entry. If they say more than ${String(QUICK_LOG_ENTRIES_MAX)}, give the first ${String(QUICK_LOG_ENTRIES_MAX)}.
+
+For each: they paid a bill, did a house job, had a health visit or shot, refilled a medicine, spent some cash, or renewed something (or decided not to). You're given today's date and the household's bills (b1, b2, ...), house jobs (j1, j2, ...), people (p1, p2, ...), medicines (m1, m2, ...), spending categories (c1, c2, ...) and things that run out (r1, r2, ...). Pick the ones they mean by reference, best fit first. Never invent a reference. When nothing on the list fits, or they're describing something else, answer other with no items. When the whole sentence is about something else, give one entry answering other.
 
 For a health visit or shot, the items are the people it was for. When they don't say who, it was the person writing.
 
@@ -357,7 +390,7 @@ const REF_KINDS: Record<QuickLogAction, QuickLogRef['kind']> = {
   not_renewing: 'expiry',
 }
 
-function offer(choices: QuickLogProposal[]): QuickLogResult {
+function offer(choices: QuickLogProposal[]): EntryResult {
   return choices.length === 0
     ? { choices: [], problem: QUICK_LOG_UNCLEAR }
     : { choices: choices.slice(0, QUICK_LOG_CHOICES_MAX), problem: null }
@@ -374,10 +407,10 @@ function eventTitle(kind: HealthEventKind, title: string | null, usualTitles: re
 
 function healthEventChoices(
   ids: readonly string[],
-  answer: Pick<QuickLogAnswer, 'kind' | 'title'>,
+  answer: Pick<QuickLogEntryAnswer, 'kind' | 'title'>,
   on: CalendarDate,
   people: readonly QuickLogPerson[]
-): QuickLogResult {
+): EntryResult {
   // Nobody named means the person writing, when they're someone the caller logs for.
   const you = people.find(person => person.isYou)
   const picked = ids.length > 0 ? ids : you ? [you.id] : []
@@ -393,7 +426,7 @@ function healthEventChoices(
   )
 }
 
-function refillChoices(ids: readonly string[], on: CalendarDate, medicines: readonly QuickLogMedicine[]): QuickLogResult {
+function refillChoices(ids: readonly string[], on: CalendarDate, medicines: readonly QuickLogMedicine[]): EntryResult {
   const byId = new Map(medicines.map(medicine => [medicine.id, medicine]))
   const picked = ids.flatMap(id => {
     const medicine = byId.get(id)
@@ -426,10 +459,10 @@ function refillChoices(ids: readonly string[], on: CalendarDate, medicines: read
 
 function cashChoice(
   ids: readonly string[],
-  answer: Pick<QuickLogAnswer, 'amount' | 'merchant' | 'title'>,
+  answer: Pick<QuickLogEntryAnswer, 'amount' | 'merchant' | 'title'>,
   on: CalendarDate,
   spending: QuickLogItems['spending']
-): QuickLogResult {
+): EntryResult {
   if (spending === null) return { choices: [], problem: NO_SPENDING }
   const amountCents = costFrom(answer.amount)
   if (amountCents === null || amountCents === 0) return { choices: [], problem: NO_AMOUNT }
@@ -459,7 +492,7 @@ function expiryChoices(
   ids: readonly string[],
   until: string | null,
   expiries: readonly QuickLogExpiry[]
-): QuickLogResult {
+): EntryResult {
   const byId = new Map(expiries.map(expiry => [`${expiry.kind}:${expiry.subjectId}`, expiry]))
   const picked = ids.flatMap(id => {
     const expiry = byId.get(id)
@@ -504,27 +537,49 @@ export function interpretQuickLog(
   input: { today: CalendarDate; items: QuickLogItems }
 ): QuickLogResult {
   const parsed = quickLogAnswerSchema.safeParse(answer)
-  if (!parsed.success || parsed.data.action === 'other') return { choices: [], problem: QUICK_LOG_UNCLEAR }
-  const { action, date, amount } = parsed.data
+  if (!parsed.success) return { entries: [], problem: QUICK_LOG_UNCLEAR }
+
+  const entries: QuickLogEntry[] = []
+  const seen = new Set<string>()
+  for (const entry of parsed.data.entries.slice(0, QUICK_LOG_ENTRIES_MAX)) {
+    const result = interpretEntry(prompt, entry, input)
+    // The same thing said twice is logged once.
+    const [first] = result.choices
+    const key = first === undefined ? null : JSON.stringify(first)
+    if (key !== null && seen.has(key)) continue
+    if (key !== null) seen.add(key)
+    entries.push({ said: shortText(entry.said, QUICK_LOG_TEXT_MAX_LENGTH), ...result })
+  }
+  if (!entries.some(entry => entry.choices.length > 0)) return { entries: [], problem: entries[0]?.problem ?? QUICK_LOG_UNCLEAR }
+  return { entries, problem: null }
+}
+
+function interpretEntry(
+  prompt: QuickLogPrompt,
+  entry: QuickLogEntryAnswer,
+  input: { today: CalendarDate; items: QuickLogItems }
+): EntryResult {
+  if (entry.action === 'other') return { choices: [], problem: QUICK_LOG_UNCLEAR }
+  const { action, date, amount } = entry
 
   const kind = REF_KINDS[action]
   const ids: string[] = []
-  for (const ref of parsed.data.items) {
+  for (const ref of entry.items) {
     const entry = prompt.refs.get(ref.trim().toLowerCase())
     if (entry?.kind === kind && !ids.includes(entry.id)) ids.push(entry.id)
   }
 
   // When something was renewed doesn't matter, only the date it now runs out.
-  if (action === 'renewed' || action === 'not_renewing') return expiryChoices(action, ids, parsed.data.until, input.items.expiries)
+  if (action === 'renewed' || action === 'not_renewing') return expiryChoices(action, ids, entry.until, input.items.expiries)
 
   const on = date === null ? input.today : date
   if (!isCalendarDate(on)) return { choices: [], problem: QUICK_LOG_UNCLEAR }
   if (on > input.today) return { choices: [], problem: FUTURE }
   if (on < addCalendarDays(input.today, -QUICK_LOG_DAYS_BACK)) return { choices: [], problem: TOO_OLD }
 
-  if (action === 'cash_spent') return cashChoice(ids, parsed.data, on, input.items.spending)
+  if (action === 'cash_spent') return cashChoice(ids, entry, on, input.items.spending)
 
-  if (action === 'health_event') return healthEventChoices(ids, parsed.data, on, input.items.people)
+  if (action === 'health_event') return healthEventChoices(ids, entry, on, input.items.people)
   if (action === 'medicine_refilled') return refillChoices(ids, on, input.items.medicines)
 
   if (action === 'task_done') {

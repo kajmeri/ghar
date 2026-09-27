@@ -2,6 +2,7 @@ import {
   QUICK_LOG_CHOICES_MAX,
   QUICK_LOG_COST_MAX_CENTS,
   QUICK_LOG_DESCRIPTION_MAX_LENGTH,
+  QUICK_LOG_ENTRIES_MAX,
   QUICK_LOG_TEXT_MAX_LENGTH,
 } from '@ghar/core/quick-log'
 import { describe, expect, it } from 'vitest'
@@ -11,6 +12,7 @@ import {
   QUICK_LOG_CHOICES,
   QUICK_LOG_COST_MAX,
   QUICK_LOG_DESCRIPTION_MAX,
+  QUICK_LOG_ENTRIES,
   QUICK_LOG_TEXT_MAX,
   quickLogApplyBodySchema,
 } from '../src/v1/quick-log'
@@ -23,6 +25,7 @@ describe('quick log', () => {
     expect(QUICK_LOG_CHOICES).toBe(QUICK_LOG_CHOICES_MAX)
     expect(QUICK_LOG_COST_MAX).toBe(QUICK_LOG_COST_MAX_CENTS)
     expect(QUICK_LOG_DESCRIPTION_MAX).toBe(QUICK_LOG_DESCRIPTION_MAX_LENGTH)
+    expect(QUICK_LOG_ENTRIES).toBe(QUICK_LOG_ENTRIES_MAX)
   })
 
   it('takes one trimmed sentence', () => {

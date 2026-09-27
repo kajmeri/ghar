@@ -46,6 +46,12 @@ const items = {
   ],
 }
 
+/** The first thing the stand-in read, for sentences that say one. */
+async function firstOf(answer: Promise<unknown>): Promise<unknown> {
+  const { entries } = (await answer) as { entries: unknown[] }
+  return entries[0]
+}
+
 const prompt = buildQuickLogPrompt('Paid the water bill yesterday, £42', { today: '2026-09-25', items })
 
 describe('the Claude quick log reader', () => {
@@ -80,19 +86,36 @@ describe('the Claude quick log reader', () => {
 describe('the stand-in reader', () => {
   it('reads paying, the day and the amount from the words', async () => {
     expect(await createFakeQuickLogReader().read(prompt)).toEqual({
-      action: 'bill_paid',
-      items: ['b1'],
-      date: '2026-09-24',
-      amount: '£42',
-      merchant: null,
-      until: null,
-      kind: null,
-      title: null,
+      entries: [
+        {
+          said: 'Paid the water bill yesterday, £42',
+          action: 'bill_paid',
+          items: ['b1'],
+          date: '2026-09-24',
+          amount: '£42',
+          merchant: null,
+          until: null,
+          kind: null,
+          title: null,
+        },
+      ],
     })
   })
 
-  it('reads a shot for whoever is named, and a refill', async () => {
+  it('splits a sentence where something new starts, and not inside one thing', async () => {
     const read = (text: string) => createFakeQuickLogReader().read(buildQuickLogPrompt(text, { today: '2026-09-25', items }))
+    expect(await read('paid the water bill and cleaned the gutters; refilled the metformin')).toMatchObject({
+      entries: [
+        { said: 'paid the water bill', action: 'bill_paid', items: ['b1'] },
+        { said: 'cleaned the gutters', action: 'task_done', items: ['j1'] },
+        { said: 'refilled the metformin', action: 'medicine_refilled', items: ['m1'] },
+      ],
+    })
+    expect(await read('spent £6 cash on bread and milk')).toMatchObject({ entries: [{ said: 'spent £6 cash on bread, milk' }] })
+  })
+
+  it('reads a shot for whoever is named, and a refill', async () => {
+    const read = (text: string) => firstOf(createFakeQuickLogReader().read(buildQuickLogPrompt(text, { today: '2026-09-25', items })))
     expect(await read('Asha had her flu jab yesterday')).toMatchObject({
       action: 'health_event',
       items: ['p2'],
@@ -104,7 +127,7 @@ describe('the stand-in reader', () => {
   })
 
   it('reads cash spending, a renewal with its new date, and not renewing', async () => {
-    const read = (text: string) => createFakeQuickLogReader().read(buildQuickLogPrompt(text, { today: '2026-09-25', items }))
+    const read = (text: string) => firstOf(createFakeQuickLogReader().read(buildQuickLogPrompt(text, { today: '2026-09-25', items })))
     expect(await read('£12 cash on groceries yesterday')).toMatchObject({
       action: 'cash_spent',
       items: ['c1'],

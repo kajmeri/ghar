@@ -1,13 +1,24 @@
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import type { ComponentProps } from 'react'
 import { SETTINGS, SIDEBAR_GROUPS, type NavItem } from './nav'
 import { NavLink } from './nav-link'
+import { QuickLogLauncher } from './quick-log-launcher'
 import { SidebarFrame } from './sidebar-frame'
 
 // Rendered on the server. SidebarFrame holds the collapse state; the classes below follow it
 // through its data-collapsed attribute, and NavLink marks the current page.
 const COLLAPSED = 'group-data-[collapsed=true]/sidebar'
 
-export function Sidebar({ householdName, defaultCollapsed }: { householdName: string; defaultCollapsed: boolean }) {
+export function Sidebar({
+  householdName,
+  defaultCollapsed,
+  quickLog,
+}: {
+  householdName: string
+  defaultCollapsed: boolean
+  /** What the quick log needs, or null for someone it can't help. */
+  quickLog: ComponentProps<typeof QuickLogLauncher> | null
+}) {
   return (
     <SidebarFrame
       householdName={householdName}
@@ -15,6 +26,11 @@ export function Sidebar({ householdName, defaultCollapsed }: { householdName: st
       expandIcon={<PanelLeftOpen aria-hidden className='size-5' />}
       collapseIcon={<PanelLeftClose aria-hidden className='size-5' />}
     >
+      {quickLog === null ? null : (
+        <div className='px-3 pb-4'>
+          <QuickLogLauncher {...quickLog} />
+        </div>
+      )}
       <nav id='sidebar-nav' aria-label='Primary' className='flex flex-1 flex-col overflow-y-auto px-3 pb-4'>
         <div className='flex flex-1 flex-col gap-6'>
           {SIDEBAR_GROUPS.map((group, index) => (

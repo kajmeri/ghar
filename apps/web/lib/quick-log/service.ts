@@ -1,7 +1,7 @@
 import 'server-only'
-import type { Expiry, QuickLogApplyBody, QuickLogProposal, QuickLogUndo } from '@ghar/contracts'
+import type { Expiry, QuickLogApplyBody, QuickLogUndo } from '@ghar/contracts'
 import { can, type Permission } from '@ghar/core/auth'
-import { addCalendarDays, formatCalendarDate, todayInTimeZone } from '@ghar/core/dates'
+import { addCalendarDays, formatCalendarDate, todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
 import { ConflictError, ForbiddenError, ValidationError } from '@ghar/core/errors'
 import type { ExpirySubjectKind } from '@ghar/core/expiries'
 import {
@@ -14,6 +14,7 @@ import {
   quickLogExpiryName,
   type QuickLogExpiry,
   type QuickLogItems,
+  type QuickLogResult,
 } from '@ghar/core/quick-log'
 import type { Session } from '@/lib/api/authed'
 import * as bills from '@/lib/bills/service'
@@ -41,6 +42,20 @@ const LOGGING: readonly Permission[] = ['finances.manage', 'home.manage', 'healt
 /** Whether the caller can log anything at all, so the box only shows for someone it can help. */
 export function canQuickLog(session: Session): boolean {
   return LOGGING.some(permission => can(session.context.role, permission))
+}
+
+/** What a quick log box needs to show, or null for someone it can't help. */
+export async function quickLogSetup(
+  session: Session
+): Promise<{ today: CalendarDate; currency: string; categories: { id: string; name: string }[] } | null> {
+  if (!canQuickLog(session)) return null
+  // What cash from the quick log can be filed under.
+  const categories = can(session.context.role, 'finances.manage') ? await finances.listCategoryOptions(session) : []
+  return {
+    today: todayInTimeZone(session.household.timeZone),
+    currency: session.household.currency,
+    categories: categories.map(category => ({ id: category.id, name: category.name })),
+  }
 }
 
 function expirySubjectId(expiry: Expiry): string {
@@ -97,10 +112,10 @@ function hasNothingToLog(items: QuickLogItems): boolean {
   return spending === null && Object.values(lists).every(list => list.length === 0)
 }
 
-export async function parseQuickLog(session: Session, text: string): Promise<{ choices: QuickLogProposal[]; problem: string | null }> {
+export async function parseQuickLog(session: Session, text: string): Promise<QuickLogResult> {
   if (!canQuickLog(session)) throw new ForbiddenError("Your role in this household doesn't allow this.")
   const items = await loggableItems(session)
-  if (hasNothingToLog(items)) return { choices: [], problem: QUICK_LOG_NOTHING_TO_LOG }
+  if (hasNothingToLog(items)) return { entries: [], problem: QUICK_LOG_NOTHING_TO_LOG }
 
   const today = todayInTimeZone(session.household.timeZone)
   const prompt = buildQuickLogPrompt(text, { today, items })
@@ -111,7 +126,7 @@ export async function parseQuickLog(session: Session, text: string): Promise<{ c
     if (!(error instanceof QuickLogError)) throw error
     // The message is always ours, never the sentence.
     console.warn(`Reading a quick log failed: ${error.message}`)
-    return { choices: [], problem: QUICK_LOG_UNREADABLE }
+    return { entries: [], problem: QUICK_LOG_UNREADABLE }
   }
   return interpretQuickLog(prompt, answer, { today, items })
 }

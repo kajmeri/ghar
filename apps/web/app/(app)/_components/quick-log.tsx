@@ -15,27 +15,49 @@ import {
   undoRenewExpiry,
   unmarkBillPaid,
   type QuickLogApplyBody,
+  type QuickLogEntry,
   type QuickLogProposal,
   type QuickLogUndo,
 } from '@ghar/contracts'
 import { addCalendarDays, formatCalendarDate, isCalendarDate, type CalendarDate } from '@ghar/core/dates'
 import { HEALTH_EVENT_KINDS, HEALTH_KIND_LABELS, type HealthEventKind } from '@ghar/core/health'
 import { formatCents } from '@ghar/core/money'
+import { CircleCheck, TriangleAlert } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useId, useState, useTransition, type SyntheticEvent } from 'react'
 import { DateField } from '@/app/(app)/_components/ui/date-field'
 import { MoneyInput } from '@/app/(app)/_components/ui/money-input'
-import { Notice } from '@/app/(app)/_components/ui/notice'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/field'
 import { NativeSelect } from '@/components/ui/native-select'
 import { FormError } from '@/components/ui/form-error'
 import { api, errorMessage } from '@/lib/api/client'
 
-type State =
-  | { step: 'write'; problem: string | null }
-  | { step: 'confirm'; choices: QuickLogProposal[]; round: number }
-  | { step: 'done'; message: string; undo: QuickLogUndo }
+/** Something recorded, and what takes it back. */
+interface Logged {
+  message: string
+  undo: QuickLogUndo
+  undone: boolean
+}
+
+/** Something the sentence mentioned that can't be logged, and why. */
+interface Skipped {
+  said: string | null
+  problem: string
+}
+
+interface Confirming {
+  step: 'confirm'
+  /** The things to confirm, one at a time, each with at least one choice. */
+  entries: QuickLogEntry[]
+  at: number
+  skipped: Skipped[]
+  logged: Logged[]
+  /** Counts every card shown, so each starts with fresh defaults. */
+  round: number
+}
+
+type State = { step: 'write'; problem: string | null } | Confirming | { step: 'done'; logged: Logged[]; skipped: Skipped[] }
 
 /** "you" mid-sentence, or their name. */
 function whom(personName: string): string {
@@ -278,11 +300,13 @@ export function QuickLog({
   today,
   currency,
   categories,
+  label = 'Log something',
 }: {
   today: CalendarDate
   currency: string
   /** The categories cash can be filed under. Empty for someone who can't log spending. */
   categories: readonly QuickLogCategoryOption[]
+  label?: string
 }) {
   const id = useId()
   const router = useRouter()
@@ -293,6 +317,8 @@ export function QuickLog({
   /** A renewal's new date, once the suggested one is picked; it remounts the date field. */
   const [renewTo, setRenewTo] = useState<CalendarDate | null>(null)
   const [busy, setBusy] = useState<'reading' | 'saving' | 'undoing' | null>(null)
+  /** Which of the logged things is being taken back. */
+  const [undoingAt, setUndoingAt] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, startTransition] = useTransition()
 
@@ -303,10 +329,21 @@ export function QuickLog({
     setBusy('reading')
     try {
       const result = await api.request(parseQuickLog, { body: { text } })
-      const [first] = result.choices
+      const entries = result.entries.filter(entry => entry.choices.length > 0)
+      const skipped = result.entries.flatMap(entry =>
+        entry.choices.length === 0 && entry.problem !== null ? [{ said: entry.said, problem: entry.problem }] : []
+      )
+      const first = entries[0]?.choices[0]
       if (first) {
         pick(first, 0)
-        setState(current => ({ step: 'confirm', choices: result.choices, round: (current.step === 'confirm' ? current.round : 0) + 1 }))
+        setState(current => ({
+          step: 'confirm',
+          entries,
+          at: 0,
+          skipped,
+          logged: [],
+          round: (current.step === 'confirm' ? current.round : 0) + 1,
+        }))
       } else {
         setState({ step: 'write', problem: result.problem })
       }
@@ -324,7 +361,23 @@ export function QuickLog({
     setRenewTo(null)
   }
 
-  const confirm = async (event: SyntheticEvent<HTMLFormElement>, choice: QuickLogProposal) => {
+  /** On to the next thing to confirm, or to what was logged once there's nothing left. */
+  function next(current: Confirming, logged: Logged[]) {
+    setError(null)
+    const at = current.at + 1
+    const first = current.entries[at]?.choices[0]
+    if (first) {
+      pick(first, 0)
+      setState({ ...current, at, logged, round: current.round + 1 })
+    } else if (logged.length === 0) {
+      setState({ step: 'write', problem: 'Nothing was logged.' })
+    } else {
+      setText('')
+      setState({ step: 'done', logged, skipped: current.skipped })
+    }
+  }
+
+  const confirm = async (event: SyntheticEvent<HTMLFormElement>, current: Confirming, choice: QuickLogProposal) => {
     event.preventDefault()
     // Not renewing has no date to pick: it's the one it runs out on.
     const on = choice.action === 'not_renewing' ? choice.expiresOn : new FormData(event.currentTarget).get('on')
@@ -338,8 +391,7 @@ export function QuickLog({
     setBusy('saving')
     try {
       const done = await api.request(applyQuickLog, { body })
-      setText('')
-      setState({ step: 'done', message: done.message, undo: done.undo })
+      next(current, [...current.logged, { message: done.message, undo: done.undo, undone: false }])
       startTransition(() => router.refresh())
     } catch (caught) {
       setError(errorMessage(caught))
@@ -348,17 +400,25 @@ export function QuickLog({
     }
   }
 
-  const undo = async (what: QuickLogUndo) => {
+  const undo = async (what: QuickLogUndo, index: number) => {
     setError(null)
     setBusy('undoing')
+    setUndoingAt(index)
     try {
       await undoRequest(what)
-      setState({ step: 'write', problem: 'Taken back. Nothing was left recorded.' })
+      setState(current => {
+        if (current.step !== 'done') return current
+        const logged = current.logged.map((item, at) => (at === index ? { ...item, undone: true } : item))
+        return logged.every(item => item.undone)
+          ? { step: 'write', problem: 'Taken back. Nothing was left recorded.' }
+          : { ...current, logged }
+      })
       startTransition(() => router.refresh())
     } catch (caught) {
       setError(errorMessage(caught))
     } finally {
       setBusy(null)
+      setUndoingAt(null)
     }
   }
 
@@ -370,53 +430,87 @@ export function QuickLog({
   if (state.step === 'done') {
     return (
       <div className='flex flex-col gap-2'>
-        <Notice
-          tone='positive'
-          role='status'
-          action={
-            <div className='flex gap-2'>
-              <Button type='button' variant='outline' disabled={busy !== null || refreshing} onClick={() => void undo(state.undo)}>
-                {busy === 'undoing' ? 'Taking back…' : 'Undo'}
-              </Button>
-              <Button type='button' variant='ghost' disabled={busy !== null} onClick={startOver}>
-                Log another
-              </Button>
-            </div>
-          }
-        >
-          {state.message}
-        </Notice>
+        <div role='status' className='flex flex-col gap-3 rounded-card border border-line bg-surface p-4'>
+          <ul className='flex flex-col divide-y divide-line'>
+            {state.logged.map((item, index) => (
+              <li
+                // One sentence gives each thing once, so its message is its own.
+                key={item.message}
+                className='flex flex-col gap-3 py-3 first:pt-0 last:pb-0 md:flex-row md:items-center md:justify-between'
+              >
+                <div className='flex min-w-0 items-start gap-3'>
+                  <CircleCheck
+                    aria-hidden
+                    className={item.undone ? 'mt-0.5 size-5 shrink-0 text-ink-muted' : 'mt-0.5 size-5 shrink-0 text-positive'}
+                  />
+                  <p className={item.undone ? 'min-w-0 break-words text-ink-muted' : 'min-w-0 break-words'}>
+                    {item.undone ? `Taken back: ${item.message}` : item.message}
+                  </p>
+                </div>
+                {item.undone ? null : (
+                  <Button
+                    type='button'
+                    variant='outline'
+                    className='shrink-0'
+                    disabled={busy !== null || refreshing}
+                    onClick={() => void undo(item.undo, index)}
+                  >
+                    {undoingAt === index ? 'Taking back…' : 'Undo'}
+                  </Button>
+                )}
+              </li>
+            ))}
+            {state.skipped.map(item => (
+              <SkippedRow key={`${item.said ?? ''}-${item.problem}`} item={item} />
+            ))}
+          </ul>
+          <Button type='button' variant='ghost' className='self-start' disabled={busy !== null} onClick={startOver}>
+            Log another
+          </Button>
+        </div>
         <FormError>{error}</FormError>
       </div>
     )
   }
 
   if (state.step === 'confirm') {
-    const choice = state.choices[picked] ?? state.choices[0]
-    if (!choice) return null
+    const entry = state.entries[state.at]
+    const choice = entry?.choices[picked] ?? entry?.choices[0]
+    if (!entry || !choice) return null
     const below = detail(choice)
+    const several = state.entries.length > 1
     return (
       <form
         // Fresh defaults for every new suggestion and every choice.
         key={`${String(state.round)}-${String(picked)}`}
         aria-labelledby={`${id}-headline`}
-        onSubmit={event => void confirm(event, choice)}
+        onSubmit={event => void confirm(event, state, choice)}
         className='flex flex-col gap-4 rounded-card border border-line bg-surface p-4'
       >
+        {state.at === 0 && state.skipped.length > 0 ? (
+          <ul className='flex flex-col gap-2 border-b border-line pb-3'>
+            {state.skipped.map(item => (
+              <SkippedRow key={`${item.said ?? ''}-${item.problem}`} item={item} />
+            ))}
+          </ul>
+        ) : null}
         <div className='flex flex-col gap-1'>
-          <p className='text-sm text-ink-muted'>“{text.trim()}”</p>
+          <p className='text-sm text-ink-muted'>
+            {several ? `${String(state.at + 1)} of ${String(state.entries.length)} · ` : null}“
+            {several ? (entry.said ?? text.trim()) : text.trim()}”
+          </p>
           <h2 id={`${id}-headline`} className='text-lg font-semibold break-words'>
             {headline(choice, edits, currency)}
           </h2>
           {below === null ? null : <p className='text-sm text-ink-muted'>{below}</p>}
         </div>
 
-        {state.choices.length > 1 ? (
+        {entry.choices.length > 1 ? (
           <fieldset className='flex flex-col gap-1'>
             <legend className='mb-1 text-sm font-medium'>
               {choice.action === 'health_event' ? 'Who was it for?' : 'Which one did you mean?'}
             </legend>
-            {state.choices.map((option, index) => (
+            {entry.choices.map((option, index) => (
               <label key={choiceKey(option)} className='flex min-h-tap items-center gap-3'>
                 <input
                   type='radio'
@@ -557,9 +651,22 @@ export function QuickLog({
 
         <FormError>{error}</FormError>
         <div className='flex flex-col-reverse gap-2 md:flex-row md:justify-end'>
-          <Button type='button' variant='outline' disabled={busy !== null} onClick={startOver}>
-            Cancel
-          </Button>
+          {several ? (
+            <Button
+              type='button'
+              variant='outline'
+              disabled={busy !== null}
+              onClick={() => {
+                next(state, state.logged)
+              }}
+            >
+              Skip
+            </Button>
+          ) : (
+            <Button type='button' variant='outline' disabled={busy !== null} onClick={startOver}>
+              Cancel
+            </Button>
+          )}
           <Button type='submit' disabled={busy !== null}>
             {busy === 'saving' ? 'Saving…' : SUBMIT_LABELS[choice.action]}
           </Button>
@@ -572,7 +679,7 @@ export function QuickLog({
   return (
     <form onSubmit={event => void read(event)} className='flex flex-col gap-2'>
       <div className='flex items-end gap-2'>
-        <Field id={`${id}-text`} label='Log something' className='min-w-0 flex-1'>
+        <Field id={`${id}-text`} label={label} className='min-w-0 flex-1'>
           <Input
             id={`${id}-text`}
             value={text}
@@ -595,9 +702,19 @@ export function QuickLog({
         {reading
           ? 'Claude is reading it…'
           : (state.problem ??
-            'Say what you paid or spent, did around the house, renewed, or a visit, shot or refill. You check it before anything is saved.')}
+            'Say what you paid or spent, did around the house, renewed, or a visit, shot or refill, up to three at once. You check each before anything is saved.')}
       </p>
       <FormError>{error}</FormError>
     </form>
+  )
+}
+
+/** Something from the sentence that isn't being logged, and why. */
+function SkippedRow({ item }: { item: Skipped }) {
+  return (
+    <li className='flex min-w-0 items-start gap-3 py-3 text-sm text-ink-muted first:pt-0 last:pb-0'>
+      <TriangleAlert aria-hidden className='mt-0.5 size-4 shrink-0 text-caution-ink' />
+      <span className='min-w-0 break-words'>{item.said === null ? item.problem : `Not logging “${item.said}”. ${item.problem}`}</span>
+    </li>
   )
 }

@@ -1,5 +1,5 @@
 import type { PGlite } from '@electric-sql/pglite'
-import type { QuickLogProposal, QuickLogUndo, RequestContext } from '@ghar/contracts'
+import type { QuickLogEntry, QuickLogProposal, QuickLogUndo, RequestContext } from '@ghar/contracts'
 import { addCalendarDays, todayInTimeZone } from '@ghar/core/dates'
 import { invitationExpiresAt } from '@ghar/core/invitations'
 import { QUICK_LOG_UNCLEAR, QUICK_LOG_UNREADABLE } from '@ghar/core/quick-log'
@@ -80,12 +80,23 @@ function post(path: string, body: unknown): Request {
   })
 }
 
-type ParseReply = { choices?: QuickLogProposal[]; problem?: string | null; error?: { message: string } }
+type ParseReply = { entries?: QuickLogEntry[]; problem?: string | null; error?: { message: string } }
+/** What a sentence that says one thing comes to. */
+type OneReply = { choices?: QuickLogProposal[]; problem?: string | null; error?: { message: string } }
 type ApplyReply = { message?: string; undo?: QuickLogUndo; error?: { message: string } }
 
-async function parse(text: string): Promise<{ status: number; body: ParseReply }> {
+async function parseAll(text: string): Promise<{ status: number; body: ParseReply }> {
   const response = await parseRoute(post('/api/v1/quick-log/parse', { text }), { params: Promise.resolve({}) })
   return { status: response.status, body: (await response.json()) as ParseReply }
+}
+
+/** For a sentence that says one thing: its choices and problem, or why there are none. */
+async function parse(text: string): Promise<{ status: number; body: OneReply }> {
+  const { status, body } = await parseAll(text)
+  if (body.entries === undefined) return { status, body }
+  expect(body.entries.length).toBeLessThanOrEqual(1)
+  const [entry] = body.entries
+  return { status, body: entry ? { choices: entry.choices, problem: entry.problem } : { choices: [], problem: body.problem } }
 }
 
 async function apply(body: unknown): Promise<{ status: number; body: ApplyReply }> {
@@ -294,6 +305,39 @@ describe('reading money and renewals', () => {
     expect((await parse('not renewing the gym membership')).body.choices).toEqual([
       { action: 'not_renewing', kind: 'renewal', subjectId: gymId, name: 'Gym membership', expiresOn: runsOutOn },
     ])
+  })
+})
+
+describe('reading several things at once', () => {
+  it('suggests each in order, says which can’t be logged, and writes nothing', async () => {
+    const { status, body } = await parseAll('paid the water bill yesterday and cleaned the gutters; went for a walk')
+    expect(status).toBe(200)
+    expect(body).toEqual({
+      entries: [
+        {
+          said: 'paid the water bill yesterday',
+          choices: [{ action: 'bill_paid', billId: waterId, billName: 'Water', dueOn, paidOn: addCalendarDays(today, -1) }],
+          problem: null,
+        },
+        {
+          said: 'cleaned the gutters',
+          choices: [
+            {
+              action: 'task_done',
+              taskId: guttersId,
+              taskTitle: 'Clean the gutters',
+              assetName: null,
+              completedOn: today,
+              costCents: null,
+            },
+          ],
+          problem: null,
+        },
+        { said: 'went for a walk', choices: [], problem: QUICK_LOG_UNCLEAR },
+      ],
+      problem: null,
+    })
+    expect(await listBillPayments(owner, db)).toEqual([])
   })
 })
 

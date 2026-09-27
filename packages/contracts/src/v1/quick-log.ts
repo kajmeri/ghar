@@ -4,8 +4,8 @@ import { HEALTH_TITLE_MAX, healthEventKindSchema } from './health-records'
 import { expiryKindSchema } from './renewals'
 import { calendarDateSchema, centsSchema } from './shared'
 
-// The quick log: one sentence in, one thing to record out, confirmed before anything is written.
-// parseQuickLog only suggests. applyQuickLog records a suggestion through the same checks as the
+// The quick log: one sentence in, up to three things to record out, each confirmed before anything
+// is written. parseQuickLog only suggests. applyQuickLog records a suggestion through the same checks as the
 // bills, house, health, money and renewals pages, and answers with what undoes it: unmarkBillPaid
 // for a bill, deleteMaintenanceCompletion for a house job, deleteHealthEvent for a visit or shot,
 // undoHealthMedicineRefill for a refill, deleteTransaction for cash spending, undoRenewExpiry for a
@@ -14,6 +14,7 @@ import { calendarDateSchema, centsSchema } from './shared'
 // These mirror @ghar/core/quick-log. A test keeps them equal.
 export const QUICK_LOG_TEXT_MAX = 200
 export const QUICK_LOG_CHOICES = 3
+export const QUICK_LOG_ENTRIES = 3
 export const QUICK_LOG_COST_MAX = 100_000_000
 export const QUICK_LOG_DESCRIPTION_MAX = 120
 
@@ -104,11 +105,25 @@ export const parseQuickLog = defineEndpoint({
     text: z.string().trim().min(1, 'Say what you did.').max(QUICK_LOG_TEXT_MAX),
   }),
   response: z.object({
-    /** Best fit first. More than one when the sentence could mean any of them. Empty when `problem` says why. */
-    choices: z.array(quickLogProposalSchema).max(QUICK_LOG_CHOICES),
+    /**
+     * One per thing the sentence mentions, in the order it said them, to confirm one at a time
+     * through applyQuickLog. Empty when `problem` says why nothing can be logged.
+     */
+    entries: z
+      .array(
+        z.object({
+          /** The words it came from, like "paid the water bill". */
+          said: z.string().nullable(),
+          /** Best fit first. More than one when it could mean any of them. Empty when `problem` says why. */
+          choices: z.array(quickLogProposalSchema).max(QUICK_LOG_CHOICES),
+          problem: z.string().nullable(),
+        })
+      )
+      .max(QUICK_LOG_ENTRIES),
     problem: z.string().nullable(),
   }),
 })
+export type QuickLogEntry = z.infer<typeof parseQuickLog.response>['entries'][number]
 
 /** A suggestion to record, as parseQuickLog gave it, with the date or cost changed if they changed it. */
 export const quickLogApplyBodySchema = z.discriminatedUnion('action', [

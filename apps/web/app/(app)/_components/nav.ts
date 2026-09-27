@@ -5,6 +5,7 @@ import {
   FileText,
   HeartPulse,
   House,
+  NotebookPen,
   Plane,
   Receipt,
   Settings,
@@ -34,6 +35,8 @@ const HEALTH: NavItem = { label: 'Health', href: '/health', icon: HeartPulse }
 const HOUSE: NavItem = { label: 'House', href: '/home', icon: Wrench }
 const BILLS: NavItem = { label: 'Bills', href: '/bills', icon: Receipt }
 const CONTACTS: NavItem = { label: 'Contacts', href: '/contacts', icon: BookUser }
+/** The quick log on its own page, for phones. Only for someone who can log something. */
+export const LOG: NavItem = { label: 'Log something', href: '/log', icon: NotebookPen }
 export const SETTINGS: NavItem = { label: 'Settings', href: '/settings', icon: Settings }
 
 /** The phone's bottom bar. Four destinations plus More, which opens MORE_ITEMS. */

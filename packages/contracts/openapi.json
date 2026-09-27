@@ -10608,11 +10608,37 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "choices": {
+                    "entries": {
                       "maxItems": 3,
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/QuickLogProposal"
+                        "type": "object",
+                        "properties": {
+                          "said": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "choices": {
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/QuickLogProposal"
+                            }
+                          },
+                          "problem": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "said",
+                          "choices",
+                          "problem"
+                        ]
                       }
                     },
                     "problem": {
@@ -10623,7 +10649,7 @@
                     }
                   },
                   "required": [
-                    "choices",
+                    "entries",
                     "problem"
                   ]
                 }

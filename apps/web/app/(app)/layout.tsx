@@ -1,13 +1,16 @@
 import { cookies } from 'next/headers'
 import type { ReactNode } from 'react'
 import { getPageSession } from '@/lib/api/authed'
+import { quickLogSetup } from '@/lib/quick-log/service'
 import { SIDEBAR_COOKIE } from './_components/nav'
 import { Sidebar } from './_components/sidebar'
 import { TabBar } from './_components/tab-bar'
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   // The page asks for the same session; it's resolved once for both.
-  const [{ household }, cookieStore] = await Promise.all([getPageSession(), cookies()])
+  const [session, cookieStore] = await Promise.all([getPageSession(), cookies()])
+  const { household } = session
+  const quickLog = await quickLogSetup(session)
 
   return (
     <div className='flex min-h-dvh'>
@@ -18,7 +21,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
-      <Sidebar householdName={household.name} defaultCollapsed={cookieStore.get(SIDEBAR_COOKIE)?.value === 'collapsed'} />
+      <Sidebar
+        householdName={household.name}
+        defaultCollapsed={cookieStore.get(SIDEBAR_COOKIE)?.value === 'collapsed'}
+        quickLog={quickLog}
+      />
       <div className='min-w-0 flex-1'>
         {/* On phones the bottom padding clears the fixed tab bar and the home indicator. */}
         <main
@@ -28,7 +35,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
-      <TabBar />
+      <TabBar canLog={quickLog !== null} />
     </div>
   )
 }

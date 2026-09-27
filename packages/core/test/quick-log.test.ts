@@ -6,6 +6,7 @@ import {
   QUICK_LOG_UNCLEAR,
   quickLogDoneMessage,
   type QuickLogItems,
+  type QuickLogResult,
 } from '../src/quick-log'
 
 const today = '2026-09-25'
@@ -68,8 +69,18 @@ const items: QuickLogItems = {
 const prompt = buildQuickLogPrompt('paid the water bill yesterday', { today, items })
 
 /** The model always answers every field; the older cases leave out the ones they don't use. */
+function entry(answer: object) {
+  return { said: 'what they said', kind: null, title: null, merchant: null, until: null, ...answer }
+}
+
+/** One thing said, as its choices and problem. */
+function only(result: QuickLogResult) {
+  const [first] = result.entries
+  return first ? { choices: first.choices, problem: first.problem } : { choices: [], problem: result.problem }
+}
+
 function interpret(answer: object) {
-  return interpretQuickLog(prompt, { kind: null, title: null, merchant: null, until: null, ...answer }, { today, items })
+  return only(interpretQuickLog(prompt, { entries: [entry(answer)] }, { today, items }))
 }
 
 describe('buildQuickLogPrompt', () => {
@@ -225,8 +236,12 @@ describe('interpretQuickLog for money and renewals', () => {
     expect(interpret({ ...answer, action: 'cash_spent', amount: '8', date: '2026-09-26' }).problem).toMatch(/hasn’t happened/)
 
     const cannot = { ...items, spending: null }
-    const result = interpretQuickLog(prompt, { ...answer, action: 'cash_spent', amount: '8' }, { today, items: cannot })
-    expect(result.problem).toBe('Only owners and adults can log spending.')
+    const result = interpretQuickLog(
+      prompt,
+      { entries: [entry({ ...answer, action: 'cash_spent', amount: '8' })] },
+      { today, items: cannot }
+    )
+    expect(result).toEqual({ entries: [], problem: 'Only owners and adults can log spending.' })
   })
 
   it('renews to the date they said, and asks when they didn’t say or it isn’t later', () => {
@@ -259,6 +274,46 @@ describe('interpretQuickLog for money and renewals', () => {
     expect(interpret({ ...answer, action: 'not_renewing', items: ['r2'] }).problem).toBe(
       'Boiler warranty is already marked as not being renewed.'
     )
+  })
+})
+
+describe('interpretQuickLog for several things at once', () => {
+  const read = (...entries: object[]) => interpretQuickLog(prompt, { entries: entries.map(entry) }, { today, items })
+  const water = { action: 'bill_paid', items: ['b1'], date: null, amount: null, said: 'paid the water bill' }
+  const gutters = { action: 'task_done', items: ['j1'], date: null, amount: null, said: ' cleaned  the gutters ' }
+
+  it('gives each thing in the order said, with the words it came from', () => {
+    const { entries, problem } = read(water, gutters)
+    expect(problem).toBeNull()
+    expect(entries.map(({ said, choices }) => [said, choices[0]?.action])).toEqual([
+      ['paid the water bill', 'bill_paid'],
+      ['cleaned the gutters', 'task_done'],
+    ])
+  })
+
+  it('keeps what can’t be logged with its reason, unless nothing can', () => {
+    const walk = { action: 'other', items: [], date: null, amount: null, said: 'walked the dog' }
+    expect(read(water, walk).entries[1]).toEqual({ said: 'walked the dog', choices: [], problem: QUICK_LOG_UNCLEAR })
+    expect(read({ ...gutters, date: '2026-09-26' }, walk)).toEqual({
+      entries: [],
+      problem: expect.stringMatching(/hasn’t happened/) as string,
+    })
+  })
+
+  it('logs the same thing once, and no more than three', () => {
+    expect(read(water, water, gutters).entries).toHaveLength(2)
+    const refill = { action: 'medicine_refilled', items: ['m1'], date: null, amount: null }
+    const cash = { action: 'cash_spent', items: [], date: null, amount: '£4' }
+    expect(read(water, gutters, refill, cash).entries.map(({ choices }) => choices[0]?.action)).toEqual([
+      'bill_paid',
+      'task_done',
+      'medicine_refilled',
+    ])
+  })
+
+  it('reads nothing from an answer in the wrong shape', () => {
+    expect(interpretQuickLog(prompt, water, { today, items })).toEqual({ entries: [], problem: QUICK_LOG_UNCLEAR })
+    expect(interpretQuickLog(prompt, { entries: [] }, { today, items })).toEqual({ entries: [], problem: QUICK_LOG_UNCLEAR })
   })
 })
 

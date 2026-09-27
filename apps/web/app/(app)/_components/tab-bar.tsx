@@ -1,6 +1,6 @@
 import { Ellipsis } from 'lucide-react'
 import { MoreSheet, MoreSheetLink } from './more-sheet'
-import { MORE_ITEMS, TAB_ITEMS } from './nav'
+import { LOG, MORE_ITEMS, TAB_ITEMS } from './nav'
 import { NavLink } from './nav-link'
 
 // Rendered on the server; NavLink and MoreSheet are the only parts that run in the browser.
@@ -10,7 +10,9 @@ const TAB_CLASS =
 const TAB_ACTIVE = 'font-medium text-ink [&_svg]:[stroke-width:2.25]'
 const TAB_IDLE = 'text-ink-muted'
 
-export function TabBar() {
+/** `canLog` puts the quick log at the top of More, for someone who can log something. */
+export function TabBar({ canLog }: { canLog: boolean }) {
+  const more = canLog ? [LOG, ...MORE_ITEMS] : MORE_ITEMS
   return (
     <nav
       aria-label='Primary'
@@ -30,13 +32,13 @@ export function TabBar() {
         })}
         <li>
           <MoreSheet
-            hrefs={MORE_ITEMS.map(item => item.href)}
+            hrefs={more.map(item => item.href)}
             triggerClassName={TAB_CLASS}
             activeClassName={TAB_ACTIVE}
             inactiveClassName={TAB_IDLE}
             triggerIcon={<Ellipsis aria-hidden className='size-6' strokeWidth={1.75} />}
           >
-            {MORE_ITEMS.map(item => {
+            {more.map(item => {
               const Icon = item.icon
               return (
                 <li key={item.href}>
