@@ -236,6 +236,30 @@ export const markNotRenewing = defineEndpoint({
   response: z.object({ expiry: expirySchema }),
 })
 
+/**
+ * Takes a renewal back: the date it ran out on before, and for a document the issue date it had.
+ * 409 when its date isn't `renewedTo` any more, because someone changed it since, so this never
+ * undoes their change. The quick log's undo.
+ */
+export const undoRenewExpiry = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/expiries/:kind/:subjectId/renew/undo',
+  params: expiryParamsSchema,
+  body: z
+    .object({
+      /** The date it was renewed to, which it has to still have. */
+      renewedTo: calendarDateSchema,
+      previousExpiresOn: calendarDateSchema,
+      /** A document only. Leave it out, or null, for anything else. */
+      previousIssuedOn: calendarDateSchema.nullable().default(null),
+    })
+    .refine(body => body.previousExpiresOn < body.renewedTo, {
+      message: 'The earlier date has to be before the one it was renewed to',
+      path: ['previousExpiresOn'],
+    }),
+  response: z.object({ expiry: expirySchema }),
+})
+
 /** Takes "not renewing" back, so reminders for its date go out again. Fine when it wasn't set. */
 export const clearNotRenewing = defineEndpoint({
   method: 'DELETE',

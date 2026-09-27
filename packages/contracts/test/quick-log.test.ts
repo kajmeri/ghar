@@ -1,6 +1,19 @@
-import { QUICK_LOG_CHOICES_MAX, QUICK_LOG_COST_MAX_CENTS, QUICK_LOG_TEXT_MAX_LENGTH } from '@ghar/core/quick-log'
+import {
+  QUICK_LOG_CHOICES_MAX,
+  QUICK_LOG_COST_MAX_CENTS,
+  QUICK_LOG_DESCRIPTION_MAX_LENGTH,
+  QUICK_LOG_TEXT_MAX_LENGTH,
+} from '@ghar/core/quick-log'
 import { describe, expect, it } from 'vitest'
-import { parseQuickLog, QUICK_LOG_CHOICES, QUICK_LOG_COST_MAX, QUICK_LOG_TEXT_MAX, quickLogApplyBodySchema } from '../src/v1/quick-log'
+import { undoRenewExpiry } from '../src/v1/renewals'
+import {
+  parseQuickLog,
+  QUICK_LOG_CHOICES,
+  QUICK_LOG_COST_MAX,
+  QUICK_LOG_DESCRIPTION_MAX,
+  QUICK_LOG_TEXT_MAX,
+  quickLogApplyBodySchema,
+} from '../src/v1/quick-log'
 
 const billId = '6f0c6f4e-4b7e-4a55-9a3e-2d2f1b0c9a11'
 
@@ -9,6 +22,7 @@ describe('quick log', () => {
     expect(QUICK_LOG_TEXT_MAX).toBe(QUICK_LOG_TEXT_MAX_LENGTH)
     expect(QUICK_LOG_CHOICES).toBe(QUICK_LOG_CHOICES_MAX)
     expect(QUICK_LOG_COST_MAX).toBe(QUICK_LOG_COST_MAX_CENTS)
+    expect(QUICK_LOG_DESCRIPTION_MAX).toBe(QUICK_LOG_DESCRIPTION_MAX_LENGTH)
   })
 
   it('takes one trimmed sentence', () => {
@@ -56,5 +70,43 @@ describe('quick log', () => {
       })
     ).toEqual({ action: 'medicine_refilled', medicineId: billId, refilledOn: '2026-09-24' })
     expect(quickLogApplyBodySchema.safeParse({ action: 'paid_rent', billId }).success).toBe(false)
+  })
+
+  it('takes cash as a positive amount, and a renewal with its new date', () => {
+    expect(
+      quickLogApplyBodySchema.parse({
+        action: 'cash_spent',
+        description: ' Lunch ',
+        amountCents: 1250,
+        spentOn: '2026-09-24',
+        categoryName: 'Restaurants',
+      })
+    ).toEqual({ action: 'cash_spent', description: 'Lunch', merchant: null, amountCents: 1250, spentOn: '2026-09-24', categoryId: null })
+    for (const amountCents of [0, -500, 1.5]) {
+      expect(
+        quickLogApplyBodySchema.safeParse({ action: 'cash_spent', description: 'Lunch', amountCents, spentOn: '2026-09-24' }).success
+      ).toBe(false)
+    }
+    expect(quickLogApplyBodySchema.safeParse({ action: 'renewed', kind: 'renewal', subjectId: billId, expiresOn: null }).success).toBe(
+      false
+    )
+    expect(
+      quickLogApplyBodySchema.parse({
+        action: 'not_renewing',
+        kind: 'document',
+        subjectId: billId,
+        name: 'Passport',
+        expiresOn: '2027-01-01',
+      })
+    ).toEqual({ action: 'not_renewing', kind: 'document', subjectId: billId, expiresOn: '2027-01-01' })
+  })
+
+  it('undoes a renewal only back to an earlier date', () => {
+    expect(undoRenewExpiry.body.parse({ renewedTo: '2027-01-01', previousExpiresOn: '2026-01-01' })).toEqual({
+      renewedTo: '2027-01-01',
+      previousExpiresOn: '2026-01-01',
+      previousIssuedOn: null,
+    })
+    expect(undoRenewExpiry.body.safeParse({ renewedTo: '2027-01-01', previousExpiresOn: '2027-01-01' }).success).toBe(false)
   })
 })

@@ -253,3 +253,44 @@ export async function renewExpiry(
     }
   })
 }
+
+/**
+ * Puts a renewal back: the date it ran out on before and, for a document, the issue date it had.
+ * Only while it still has the date it was renewed to, so this never takes back somebody else's
+ * change. Its old date's "not renewing", if it had one, applies again, since that's kept per date.
+ */
+export async function undoRenewExpiry(
+  ctx: RequestContext,
+  db: Db,
+  input: { subject: ExpirySubjectRef; renewedTo: CalendarDate; previousExpiresOn: CalendarDate; previousIssuedOn: CalendarDate | null }
+): Promise<ExpiryRow> {
+  const { subject, previousExpiresOn, previousIssuedOn } = input
+  requirePermission(ctx, MANAGE[subject.kind])
+  if (previousIssuedOn !== null && subject.kind !== 'document') throw new ValidationError('Only a document has an issue date.')
+  return db.transaction(async tx => {
+    const current = await lockExpiresOn(ctx, tx, subject)
+    if (current.expiresOn !== input.renewedTo) throw new ConflictError('Its date changed since it was renewed, so it was left as it is.')
+
+    switch (subject.kind) {
+      case 'document':
+        await tx
+          .update(documents)
+          .set({ expiresOn: previousExpiresOn, issuedOn: previousIssuedOn, updatedAt: sql`now()` })
+          .where(and(eq(documents.id, subject.id), eq(documents.householdId, ctx.householdId)))
+        break
+      case 'warranty':
+        await tx
+          .update(assets)
+          .set({ warrantyExpiresOn: previousExpiresOn, updatedAt: sql`now()` })
+          .where(and(eq(assets.id, subject.id), eq(assets.householdId, ctx.householdId)))
+        break
+      case 'renewal':
+        await tx
+          .update(renewals)
+          .set({ expiresOn: previousExpiresOn, updatedAt: sql`now()` })
+          .where(and(eq(renewals.id, subject.id), eq(renewals.householdId, ctx.householdId)))
+        break
+    }
+    return getExpiry(ctx, tx, subject)
+  })
+}

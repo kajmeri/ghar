@@ -158,3 +158,35 @@ export async function editTransaction(session: Session, transactionId: string, c
   })
   return toTransaction(row)
 }
+
+/** A charge typed in by hand, removed. A synced one can't be. */
+export async function removeTransaction(session: Session, transactionId: string): Promise<{ transactionId: string }> {
+  await queries.deleteManualTransaction(session.context, getDb(), transactionId)
+  return { transactionId }
+}
+
+/**
+ * Cash spent, as the quick log adds it: a charge typed in by hand, filed under a category in the
+ * same go when one was picked, so a category that won't do leaves nothing half-added.
+ */
+export async function addCashSpend(
+  session: Session,
+  input: { spentOn: string; description: string; merchant: string | null; amountCents: number; categoryId: string | null }
+): Promise<Transaction> {
+  const { context } = session
+  const row = await getDb().transaction(async tx => {
+    const created = await queries.createManualTransaction(context, tx, {
+      date: input.spentOn,
+      name: input.description,
+      merchantName: input.merchant,
+      // Money out is negative.
+      amountCents: -input.amountCents,
+      tripId: null,
+    })
+    if (input.categoryId !== null) {
+      await queries.updateTransaction(context, tx, { transactionId: created.id, categoryId: input.categoryId })
+    }
+    return queries.getTransaction(context, tx, { transactionId: created.id })
+  })
+  return toTransaction(row)
+}

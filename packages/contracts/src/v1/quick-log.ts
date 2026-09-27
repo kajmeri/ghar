@@ -1,18 +1,21 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
 import { HEALTH_TITLE_MAX, healthEventKindSchema } from './health-records'
+import { expiryKindSchema } from './renewals'
 import { calendarDateSchema, centsSchema } from './shared'
 
 // The quick log: one sentence in, one thing to record out, confirmed before anything is written.
 // parseQuickLog only suggests. applyQuickLog records a suggestion through the same checks as the
-// bills, house and health pages, and answers with what undoes it: unmarkBillPaid for a bill,
-// deleteMaintenanceCompletion for a house job, deleteHealthEvent for a visit or shot, and
-// undoHealthMedicineRefill for a refill.
+// bills, house, health, money and renewals pages, and answers with what undoes it: unmarkBillPaid
+// for a bill, deleteMaintenanceCompletion for a house job, deleteHealthEvent for a visit or shot,
+// undoHealthMedicineRefill for a refill, deleteTransaction for cash spending, undoRenewExpiry for a
+// renewal, and clearNotRenewing for something not being renewed.
 
 // These mirror @ghar/core/quick-log. A test keeps them equal.
 export const QUICK_LOG_TEXT_MAX = 200
 export const QUICK_LOG_CHOICES = 3
 export const QUICK_LOG_COST_MAX = 100_000_000
+export const QUICK_LOG_DESCRIPTION_MAX = 120
 
 const billPaidSchema = z.object({
   action: z.literal('bill_paid'),
@@ -44,6 +47,33 @@ const medicineRefilledSchema = z.object({
   refilledOn: calendarDateSchema,
 })
 
+const cashSpentSchema = z.object({
+  action: z.literal('cash_spent'),
+  description: z.string().trim().min(1, 'Say what it was for.').max(QUICK_LOG_DESCRIPTION_MAX),
+  merchant: z.string().trim().min(1).max(QUICK_LOG_DESCRIPTION_MAX).nullable().default(null),
+  /** Money out, as a positive figure. It's saved as a charge, negative. */
+  amountCents: centsSchema.min(1).max(QUICK_LOG_COST_MAX),
+  spentOn: calendarDateSchema,
+  /** One of the household's unarchived categories, or null to leave it for review. */
+  categoryId: z.uuid().nullable().default(null),
+})
+
+const renewedSchema = z.object({
+  action: z.literal('renewed'),
+  kind: expiryKindSchema,
+  subjectId: z.uuid(),
+  /** When the new term ends. It has to be after the date it runs out on now. */
+  expiresOn: calendarDateSchema,
+})
+
+const notRenewingSchema = z.object({
+  action: z.literal('not_renewing'),
+  kind: expiryKindSchema,
+  subjectId: z.uuid(),
+  /** The date it runs out on, as the suggestion saw it. 409 when it has changed since. */
+  expiresOn: calendarDateSchema,
+})
+
 /** Something to record, with its name for the confirm card. */
 export const quickLogProposalSchema = z.discriminatedUnion('action', [
   billPaidSchema.extend({ billName: z.string() }),
@@ -51,6 +81,18 @@ export const quickLogProposalSchema = z.discriminatedUnion('action', [
   /** `personName` is "You", or their name. */
   healthEventSchema.extend({ personName: z.string(), title: z.string().nullable() }),
   medicineRefilledSchema.extend({ medicineName: z.string(), personName: z.string() }),
+  cashSpentSchema.extend({ merchant: z.string().nullable(), categoryId: z.uuid().nullable(), categoryName: z.string().nullable() }),
+  /**
+   * `name` is "Passport", or "Boiler warranty". `expiresOn` is null when they didn't say the new
+   * date, and has to be asked for; `suggestedRenewalOn` is one term on, to offer.
+   */
+  renewedSchema.extend({
+    name: z.string(),
+    currentExpiresOn: calendarDateSchema,
+    expiresOn: calendarDateSchema.nullable(),
+    suggestedRenewalOn: calendarDateSchema.nullable(),
+  }),
+  notRenewingSchema.extend({ name: z.string() }),
 ])
 export type QuickLogProposal = z.infer<typeof quickLogProposalSchema>
 
@@ -74,6 +116,9 @@ export const quickLogApplyBodySchema = z.discriminatedUnion('action', [
   taskDoneSchema,
   healthEventSchema,
   medicineRefilledSchema,
+  cashSpentSchema,
+  renewedSchema,
+  notRenewingSchema,
 ])
 export type QuickLogApplyBody = z.output<typeof quickLogApplyBodySchema>
 
@@ -89,13 +134,25 @@ export const quickLogUndoSchema = z.discriminatedUnion('action', [
     previousRefillBy: calendarDateSchema.nullable(),
     previousLastRefilledOn: calendarDateSchema.nullable(),
   }),
+  z.object({ action: z.literal('cash_spent'), transactionId: z.uuid() }),
+  /** `kind` and `subjectId` for the path of undoRenewExpiry, and the rest for its body. */
+  z.object({
+    action: z.literal('renewed'),
+    kind: expiryKindSchema,
+    subjectId: z.uuid(),
+    renewedTo: calendarDateSchema,
+    previousExpiresOn: calendarDateSchema,
+    previousIssuedOn: calendarDateSchema.nullable(),
+  }),
+  z.object({ action: z.literal('not_renewing'), kind: expiryKindSchema, subjectId: z.uuid() }),
 ])
 export type QuickLogUndo = z.infer<typeof quickLogUndoSchema>
 
 /**
- * Records it. 409 when the bill's due date was marked paid since, or the medicine already marked
- * refilled that day, so an undo never takes back somebody else's mark; 400 for a date in the
- * future, or a refill older than the last one.
+ * Records it. 409 when the bill's due date was marked paid since, the medicine already marked
+ * refilled that day, or the thing already marked as not being renewed, so an undo never takes back
+ * somebody else's mark; also 409 when something's date changed since it was suggested. 400 for a
+ * date in the future, a refill older than the last one, or a renewal date that isn't later.
  */
 export const applyQuickLog = defineEndpoint({
   method: 'POST',

@@ -1,6 +1,6 @@
 import { requirePermission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
-import { NotFoundError } from '@ghar/core/errors'
+import { NotFoundError, ValidationError } from '@ghar/core/errors'
 import { and, desc, eq, gte, isNull, lte, sql, sum } from 'drizzle-orm'
 import { transactions } from '../schema'
 import { recordAudit } from './audit'
@@ -177,6 +177,27 @@ export async function createManualTransaction(ctx: RequestContext, db: Db, input
       metadata: { tripId: input.tripId },
     })
     return transaction
+  })
+}
+
+/**
+ * Removes a charge typed in by hand. A synced one can't go: the next sync would only bring it back,
+ * so it's excluded from spending instead.
+ */
+export async function deleteManualTransaction(ctx: RequestContext, db: Db, transactionId: string): Promise<void> {
+  requirePermission(ctx, 'finances.manage')
+  await db.transaction(async tx => {
+    const [row] = await tx
+      .select({ accountId: transactions.accountId })
+      .from(transactions)
+      .where(and(eq(transactions.id, transactionId), eq(transactions.householdId, ctx.householdId)))
+      .for('update')
+    if (!row) throw new NotFoundError('That transaction no longer exists.')
+    if (row.accountId !== null)
+      throw new ValidationError('Only a charge added by hand can be deleted. Exclude this one from spending instead.')
+
+    await tx.delete(transactions).where(and(eq(transactions.id, transactionId), eq(transactions.householdId, ctx.householdId)))
+    await recordAudit(ctx, tx, { action: 'transaction.deleted', entity: 'transaction', entityId: transactionId, metadata: {} })
   })
 }
 

@@ -1,15 +1,17 @@
 import { z } from 'zod'
 import { MATCH_DAYS_BEFORE_DUE, type BillStatus } from './bills'
 import { addCalendarDays, formatCalendarDate, isCalendarDate, type CalendarDate } from './dates'
+import type { ExpirySubjectKind } from './expiries'
 import { HEALTH_EVENT_KINDS, HEALTH_KIND_LABELS, HEALTH_TITLE_MAX_LENGTH, type HealthEventKind } from './health'
-import { parseMoneyInput, type Cents } from './money'
+import { formatCents, parseMoneyInput, type Cents } from './money'
 
 // The quick log: someone types what happened in a sentence, like "paid the water bill yesterday",
 // and Ghar suggests the one thing to record for a person to confirm. The model sees a numbered
-// list of what the caller may log against (b1, j2, p1, m3, ...) and picks from it by number, so it
-// never sees an id or makes one up. interpretQuickLog checks everything it says again: the number
-// has to be on the list, the date real and not in the future, a bill still unpaid for that date,
-// and a medicine not already refilled that day or since.
+// list of what the caller may log against (b1, j2, p1, m3, c4, r5, ...) and picks from it by
+// number, so it never sees an id or makes one up. interpretQuickLog checks everything it says
+// again: the number has to be on the list, the date real and not in the future, a bill still
+// unpaid for that date, a medicine not already refilled that day or since, and a renewal's new
+// date after the one it runs out on now.
 // Nothing is written until the person confirms, and then through the same code as the screens.
 
 /** The longest sentence the box takes. */
@@ -20,10 +22,20 @@ export const QUICK_LOG_ITEMS_MAX = 150
 export const QUICK_LOG_CHOICES_MAX = 3
 /** How far back a quick log reaches. Anything older is logged from its own page. */
 export const QUICK_LOG_DAYS_BACK = 366
-/** The largest cost a house job takes, as the completion form allows. */
+/** The largest cost a house job or a cash spend takes, as the completion form allows. */
 export const QUICK_LOG_COST_MAX_CENTS = 100_000_000
+/** The longest description a cash spend gets. */
+export const QUICK_LOG_DESCRIPTION_MAX_LENGTH = 120
 
-export const QUICK_LOG_ACTIONS = ['bill_paid', 'task_done', 'health_event', 'medicine_refilled'] as const
+export const QUICK_LOG_ACTIONS = [
+  'bill_paid',
+  'task_done',
+  'health_event',
+  'medicine_refilled',
+  'cash_spent',
+  'renewed',
+  'not_renewing',
+] as const
 export type QuickLogAction = (typeof QUICK_LOG_ACTIONS)[number]
 
 export interface QuickLogBill {
@@ -63,11 +75,32 @@ export interface QuickLogMedicine {
   lastRefilledOn: CalendarDate | null
 }
 
+/** A category a cash spend can be filed under. Archived ones aren't offered. */
+export interface QuickLogCategory {
+  id: string
+  name: string
+}
+
+/** A document, a warranty or a renewal the caller may renew. */
+export interface QuickLogExpiry {
+  kind: ExpirySubjectKind
+  subjectId: string
+  /** The document's or renewal's title, or the asset's name for a warranty. */
+  title: string
+  expiresOn: CalendarDate
+  notRenewing: boolean
+  /** One term on, when there's something to go on. */
+  suggestedRenewalOn: CalendarDate | null
+}
+
 export interface QuickLogItems {
   bills: readonly QuickLogBill[]
   tasks: readonly QuickLogTask[]
   people: readonly QuickLogPerson[]
   medicines: readonly QuickLogMedicine[]
+  /** Null when the caller can't log spending. */
+  spending: { categories: readonly QuickLogCategory[] } | null
+  expiries: readonly QuickLogExpiry[]
 }
 
 export type QuickLogProposal =
@@ -83,6 +116,28 @@ export type QuickLogProposal =
       occurredOn: CalendarDate
     }
   | { action: 'medicine_refilled'; medicineId: string; medicineName: string; personName: string; refilledOn: CalendarDate }
+  | {
+      action: 'cash_spent'
+      description: string
+      merchant: string | null
+      /** Money out, as a positive figure. */
+      amountCents: Cents
+      spentOn: CalendarDate
+      categoryId: string | null
+      categoryName: string | null
+    }
+  | {
+      action: 'renewed'
+      kind: ExpirySubjectKind
+      subjectId: string
+      /** "Passport", or "Boiler warranty". */
+      name: string
+      currentExpiresOn: CalendarDate
+      /** The new date, when they said one. Null asks for it. */
+      expiresOn: CalendarDate | null
+      suggestedRenewalOn: CalendarDate | null
+    }
+  | { action: 'not_renewing'; kind: ExpirySubjectKind; subjectId: string; name: string; expiresOn: CalendarDate }
 
 /** Either something to confirm (the first choice is the best fit) or why there's nothing. */
 export interface QuickLogResult {
@@ -90,30 +145,40 @@ export interface QuickLogResult {
   problem: string | null
 }
 
-export const QUICK_LOG_NOTHING_TO_LOG = 'Add a bill, a house job or a medicine first. Then you can log it here in a sentence.'
+export const QUICK_LOG_NOTHING_TO_LOG = 'Add a bill, a house job or a renewal first. Then you can log it here in a sentence.'
 export const QUICK_LOG_UNCLEAR =
   'Ghar couldn’t tell what to log from that. Try saying what you did and its name as it is in Ghar, like “paid the water bill”.'
 export const QUICK_LOG_UNREADABLE = 'Ghar couldn’t read that just now. Try again, or log it from its page.'
 const FUTURE = 'That’s a day that hasn’t happened yet. Log it once it’s done.'
 const TOO_OLD = 'That’s more than a year ago. Log it from its page instead.'
+const NO_AMOUNT = 'Say how much it was, like “£12 cash for lunch”.'
+const NO_SPENDING = 'Only owners and adults can log spending.'
 
 /** What the model answers. Loose on purpose: interpretQuickLog does the real checking. */
 export const quickLogAnswerSchema = z.object({
   action: z
     .enum([...QUICK_LOG_ACTIONS, 'other'])
     .describe(
-      'bill_paid when they paid a bill; task_done when they did a house job; health_event when someone had a shot, checkup, dentist, eye test, doctor’s visit or medical test; medicine_refilled when a medicine was refilled or picked up; other for anything else.'
+      'bill_paid when they paid a bill; task_done when they did a house job; health_event when someone had a shot, checkup, dentist, eye test, doctor’s visit or medical test; medicine_refilled when a medicine was refilled or picked up; cash_spent when they spent money in cash, or on a card Ghar doesn’t see, that isn’t one of the bills; renewed when they renewed a document, warranty or renewal; not_renewing when they decided not to renew one; other for anything else.'
     ),
   items: z
     .array(z.string())
     .describe(
-      'The references they mean, best fit first: bills (b1, ...), house jobs (j1, ...), people for a health_event (p1, ...) or medicines (m1, ...). One when it is clear; up to three when it could be any of them; empty when nothing on the list fits.'
+      'The references they mean, best fit first: bills (b1, ...), house jobs (j1, ...), people for a health_event (p1, ...), medicines (m1, ...), the category a cash_spent belongs in (c1, ...), or what was renewed or not (r1, ...). One when it is clear; up to three when it could be any of them; empty when nothing on the list fits.'
     ),
   date: z
     .string()
     .nullable()
     .describe('The day it happened as YYYY-MM-DD, worked out from today’s date. Null when they didn’t say, which means today.'),
   amount: z.string().nullable().describe('What it cost as they wrote it, like "80" or "£80.50", when they said. Null otherwise.'),
+  merchant: z
+    .string()
+    .nullable()
+    .describe('For a cash_spent, where they spent it, like "the farmers market", when they said. Null otherwise.'),
+  until: z
+    .string()
+    .nullable()
+    .describe('For renewed, the new date it runs out as YYYY-MM-DD, when they said, like "until March 2036". Null otherwise.'),
   kind: z
     .enum(HEALTH_EVENT_KINDS)
     .nullable()
@@ -124,7 +189,7 @@ export const quickLogAnswerSchema = z.object({
     .string()
     .nullable()
     .describe(
-      'For a health_event, a short title when they named it, like "Flu shot" or "Blood test", using one of the person’s usual titles when it fits. Null otherwise.'
+      'For a health_event, a short title when they named it, like "Flu shot" or "Blood test", using one of the person’s usual titles when it fits. For a cash_spent, a short description of what it was for, like "Lunch" or "Haircut". Null otherwise.'
     ),
 })
 export type QuickLogAnswer = z.infer<typeof quickLogAnswerSchema>
@@ -137,16 +202,18 @@ export interface QuickLogPrompt {
 }
 
 export interface QuickLogRef {
-  kind: 'bill' | 'task' | 'person' | 'medicine'
+  kind: 'bill' | 'task' | 'person' | 'medicine' | 'category' | 'expiry'
   id: string
   label: string
 }
 
 const SYSTEM_PROMPT = `You help a household log something that already happened, from one sentence they typed. You answer with the output format you've been given.
 
-They paid a bill, did a house job, had a health visit or shot, or refilled a medicine. You're given today's date and the household's bills (b1, b2, ...), house jobs (j1, j2, ...), people (p1, p2, ...) and medicines (m1, m2, ...). Pick the ones they mean by reference, best fit first. Never invent a reference. When nothing on the list fits, or they're describing something else, answer other with no items.
+They paid a bill, did a house job, had a health visit or shot, refilled a medicine, spent some cash, or renewed something (or decided not to). You're given today's date and the household's bills (b1, b2, ...), house jobs (j1, j2, ...), people (p1, p2, ...), medicines (m1, m2, ...), spending categories (c1, c2, ...) and things that run out (r1, r2, ...). Pick the ones they mean by reference, best fit first. Never invent a reference. When nothing on the list fits, or they're describing something else, answer other with no items.
 
 For a health visit or shot, the items are the people it was for. When they don't say who, it was the person writing.
+
+For cash spending, the items are the categories it could be filed under, best fit first, and the amount is required. For renewing, the items are what was renewed, and "until" is the new date it runs out, only when they said it.
 
 Work the date out from today's date: "yesterday", "on Saturday", "last Tuesday" and "the 3rd" all mean a day on or before today. Use null when they don't say when.
 
@@ -171,6 +238,16 @@ function medicineLine(ref: string, medicine: QuickLogMedicine): string {
   return `${ref} ${medicine.name} (${medicine.personName === 'You' ? 'yours' : medicine.personName})`
 }
 
+/** "Passport", or "Boiler warranty". */
+export function quickLogExpiryName(expiry: Pick<QuickLogExpiry, 'kind' | 'title'>): string {
+  return expiry.kind === 'warranty' ? `${expiry.title} warranty` : expiry.title
+}
+
+function expiryLine(ref: string, expiry: QuickLogExpiry): string {
+  const state = expiry.notRenewing ? ', not being renewed' : ''
+  return `${ref} ${quickLogExpiryName(expiry)} (runs out ${expiry.expiresOn}${state})`
+}
+
 function section(heading: string, lines: readonly string[]): string {
   return lines.length > 0 ? `${heading}:\n${lines.join('\n')}` : `${heading}: none`
 }
@@ -192,7 +269,7 @@ export function buildQuickLogPrompt(text: string, input: { today: CalendarDate; 
       return line(ref, item)
     })
   }
-  const { bills, tasks, people, medicines } = input.items
+  const { bills, tasks, people, medicines, spending, expiries } = input.items
   const sections = [
     `Today is ${formatCalendarDate(input.today, 'EEEE d MMMM yyyy')} (${input.today}).`,
     section(
@@ -210,6 +287,22 @@ export function buildQuickLogPrompt(text: string, input: { today: CalendarDate; 
     section(
       'Medicines',
       listed(medicines, 'm', 'medicine', medicine => [medicine.id, medicine.name], medicineLine)
+    ),
+    spending === null
+      ? 'Spending categories: none, they can’t log spending'
+      : section(
+          'Spending categories',
+          listed(
+            spending.categories,
+            'c',
+            'category',
+            category => [category.id, category.name],
+            (ref, category) => `${ref} ${category.name}`
+          )
+        ),
+    section(
+      'Things that run out',
+      listed(expiries, 'r', 'expiry', expiry => [`${expiry.kind}:${expiry.subjectId}`, quickLogExpiryName(expiry)], expiryLine)
     ),
     `What they wrote:\n<sentence>\n${text.replaceAll('<', '‹').replaceAll('>', '›')}\n</sentence>`,
   ]
@@ -243,11 +336,25 @@ function costFrom(amount: string | null): Cents | null {
   }
 }
 
+/** Trimmed, spaces squashed, and null when blank or too long to be a name. */
+function shortText(text: string | null, max: number): string | null {
+  const trimmed = text?.trim().replace(/\s+/g, ' ') ?? ''
+  return trimmed === '' || trimmed.length > max ? null : trimmed
+}
+
+/** Sentence case: "lunch" reads as "Lunch" on the list. */
+function capitalized(text: string): string {
+  return text.charAt(0).toLocaleUpperCase('en') + text.slice(1)
+}
+
 const REF_KINDS: Record<QuickLogAction, QuickLogRef['kind']> = {
   bill_paid: 'bill',
   task_done: 'task',
   health_event: 'person',
   medicine_refilled: 'medicine',
+  cash_spent: 'category',
+  renewed: 'expiry',
+  not_renewing: 'expiry',
 }
 
 function offer(choices: QuickLogProposal[]): QuickLogResult {
@@ -317,6 +424,79 @@ function refillChoices(ids: readonly string[], on: CalendarDate, medicines: read
   }
 }
 
+function cashChoice(
+  ids: readonly string[],
+  answer: Pick<QuickLogAnswer, 'amount' | 'merchant' | 'title'>,
+  on: CalendarDate,
+  spending: QuickLogItems['spending']
+): QuickLogResult {
+  if (spending === null) return { choices: [], problem: NO_SPENDING }
+  const amountCents = costFrom(answer.amount)
+  if (amountCents === null || amountCents === 0) return { choices: [], problem: NO_AMOUNT }
+  const categories = new Map(spending.categories.map(category => [category.id, category]))
+  // The best fit is suggested; the card can change it.
+  const category = ids.map(id => categories.get(id)).find(found => found !== undefined) ?? null
+  const merchant = shortText(answer.merchant, QUICK_LOG_DESCRIPTION_MAX_LENGTH)
+  const said = shortText(answer.title, QUICK_LOG_DESCRIPTION_MAX_LENGTH)
+  return {
+    choices: [
+      {
+        action: 'cash_spent',
+        description: capitalized(said ?? merchant ?? category?.name ?? 'Cash'),
+        merchant: merchant === null ? null : capitalized(merchant),
+        amountCents,
+        spentOn: on,
+        categoryId: category?.id ?? null,
+        categoryName: category?.name ?? null,
+      },
+    ],
+    problem: null,
+  }
+}
+
+function expiryChoices(
+  action: 'renewed' | 'not_renewing',
+  ids: readonly string[],
+  until: string | null,
+  expiries: readonly QuickLogExpiry[]
+): QuickLogResult {
+  const byId = new Map(expiries.map(expiry => [`${expiry.kind}:${expiry.subjectId}`, expiry]))
+  const picked = ids.flatMap(id => {
+    const expiry = byId.get(id)
+    return expiry ? [expiry] : []
+  })
+  const [first] = picked
+  if (!first) return { choices: [], problem: QUICK_LOG_UNCLEAR }
+
+  if (action === 'not_renewing') {
+    const choices = picked
+      .filter(expiry => !expiry.notRenewing)
+      .map((expiry): QuickLogProposal => ({
+        action: 'not_renewing',
+        kind: expiry.kind,
+        subjectId: expiry.subjectId,
+        name: quickLogExpiryName(expiry),
+        expiresOn: expiry.expiresOn,
+      }))
+    if (choices.length === 0) return { choices: [], problem: `${quickLogExpiryName(first)} is already marked as not being renewed.` }
+    return offer(choices)
+  }
+
+  const newDate = until !== null && isCalendarDate(until) ? until : null
+  return offer(
+    picked.map((expiry): QuickLogProposal => ({
+      action: 'renewed',
+      kind: expiry.kind,
+      subjectId: expiry.subjectId,
+      name: quickLogExpiryName(expiry),
+      currentExpiresOn: expiry.expiresOn,
+      // A date that isn't later is a misreading; the card asks for the right one.
+      expiresOn: newDate !== null && newDate > expiry.expiresOn ? newDate : null,
+      suggestedRenewalOn: expiry.suggestedRenewalOn,
+    }))
+  )
+}
+
 /** Turns the model's answer into things to confirm, or the reason there aren't any. */
 export function interpretQuickLog(
   prompt: QuickLogPrompt,
@@ -327,17 +507,22 @@ export function interpretQuickLog(
   if (!parsed.success || parsed.data.action === 'other') return { choices: [], problem: QUICK_LOG_UNCLEAR }
   const { action, date, amount } = parsed.data
 
-  const on = date === null ? input.today : date
-  if (!isCalendarDate(on)) return { choices: [], problem: QUICK_LOG_UNCLEAR }
-  if (on > input.today) return { choices: [], problem: FUTURE }
-  if (on < addCalendarDays(input.today, -QUICK_LOG_DAYS_BACK)) return { choices: [], problem: TOO_OLD }
-
   const kind = REF_KINDS[action]
   const ids: string[] = []
   for (const ref of parsed.data.items) {
     const entry = prompt.refs.get(ref.trim().toLowerCase())
     if (entry?.kind === kind && !ids.includes(entry.id)) ids.push(entry.id)
   }
+
+  // When something was renewed doesn't matter, only the date it now runs out.
+  if (action === 'renewed' || action === 'not_renewing') return expiryChoices(action, ids, parsed.data.until, input.items.expiries)
+
+  const on = date === null ? input.today : date
+  if (!isCalendarDate(on)) return { choices: [], problem: QUICK_LOG_UNCLEAR }
+  if (on > input.today) return { choices: [], problem: FUTURE }
+  if (on < addCalendarDays(input.today, -QUICK_LOG_DAYS_BACK)) return { choices: [], problem: TOO_OLD }
+
+  if (action === 'cash_spent') return cashChoice(ids, parsed.data, on, input.items.spending)
 
   if (action === 'health_event') return healthEventChoices(ids, parsed.data, on, input.items.people)
   if (action === 'medicine_refilled') return refillChoices(ids, on, input.items.medicines)
@@ -368,8 +553,8 @@ export function interpretQuickLog(
   return { choices: choices.slice(0, QUICK_LOG_CHOICES_MAX), problem: null }
 }
 
-/** What the confirm button's result says, in the household's words. */
-export function quickLogDoneMessage(proposal: QuickLogProposal): string {
+/** What the confirm button's result says, in the household's words. Amounts are in the household's currency. */
+export function quickLogDoneMessage(proposal: QuickLogProposal, currency: string): string {
   if (proposal.action === 'bill_paid') {
     return `Marked ${proposal.billName} paid for ${formatCalendarDate(proposal.dueOn, 'd MMM')}.`
   }
@@ -379,7 +564,19 @@ export function quickLogDoneMessage(proposal: QuickLogProposal): string {
   if (proposal.action === 'health_event') {
     return `Added ${quickLogEventName(proposal)} for ${forWhom(proposal.personName)} on ${formatCalendarDate(proposal.occurredOn, 'd MMM')}.`
   }
-  return `Marked ${proposal.medicineName} refilled on ${formatCalendarDate(proposal.refilledOn, 'd MMM')}.`
+  if (proposal.action === 'medicine_refilled') {
+    return `Marked ${proposal.medicineName} refilled on ${formatCalendarDate(proposal.refilledOn, 'd MMM')}.`
+  }
+  if (proposal.action === 'cash_spent') {
+    const amount = formatCents(proposal.amountCents, { currency })
+    return `Added ${proposal.description} for ${amount} on ${formatCalendarDate(proposal.spentOn, 'd MMM')}.`
+  }
+  if (proposal.action === 'renewed') {
+    return proposal.expiresOn === null
+      ? `Renewed ${proposal.name}.`
+      : `Renewed ${proposal.name} to ${formatCalendarDate(proposal.expiresOn, 'd MMM yyyy')}.`
+  }
+  return `Noted you’re not renewing ${proposal.name}. Its reminders have stopped.`
 }
 
 /** What a health record is called: its title, or the kind's name. */

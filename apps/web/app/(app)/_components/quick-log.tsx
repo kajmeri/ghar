@@ -2,20 +2,25 @@
 
 import {
   applyQuickLog,
+  clearNotRenewing,
   deleteHealthEvent,
   deleteMaintenanceCompletion,
+  deleteTransaction,
   HEALTH_TITLE_MAX,
   healthEventKindSchema,
   parseQuickLog,
+  QUICK_LOG_DESCRIPTION_MAX,
   QUICK_LOG_TEXT_MAX,
   undoHealthMedicineRefill,
+  undoRenewExpiry,
   unmarkBillPaid,
   type QuickLogApplyBody,
   type QuickLogProposal,
   type QuickLogUndo,
 } from '@ghar/contracts'
-import { formatCalendarDate, isCalendarDate, type CalendarDate } from '@ghar/core/dates'
+import { addCalendarDays, formatCalendarDate, isCalendarDate, type CalendarDate } from '@ghar/core/dates'
 import { HEALTH_EVENT_KINDS, HEALTH_KIND_LABELS, type HealthEventKind } from '@ghar/core/health'
+import { formatCents } from '@ghar/core/money'
 import { useRouter } from 'next/navigation'
 import { useId, useState, useTransition, type SyntheticEvent } from 'react'
 import { DateField } from '@/app/(app)/_components/ui/date-field'
@@ -47,6 +52,11 @@ function choiceKey(choice: QuickLogProposal): string {
       return choice.personId
     case 'medicine_refilled':
       return choice.medicineId
+    case 'cash_spent':
+      return 'cash'
+    case 'renewed':
+    case 'not_renewing':
+      return `${choice.kind}:${choice.subjectId}`
   }
 }
 
@@ -60,20 +70,45 @@ function choiceLabel(choice: QuickLogProposal): string {
       return choice.personName
     case 'medicine_refilled':
       return choice.personName === 'You' ? `${choice.medicineName} (yours)` : `${choice.medicineName} (${choice.personName})`
+    case 'cash_spent':
+      return choice.description
+    case 'renewed':
+    case 'not_renewing':
+      return `${choice.name}, runs out ${formatCalendarDate(choice.action === 'renewed' ? choice.currentExpiresOn : choice.expiresOn, 'd MMM yyyy')}`
   }
 }
 
-/** What a health record will be called, as the card has it now. */
-interface EventEdits {
+/** What the card has changed from the suggestion: a health record's kind and name, or a cash spend's. */
+interface Edits {
   kind: HealthEventKind
   title: string
+  description: string
+  /** Empty for none. */
+  categoryId: string
+  /** The cost of a house job, or the amount of a cash spend. */
+  cents: number | null
 }
 
-function eventName(edits: EventEdits): string {
+const NO_EDITS: Edits = { kind: 'visit', title: '', description: '', categoryId: '', cents: null }
+
+function editsFor(choice: QuickLogProposal): Edits {
+  switch (choice.action) {
+    case 'health_event':
+      return { ...NO_EDITS, kind: choice.kind, title: choice.title ?? '' }
+    case 'task_done':
+      return { ...NO_EDITS, cents: choice.costCents }
+    case 'cash_spent':
+      return { ...NO_EDITS, description: choice.description, categoryId: choice.categoryId ?? '', cents: choice.amountCents }
+    default:
+      return NO_EDITS
+  }
+}
+
+function eventName(edits: Edits): string {
   return edits.title.trim() === '' ? HEALTH_KIND_LABELS[edits.kind] : edits.title.trim()
 }
 
-function headline(choice: QuickLogProposal, edits: EventEdits): string {
+function headline(choice: QuickLogProposal, edits: Edits, currency: string): string {
   switch (choice.action) {
     case 'bill_paid':
       return `Mark ${choice.billName} paid`
@@ -83,6 +118,17 @@ function headline(choice: QuickLogProposal, edits: EventEdits): string {
       return `Add ${eventName(edits)} for ${whom(choice.personName)}`
     case 'medicine_refilled':
       return `Mark ${choice.medicineName} refilled`
+    case 'cash_spent': {
+      const what = edits.description.trim()
+      const amount = edits.cents === null ? null : formatCents(edits.cents, { currency })
+      // Nothing said about what it was for reads as plain cash.
+      if (what === '' || what.toLocaleLowerCase('en') === 'cash') return amount === null ? 'Add cash spending' : `Add ${amount} in cash`
+      return amount === null ? `Add ${what}` : `Add ${amount} for ${what}`
+    }
+    case 'renewed':
+      return `Renew ${choice.name}`
+    case 'not_renewing':
+      return `Not renewing ${choice.name}`
   }
 }
 
@@ -97,6 +143,12 @@ function detail(choice: QuickLogProposal): string | null {
       return 'It goes on their health record.'
     case 'medicine_refilled':
       return choice.personName === 'You' ? null : `${choice.personName}’s medicine`
+    case 'cash_spent':
+      return choice.merchant === null ? 'It goes on your transactions as a cash spend.' : `At ${choice.merchant}`
+    case 'renewed':
+      return `It runs out on ${formatCalendarDate(choice.currentExpiresOn, 'd MMM yyyy')} now.`
+    case 'not_renewing':
+      return `It runs out on ${formatCalendarDate(choice.expiresOn, 'd MMM yyyy')}. Ghar stops reminding anyone about it.`
   }
 }
 
@@ -105,6 +157,9 @@ const DATE_LABELS: Record<QuickLogProposal['action'], string> = {
   task_done: 'Done on',
   health_event: 'When',
   medicine_refilled: 'Refilled on',
+  cash_spent: 'Spent on',
+  renewed: 'New expiry date',
+  not_renewing: 'Runs out on',
 }
 
 const SUBMIT_LABELS: Record<QuickLogProposal['action'], string> = {
@@ -112,9 +167,13 @@ const SUBMIT_LABELS: Record<QuickLogProposal['action'], string> = {
   task_done: 'Log it',
   health_event: 'Add it',
   medicine_refilled: 'Mark refilled',
+  cash_spent: 'Add it',
+  renewed: 'Renew',
+  not_renewing: 'Stop reminders',
 }
 
-function proposedDate(choice: QuickLogProposal): CalendarDate {
+/** The date the card starts with. Empty when it has to be asked for. */
+function proposedDate(choice: QuickLogProposal): CalendarDate | undefined {
   switch (choice.action) {
     case 'bill_paid':
       return choice.paidOn
@@ -124,15 +183,22 @@ function proposedDate(choice: QuickLogProposal): CalendarDate {
       return choice.occurredOn
     case 'medicine_refilled':
       return choice.refilledOn
+    case 'cash_spent':
+      return choice.spentOn
+    case 'renewed':
+      return choice.expiresOn ?? undefined
+    case 'not_renewing':
+      return choice.expiresOn
   }
 }
 
-function applyBody(choice: QuickLogProposal, edits: EventEdits, on: CalendarDate, cost: number | null): QuickLogApplyBody {
+/** What the confirm button sends, or why it can't yet. */
+function applyBody(choice: QuickLogProposal, edits: Edits, on: CalendarDate): QuickLogApplyBody | string {
   switch (choice.action) {
     case 'bill_paid':
       return { action: 'bill_paid', billId: choice.billId, dueOn: choice.dueOn, paidOn: on }
     case 'task_done':
-      return { action: 'task_done', taskId: choice.taskId, completedOn: on, costCents: cost }
+      return { action: 'task_done', taskId: choice.taskId, completedOn: on, costCents: edits.cents }
     case 'health_event':
       return {
         action: 'health_event',
@@ -143,6 +209,23 @@ function applyBody(choice: QuickLogProposal, edits: EventEdits, on: CalendarDate
       }
     case 'medicine_refilled':
       return { action: 'medicine_refilled', medicineId: choice.medicineId, refilledOn: on }
+    case 'cash_spent': {
+      if (edits.cents === null || edits.cents <= 0) return 'Say how much it was.'
+      const description = edits.description.trim()
+      if (description === '') return 'Say what it was for.'
+      return {
+        action: 'cash_spent',
+        description,
+        merchant: choice.merchant,
+        amountCents: edits.cents,
+        spentOn: on,
+        categoryId: edits.categoryId === '' ? null : edits.categoryId,
+      }
+    }
+    case 'renewed':
+      return { action: 'renewed', kind: choice.kind, subjectId: choice.subjectId, expiresOn: on }
+    case 'not_renewing':
+      return { action: 'not_renewing', kind: choice.kind, subjectId: choice.subjectId, expiresOn: choice.expiresOn }
   }
 }
 
@@ -166,7 +249,24 @@ async function undoRequest(what: QuickLogUndo): Promise<void> {
           previousLastRefilledOn: what.previousLastRefilledOn,
         },
       })
+      return
+    case 'cash_spent':
+      await api.request(deleteTransaction, { params: { transactionId: what.transactionId } })
+      return
+    case 'renewed':
+      await api.request(undoRenewExpiry, {
+        params: { kind: what.kind, subjectId: what.subjectId },
+        body: { renewedTo: what.renewedTo, previousExpiresOn: what.previousExpiresOn, previousIssuedOn: what.previousIssuedOn },
+      })
+      return
+    case 'not_renewing':
+      await api.request(clearNotRenewing, { params: { kind: what.kind, subjectId: what.subjectId } })
   }
+}
+
+export interface QuickLogCategoryOption {
+  id: string
+  name: string
 }
 
 /**
@@ -174,14 +274,24 @@ async function undoRequest(what: QuickLogUndo): Promise<void> {
  * suggests what to record, the person checks it, and only then is it saved, with a way to take it
  * back straight after.
  */
-export function QuickLog({ today, currency }: { today: CalendarDate; currency: string }) {
+export function QuickLog({
+  today,
+  currency,
+  categories,
+}: {
+  today: CalendarDate
+  currency: string
+  /** The categories cash can be filed under. Empty for someone who can't log spending. */
+  categories: readonly QuickLogCategoryOption[]
+}) {
   const id = useId()
   const router = useRouter()
   const [text, setText] = useState('')
   const [state, setState] = useState<State>({ step: 'write', problem: null })
   const [picked, setPicked] = useState(0)
-  const [cost, setCost] = useState<number | null>(null)
-  const [edits, setEdits] = useState<EventEdits>({ kind: 'visit', title: '' })
+  const [edits, setEdits] = useState<Edits>(NO_EDITS)
+  /** A renewal's new date, once the suggested one is picked; it remounts the date field. */
+  const [renewTo, setRenewTo] = useState<CalendarDate | null>(null)
   const [busy, setBusy] = useState<'reading' | 'saving' | 'undoing' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, startTransition] = useTransition()
@@ -207,18 +317,23 @@ export function QuickLog({ today, currency }: { today: CalendarDate; currency: s
     }
   }
 
-  /** Fresh cost and kind for each choice, as suggested. */
+  /** Fresh edits for each choice, as suggested. */
   function pick(choice: QuickLogProposal, index: number) {
     setPicked(index)
-    setCost(choice.action === 'task_done' ? choice.costCents : null)
-    if (choice.action === 'health_event') setEdits({ kind: choice.kind, title: choice.title ?? '' })
+    setEdits(editsFor(choice))
+    setRenewTo(null)
   }
 
   const confirm = async (event: SyntheticEvent<HTMLFormElement>, choice: QuickLogProposal) => {
     event.preventDefault()
-    const on = new FormData(event.currentTarget).get('on')
+    // Not renewing has no date to pick: it's the one it runs out on.
+    const on = choice.action === 'not_renewing' ? choice.expiresOn : new FormData(event.currentTarget).get('on')
     if (typeof on !== 'string' || !isCalendarDate(on)) return
-    const body = applyBody(choice, edits, on, cost)
+    const body = applyBody(choice, edits, on)
+    if (typeof body === 'string') {
+      setError(body)
+      return
+    }
     setError(null)
     setBusy('saving')
     try {
@@ -291,7 +406,7 @@ export function QuickLog({ today, currency }: { today: CalendarDate; currency: s
         <div className='flex flex-col gap-1'>
           <p className='text-sm text-ink-muted'>“{text.trim()}”</p>
           <h2 id={`${id}-headline`} className='text-lg font-semibold break-words'>
-            {headline(choice, edits)}
+            {headline(choice, edits, currency)}
           </h2>
           {below === null ? null : <p className='text-sm text-ink-muted'>{below}</p>}
         </div>
@@ -351,27 +466,94 @@ export function QuickLog({ today, currency }: { today: CalendarDate; currency: s
           </div>
         ) : null}
 
-        <div className='grid gap-3 md:grid-cols-2'>
-          <DateField
-            id={`${id}-on`}
-            name='on'
-            label={DATE_LABELS[choice.action]}
-            defaultValue={proposedDate(choice)}
-            max={today}
-            required
-          />
-          {choice.action !== 'task_done' ? null : (
-            <MoneyInput
-              id={`${id}-cost`}
-              name='costCents'
-              label='Cost'
-              hint='Optional'
-              currency={currency}
-              defaultValue={choice.costCents ?? undefined}
-              onValueChange={setCost}
-            />
-          )}
-        </div>
+        {choice.action === 'cash_spent' ? (
+          <div className='grid gap-3 md:grid-cols-2'>
+            <Field id={`${id}-description`} label='What it was for'>
+              <Input
+                id={`${id}-description`}
+                name='description'
+                maxLength={QUICK_LOG_DESCRIPTION_MAX}
+                required
+                value={edits.description}
+                onChange={change => {
+                  setEdits(current => ({ ...current, description: change.target.value }))
+                }}
+              />
+            </Field>
+            <Field id={`${id}-category`} label='Category'>
+              <NativeSelect
+                id={`${id}-category`}
+                name='categoryId'
+                value={edits.categoryId}
+                onChange={change => {
+                  setEdits(current => ({ ...current, categoryId: change.target.value }))
+                }}
+              >
+                <option value=''>Leave it to review</option>
+                {categories.map(category => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+          </div>
+        ) : null}
+
+        {choice.action === 'not_renewing' ? null : (
+          <div className='grid gap-3 md:grid-cols-2'>
+            {choice.action === 'renewed' ? (
+              <div className='flex flex-col gap-2'>
+                <DateField
+                  // Picking the suggested date starts the field again with it.
+                  key={renewTo ?? 'said'}
+                  id={`${id}-on`}
+                  name='on'
+                  label={DATE_LABELS.renewed}
+                  hint={choice.expiresOn === null ? 'When the new one runs out.' : undefined}
+                  defaultValue={renewTo ?? proposedDate(choice)}
+                  min={addCalendarDays(choice.currentExpiresOn, 1)}
+                  required
+                />
+                {choice.suggestedRenewalOn === null || choice.suggestedRenewalOn === (renewTo ?? choice.expiresOn) ? null : (
+                  <Button
+                    type='button'
+                    variant='outline'
+                    className='self-start rounded-pill'
+                    onClick={() => {
+                      setRenewTo(choice.suggestedRenewalOn)
+                    }}
+                  >
+                    Use {formatCalendarDate(choice.suggestedRenewalOn, 'd MMM yyyy')}
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <DateField
+                id={`${id}-on`}
+                name='on'
+                label={DATE_LABELS[choice.action]}
+                defaultValue={proposedDate(choice)}
+                max={today}
+                required
+              />
+            )}
+            {choice.action === 'task_done' || choice.action === 'cash_spent' ? (
+              <MoneyInput
+                id={`${id}-cost`}
+                name='costCents'
+                label={choice.action === 'task_done' ? 'Cost' : 'Amount'}
+                hint={choice.action === 'task_done' ? 'Optional' : undefined}
+                required={choice.action === 'cash_spent'}
+                currency={currency}
+                defaultValue={edits.cents ?? undefined}
+                onValueChange={cents => {
+                  setEdits(current => ({ ...current, cents }))
+                }}
+              />
+            ) : null}
+          </div>
+        )}
 
         <FormError>{error}</FormError>
         <div className='flex flex-col-reverse gap-2 md:flex-row md:justify-end'>
@@ -413,7 +595,7 @@ export function QuickLog({ today, currency }: { today: CalendarDate; currency: s
         {reading
           ? 'Claude is reading it…'
           : (state.problem ??
-            'Say what you paid, did around the house, or a visit, shot or refill. You check it before anything is saved.')}
+            'Say what you paid or spent, did around the house, renewed, or a visit, shot or refill. You check it before anything is saved.')}
       </p>
       <FormError>{error}</FormError>
     </form>

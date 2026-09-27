@@ -4446,6 +4446,110 @@
         }
       }
     },
+    "/api/v1/expiries/{kind}/{subjectId}/renew/undo": {
+      "post": {
+        "operationId": "undoRenewExpiry",
+        "tags": [
+          "renewals"
+        ],
+        "description": "Takes a renewal back: the date it ran out on before, and for a document the issue date it had.\n409 when its date isn't `renewedTo` any more, because someone changed it since, so this never\nundoes their change. The quick log's undo.",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ExpiryKind"
+            }
+          },
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "renewedTo": {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  },
+                  "previousExpiresOn": {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  },
+                  "previousIssuedOn": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/CalendarDate"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "renewedTo",
+                  "previousExpiresOn"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "expiry": {
+                      "$ref": "#/components/schemas/AttentionExpiry"
+                    }
+                  },
+                  "required": [
+                    "expiry"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/finances/budget": {
       "get": {
         "operationId": "getBudget",
@@ -10405,7 +10509,7 @@
         "tags": [
           "quick-log"
         ],
-        "description": "Records it. 409 when the bill's due date was marked paid since, or the medicine already marked\nrefilled that day, so an undo never takes back somebody else's mark; 400 for a date in the\nfuture, or a refill older than the last one.",
+        "description": "Records it. 409 when the bill's due date was marked paid since, the medicine already marked\nrefilled that day, or the thing already marked as not being renewed, so an undo never takes back\nsomebody else's mark; also 409 when something's date changed since it was suggested. 400 for a\ndate in the future, a refill older than the last one, or a renewal date that isn't later.",
         "requestBody": {
           "required": true,
           "content": {
@@ -11904,6 +12008,68 @@
                   },
                   "required": [
                     "transaction"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTransaction",
+        "tags": [
+          "finances"
+        ],
+        "description": "Removes a charge typed in by hand, as the quick log's undo does. A synced charge can't be deleted:\n422, since the next sync would bring it back. Exclude it from spending instead.",
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transactionId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "transactionId"
                   ]
                 }
               }
@@ -28481,6 +28647,110 @@
               "medicineId",
               "refilledOn"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "cash_spent"
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "merchant": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "amountCents": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000000,
+                "$ref": "#/components/schemas/Cents"
+              },
+              "spentOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "categoryId": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "action",
+              "description",
+              "amountCents",
+              "spentOn"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "renewed"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/ExpiryKind"
+              },
+              "subjectId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "expiresOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              }
+            },
+            "required": [
+              "action",
+              "kind",
+              "subjectId",
+              "expiresOn"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "not_renewing"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/ExpiryKind"
+              },
+              "subjectId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "expiresOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              }
+            },
+            "required": [
+              "action",
+              "kind",
+              "subjectId",
+              "expiresOn"
+            ]
           }
         ]
       },
@@ -28622,6 +28892,141 @@
               "medicineName",
               "personName"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "cash_spent"
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "merchant": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "amountCents": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000000,
+                "$ref": "#/components/schemas/Cents"
+              },
+              "spentOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "categoryId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "categoryName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "action",
+              "description",
+              "merchant",
+              "amountCents",
+              "spentOn",
+              "categoryId",
+              "categoryName"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "renewed"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/ExpiryKind"
+              },
+              "subjectId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "expiresOn": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "currentExpiresOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "suggestedRenewalOn": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "action",
+              "kind",
+              "subjectId",
+              "expiresOn",
+              "name",
+              "currentExpiresOn",
+              "suggestedRenewalOn"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "not_renewing"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/ExpiryKind"
+              },
+              "subjectId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "expiresOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "kind",
+              "subjectId",
+              "expiresOn",
+              "name"
+            ]
           }
         ]
       },
@@ -28728,6 +29133,84 @@
               "refilledOn",
               "previousRefillBy",
               "previousLastRefilledOn"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "cash_spent"
+              },
+              "transactionId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": [
+              "action",
+              "transactionId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "renewed"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/ExpiryKind"
+              },
+              "subjectId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "renewedTo": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "previousExpiresOn": {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              "previousIssuedOn": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "action",
+              "kind",
+              "subjectId",
+              "renewedTo",
+              "previousExpiresOn",
+              "previousIssuedOn"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "not_renewing"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/ExpiryKind"
+              },
+              "subjectId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": [
+              "action",
+              "kind",
+              "subjectId"
             ]
           }
         ]

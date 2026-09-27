@@ -366,6 +366,17 @@ export const tagTransaction = defineEndpoint({
   response: z.object({ transaction: transactionSchema }),
 })
 
+/**
+ * Removes a charge typed in by hand, as the quick log's undo does. A synced charge can't be deleted:
+ * 422, since the next sync would bring it back. Exclude it from spending instead.
+ */
+export const deleteTransaction = defineEndpoint({
+  method: 'DELETE',
+  path: '/api/v1/transactions/:transactionId',
+  params: z.object({ transactionId: z.uuid() }),
+  response: z.object({ transactionId: z.uuid() }),
+})
+
 // ---------------------------------------------------------------------------------------------
 // The month so far: what the Money screen answers before anyone opens a list.
 

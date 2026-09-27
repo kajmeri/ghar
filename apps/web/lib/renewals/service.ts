@@ -148,7 +148,35 @@ export async function renewExpiry(session: Session, params: ExpiryParams, body: 
   return { expiry: toExpiry(result.expiry, householdToday(session)) }
 }
 
-export async function markNotRenewing(session: Session, params: ExpiryParams, body: { expiresOn: CalendarDate }): Promise<{ expiry: Expiry }> {
+/**
+ * Renews to a new date and says what it had before, for the quick log to offer an undo. A document
+ * loses its issue date, as it does when renewed without one.
+ */
+export async function renewExpiryUndoably(
+  session: Session,
+  params: ExpiryParams,
+  expiresOn: CalendarDate
+): Promise<{ expiry: Expiry; previousExpiresOn: CalendarDate; previousIssuedOn: CalendarDate | null }> {
+  const before = await queries.getExpiry(session.context, getDb(), subjectOf(params))
+  const { expiry } = await renewExpiry(session, params, { expiresOn })
+  return { expiry, previousExpiresOn: before.expiresOn, previousIssuedOn: before.kind === 'document' ? before.issuedOn : null }
+}
+
+/** Takes a renewal back, as the quick log's undo does, while it still has the date it was renewed to. */
+export async function undoRenewExpiry(
+  session: Session,
+  params: ExpiryParams,
+  body: { renewedTo: CalendarDate; previousExpiresOn: CalendarDate; previousIssuedOn: CalendarDate | null }
+): Promise<{ expiry: Expiry }> {
+  const row = await queries.undoRenewExpiry(session.context, getDb(), { subject: subjectOf(params), ...body })
+  return { expiry: toExpiry(row, householdToday(session)) }
+}
+
+export async function markNotRenewing(
+  session: Session,
+  params: ExpiryParams,
+  body: { expiresOn: CalendarDate }
+): Promise<{ expiry: Expiry }> {
   const row = await queries.markNotRenewing(session.context, getDb(), { subject: subjectOf(params), expiresOn: body.expiresOn })
   return { expiry: toExpiry(row, householdToday(session)) }
 }

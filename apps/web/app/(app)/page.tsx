@@ -7,6 +7,7 @@ import { Pill } from '@/components/ui/pill'
 import { getPageSession } from '@/lib/api/authed'
 import { getAttention } from '@/lib/attention/service'
 import { billAmountText, billTone, occurrenceText } from '@/lib/bills/display'
+import { listCategoryOptions } from '@/lib/finances/service'
 import { healthDueStatus, refillStatus } from '@/lib/health/display'
 import * as households from '@/lib/households/service'
 import { canQuickLog } from '@/lib/quick-log/service'
@@ -30,13 +31,25 @@ export default async function HomePage() {
   const { context: ctx, household } = session
   const canInvite = can(ctx.role, 'members.invite')
   // The member count only matters to someone who can invite.
-  const [members, attention] = await Promise.all([canInvite ? households.listMembers(ctx) : [], getAttention(session)])
+  const loggable = canQuickLog(session)
+  const [members, attention, categories] = await Promise.all([
+    canInvite ? households.listMembers(ctx) : [],
+    getAttention(session),
+    // What cash from the quick log can be filed under.
+    loggable && can(ctx.role, 'finances.manage') ? listCategoryOptions(session) : [],
+  ])
   const inviteFirst = canInvite && members.length < 2
   const { today, currency, maintenance, expiries, health, refills, money } = attention
   const bills = attention.bills ?? []
   const header = <PageHeader title={household.name} description={formatInstant(new Date(), household.timeZone, { dateStyle: 'full' })} />
   const moneyGlance = money === null ? null : <MoneyGlance money={money} currency={currency} />
-  const quickLog = canQuickLog(session) ? <QuickLog today={today} currency={household.currency} /> : null
+  const quickLog = loggable ? (
+    <QuickLog
+      today={today}
+      currency={household.currency}
+      categories={categories.map(category => ({ id: category.id, name: category.name }))}
+    />
+  ) : null
 
   if (maintenance.length === 0 && bills.length === 0 && expiries.length === 0 && health.length === 0 && refills.length === 0) {
     return (

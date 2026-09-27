@@ -33,6 +33,17 @@ const items = {
     { id: 'person-asha', name: 'Asha', isYou: false, usualTitles: [] },
   ],
   medicines: [{ id: 'med-metformin', name: 'Metformin', personName: 'You', supplyDays: 30, lastRefilledOn: null }],
+  spending: { categories: [{ id: 'cat-groceries', name: 'Groceries' }] },
+  expiries: [
+    {
+      kind: 'document' as const,
+      subjectId: 'doc-passport',
+      title: 'Passport',
+      expiresOn: '2026-10-10',
+      notRenewing: false,
+      suggestedRenewalOn: null,
+    },
+  ],
 }
 
 const prompt = buildQuickLogPrompt('Paid the water bill yesterday, £42', { today: '2026-09-25', items })
@@ -73,6 +84,8 @@ describe('the stand-in reader', () => {
       items: ['b1'],
       date: '2026-09-24',
       amount: '£42',
+      merchant: null,
+      until: null,
       kind: null,
       title: null,
     })
@@ -88,5 +101,23 @@ describe('the stand-in reader', () => {
     })
     expect(await read('went to the dentist')).toMatchObject({ action: 'health_event', items: [], kind: 'dental' })
     expect(await read('refilled the metformin')).toMatchObject({ action: 'medicine_refilled', items: ['m1'], kind: null })
+  })
+
+  it('reads cash spending, a renewal with its new date, and not renewing', async () => {
+    const read = (text: string) => createFakeQuickLogReader().read(buildQuickLogPrompt(text, { today: '2026-09-25', items }))
+    expect(await read('£12 cash on groceries yesterday')).toMatchObject({
+      action: 'cash_spent',
+      items: ['c1'],
+      amount: '£12',
+      date: '2026-09-24',
+    })
+    expect(await read('spent £5 on a coffee')).toMatchObject({ action: 'cash_spent', items: [] })
+    expect(await read('renewed the passport until 2036-10-09')).toMatchObject({
+      action: 'renewed',
+      items: ['r1'],
+      until: '2036-10-09',
+      date: null,
+    })
+    expect(await read('not renewing the passport')).toMatchObject({ action: 'not_renewing', items: ['r1'] })
   })
 })

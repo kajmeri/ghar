@@ -11,8 +11,11 @@ import {
   createInvitation,
   createMaintenanceTask,
   createPerson,
+  createRenewal,
+  getExpiry,
   getHealthEvent,
   getHealthMedicine,
+  getTransaction,
   listBillPayments,
   listMaintenanceHistory,
   requireOwnPerson,
@@ -20,14 +23,16 @@ import {
 } from '@ghar/db/queries'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
+import { POST as undoRenewRoute } from '@/app/api/v1/expiries/[kind]/[subjectId]/renew/undo/route'
 import { POST as undoRefillRoute } from '@/app/api/v1/health-records/medicines/[medicineId]/refill/undo/route'
 import { POST as applyRoute } from '@/app/api/v1/quick-log/apply/route'
 import { POST as parseRoute } from '@/app/api/v1/quick-log/parse/route'
+import { DELETE as deleteTransactionRoute } from '@/app/api/v1/transactions/[transactionId]/route'
 import { createFakeQuickLogReader, QuickLogError, type QuickLogReader } from '@/lib/providers/quick-log'
 
 // The quick log through /api/v1, against PGlite and the word-matching reader: a sentence becomes
-// something to confirm and writes nothing, and confirming records it through the bills, house and
-// health services, with what undoes it.
+// something to confirm and writes nothing, and confirming records it through the bills, house,
+// health, money and renewals services, with what undoes it.
 
 const test = vi.hoisted(() => ({
   db: undefined as unknown,
@@ -58,10 +63,14 @@ let ownerPerson: string
 let memberPerson: string
 let childPerson: string
 let metforminId: string
+let insuranceId: string
+let gymId: string
 
 const today = todayInTimeZone('Europe/London')
 /** The water bill falls due three days from now, so a payment yesterday settles it. */
 const dueOn = addCalendarDays(today, 3)
+/** When the car insurance and the gym run out now. */
+const runsOutOn = addCalendarDays(today, 20)
 
 function post(path: string, body: unknown): Request {
   return new Request(`http://localhost${path}`, {
@@ -155,6 +164,24 @@ beforeAll(async () => {
       today
     )
   ).id
+
+  const renewal = {
+    kind: 'policy' as const,
+    expiresOn: runsOutOn,
+    cadenceMonths: 12,
+    autoRenews: false,
+    costCents: null,
+    provider: null,
+    referenceNumber: null,
+    url: null,
+    contactId: null,
+    assetId: null,
+    documentId: null,
+    personId: null,
+    notes: null,
+  }
+  insuranceId = (await createRenewal(owner, db, { ...renewal, title: 'Car insurance' })).id
+  gymId = (await createRenewal(owner, db, { ...renewal, title: 'Gym membership', kind: 'membership' })).id
 })
 
 beforeEach(() => {
@@ -232,6 +259,44 @@ describe('reading a sentence', () => {
   })
 })
 
+describe('reading money and renewals', () => {
+  it('suggests cash spending with a category, for someone who can log spending', async () => {
+    expect((await parse('£12 cash on groceries yesterday')).body.choices).toMatchObject([
+      {
+        action: 'cash_spent',
+        description: 'Groceries',
+        merchant: null,
+        amountCents: 1200,
+        spentOn: addCalendarDays(today, -1),
+        categoryName: 'Groceries',
+      },
+    ])
+    expect((await parse('spent some cash')).body.problem).toMatch(/how much/)
+
+    test.session = member
+    expect((await parse('spent £5 cash')).body.problem).toBe('Only owners and adults can log spending.')
+  })
+
+  it('suggests a renewal with the date said, or asks, and not renewing', async () => {
+    const until = addCalendarDays(runsOutOn, 365)
+    expect((await parse(`renewed the car insurance until ${until}`)).body.choices).toEqual([
+      {
+        action: 'renewed',
+        kind: 'renewal',
+        subjectId: insuranceId,
+        name: 'Car insurance',
+        currentExpiresOn: runsOutOn,
+        expiresOn: until,
+        suggestedRenewalOn: expect.any(String) as string,
+      },
+    ])
+    expect((await parse('renewed the car insurance')).body.choices).toMatchObject([{ expiresOn: null }])
+    expect((await parse('not renewing the gym membership')).body.choices).toEqual([
+      { action: 'not_renewing', kind: 'renewal', subjectId: gymId, name: 'Gym membership', expiresOn: runsOutOn },
+    ])
+  })
+})
+
 describe('confirming', () => {
   it('marks the bill paid once, and says how to take it back', async () => {
     const paidOn = addCalendarDays(today, -1)
@@ -302,6 +367,76 @@ describe('confirming', () => {
     expect(await getHealthMedicine(owner, db, metforminId)).toMatchObject({ lastRefilledOn: null, refillBy: null })
     // Taken back already, so there's nothing of it left to take back.
     expect((await undo()).status).toBe(409)
+  })
+
+  it('adds cash spending, filed, and deletes it again on undo', async () => {
+    const spentOn = addCalendarDays(today, -1)
+    const [groceries] = (await parse('£12 cash on groceries')).body.choices ?? []
+    const categoryId = groceries?.action === 'cash_spent' ? groceries.categoryId : null
+    const { status, body } = await apply({ action: 'cash_spent', description: 'Groceries', amountCents: 1200, spentOn, categoryId })
+    expect(status).toBe(200)
+    expect(body.message).toMatch(/^Added Groceries for £12\.00 on .+\. Filed under Groceries\.$/)
+    const transactionId = body.undo?.action === 'cash_spent' ? body.undo.transactionId : ''
+    expect(await getTransaction(owner, db, { transactionId })).toMatchObject({
+      amountCents: -1200,
+      date: spentOn,
+      accountId: null,
+      categoryId,
+      categorySource: 'user',
+    })
+
+    const undo = () =>
+      deleteTransactionRoute(new Request(`http://localhost/api/v1/transactions/${transactionId}`, { method: 'DELETE' }), {
+        params: Promise.resolve({ transactionId }),
+      })
+    expect((await undo()).status).toBe(200)
+    expect((await undo()).status).toBe(404)
+
+    expect((await apply({ action: 'cash_spent', description: 'Lunch', amountCents: 800, spentOn: addCalendarDays(today, 1) })).status).toBe(
+      400
+    )
+    test.session = member
+    expect((await apply({ action: 'cash_spent', description: 'Lunch', amountCents: 800, spentOn })).status).toBe(403)
+  })
+
+  it('renews to a later date, and takes it back only while the date is still the renewed one', async () => {
+    const subject = { kind: 'renewal' as const, id: insuranceId }
+    expect((await apply({ action: 'renewed', kind: 'renewal', subjectId: insuranceId, expiresOn: runsOutOn })).status).toBe(400)
+
+    const renewedTo = addCalendarDays(runsOutOn, 365)
+    const { status, body } = await apply({ action: 'renewed', kind: 'renewal', subjectId: insuranceId, expiresOn: renewedTo })
+    expect(status).toBe(200)
+    expect(body.message).toMatch(/^Renewed Car insurance to /)
+    expect(body.undo).toEqual({
+      action: 'renewed',
+      kind: 'renewal',
+      subjectId: insuranceId,
+      renewedTo,
+      previousExpiresOn: runsOutOn,
+      previousIssuedOn: null,
+    })
+    expect(await getExpiry(owner, db, subject)).toMatchObject({ expiresOn: renewedTo })
+
+    const undoBody = { renewedTo, previousExpiresOn: runsOutOn }
+    const undo = () =>
+      undoRenewRoute(post(`/api/v1/expiries/renewal/${insuranceId}/renew/undo`, undoBody), {
+        params: Promise.resolve({ kind: 'renewal', subjectId: insuranceId }),
+      })
+    expect((await undo()).status).toBe(200)
+    expect(await getExpiry(owner, db, subject)).toMatchObject({ expiresOn: runsOutOn })
+    // Its date isn't the renewed one any more, so there's nothing of it left to take back.
+    expect((await undo()).status).toBe(409)
+  })
+
+  it('stops reminders for something not being renewed, once', async () => {
+    const body = { action: 'not_renewing', kind: 'renewal', subjectId: gymId, expiresOn: runsOutOn }
+    const first = await apply(body)
+    expect(first.status).toBe(200)
+    expect(first.body.message).toBe('Noted you’re not renewing Gym membership. Its reminders have stopped.')
+    expect(first.body.undo).toEqual({ action: 'not_renewing', kind: 'renewal', subjectId: gymId })
+    expect(await getExpiry(owner, db, { kind: 'renewal', id: gymId })).toMatchObject({ notRenewing: true })
+    expect((await apply(body)).status).toBe(409)
+    expect((await parse('not renewing the gym membership')).body.problem).toBe('Gym membership is already marked as not being renewed.')
   })
 
   it('refuses a day in the future, a date the bill isn’t due, and what the caller can’t mark', async () => {
