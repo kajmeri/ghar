@@ -1,8 +1,8 @@
 import { assertCanChangeRole, assertCanRemoveMember, requirePermission, type HouseholdRole, type MemberRef } from '@ghar/core/auth'
 import { ForbiddenError, NotFoundError } from '@ghar/core/errors'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { authUsers } from 'drizzle-orm/supabase'
-import { householdMembers, profiles } from '../schema'
+import { householdMembers, maintenance, packingItems, profiles, trips } from '../schema'
 import { recordAudit } from './audit'
 import { freezeMemberPerson } from './people'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
@@ -87,6 +87,7 @@ export async function removeMember(ctx: RequestContext, db: Db, input: { userId:
     const target = assertCanRemoveMember({ actor, members, targetUserId: input.userId })
 
     await freezeMemberPerson(ctx, tx, input.userId)
+    await releaseAssignments(ctx, tx, input.userId)
     await tx.delete(householdMembers).where(memberKey(ctx, input.userId))
     await recordAudit(ctx, tx, {
       action: 'member.removed',
@@ -96,6 +97,22 @@ export async function removeMember(ctx: RequestContext, db: Db, input: { userId:
     })
     return { userId: input.userId }
   })
+}
+
+/**
+ * Someone who has left can't pack a bag or fix the boiler, so what was theirs goes back to
+ * the household to pick up instead of showing under a name nobody can reach.
+ */
+async function releaseAssignments(ctx: RequestContext, tx: Db, userId: string): Promise<void> {
+  await tx
+    .update(maintenance)
+    .set({ assignedUserId: null, updatedAt: sql`now()` })
+    .where(and(eq(maintenance.householdId, ctx.householdId), eq(maintenance.assignedUserId, userId)))
+  const householdTrips = tx.select({ id: trips.id }).from(trips).where(eq(trips.householdId, ctx.householdId))
+  await tx
+    .update(packingItems)
+    .set({ assignedUserId: null, updatedAt: sql`now()` })
+    .where(and(inArray(packingItems.tripId, householdTrips), eq(packingItems.assignedUserId, userId)))
 }
 
 /**
