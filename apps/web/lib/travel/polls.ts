@@ -52,5 +52,5 @@ export async function pickTripPollOption(
   session: SessionContext,
   input: { tripId: string; pollId: string; optionId: string }
 ): Promise<TripPollsValue> {
-  return queries.pickTripPollOption(session, getDb(), input)
+  return queries.pickTripPollOption(session, getDb(), { ...input, now: new Date() })
 }

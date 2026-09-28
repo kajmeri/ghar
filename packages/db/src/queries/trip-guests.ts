@@ -6,6 +6,7 @@ import {
   assertEmailInviteIsFor,
   assertPartySize,
   firstName,
+  guestsBesideTravellers,
   guestStatus,
   MAX_TRIP_GUESTS,
   normalizeGuestEmails,
@@ -35,10 +36,16 @@ import {
   tripCostShares,
   tripGuestCalendarFeeds,
   tripGuests,
+  tripArrivals,
   tripPayments,
+  tripPollOptions,
+  tripPolls,
+  tripPollVotes,
+  tripRoomAssignments,
   trips,
   tripShareLinks,
   tripTravellers,
+  tripUpdateMutes,
 } from '../schema'
 import { recordAudit } from './audit'
 import { isUniqueViolation } from './pg-errors'
@@ -120,10 +127,16 @@ export async function listTripGuests(ctx: RequestContext, db: Db, tripId: string
   const rows = await selectGuests(db)
     .where(eq(tripGuests.tripId, trip.id))
     .orderBy(sql`${tripGuests.approvedAt} is null desc`, asc(tripGuests.createdAt), asc(tripGuests.id))
-  const [travellers] = await db.select({ n: count() }).from(tripTravellers).where(eq(tripTravellers.tripId, trip.id))
+  const travellers = await db
+    .select({ userId: householdPeople.userId })
+    .from(tripTravellers)
+    .innerJoin(householdPeople, eq(householdPeople.id, tripTravellers.personId))
+    .where(eq(tripTravellers.tripId, trip.id))
   return {
+    // The list keeps everyone asked, so the household can still take them off; the count doesn't
+    // count anyone twice.
     guests: rows.map(withStatus),
-    headcount: tripHeadcount({ travellerCount: travellers?.n ?? 0, guests: rows }),
+    headcount: tripHeadcount({ travellerCount: travellers.length, guests: guestsBesideTravellers(rows, travellers) }),
   }
 }
 
@@ -237,7 +250,7 @@ export async function approveTripGuest(
 
 /**
  * Takes someone off the trip, or turns down someone who asked. Their emailed link stops working
- * with the row. Someone from the link could ask again while the link is on; turning it off or
+ * with the row, and their votes go with them. Someone from the link could ask again while the link is on; turning it off or
  * making a new one is how to stop that.
  */
 export async function removeTripGuest(ctx: RequestContext, db: Db, input: { tripId: string; guestId: string }): Promise<{ id: string }> {
@@ -251,11 +264,72 @@ export async function removeTripGuest(ctx: RequestContext, db: Db, input: { trip
     const [row] = await tx
       .delete(tripGuests)
       .where(and(eq(tripGuests.id, input.guestId), eq(tripGuests.tripId, trip.id)))
-      .returning({ id: tripGuests.id, email: tripGuests.email })
+      .returning({ id: tripGuests.id, email: tripGuests.email, userId: tripGuests.userId })
     if (!row) throw new NotFoundError(GUEST_NOT_FOUND)
+    if (row.userId) await clearGuestTraces(tx, trip.id, row.userId, ctx.householdId)
     await recordAudit(ctx, tx, { action: 'trip_guest.removed', entity: 'trip_guest', entityId: row.id, metadata: { tripId: trip.id } })
     return { id: row.id }
   })
+}
+
+/**
+ * What a guest leaves behind on the trip that is kept by account rather than by guest row, so it
+ * doesn't go with the row: their votes on the plan and on the polls, and their choice not to get
+ * updates by email. Left behind, their votes would keep counting and come back if they were let
+ * on again. Options they suggested stay, since others may have voted for them and the household
+ * can take them off. Someone who has since joined the household votes as a member now, so what's
+ * theirs is left alone.
+ */
+async function clearGuestTraces(tx: Db, tripId: string, userId: string, householdId: string): Promise<void> {
+  const [member] = await tx
+    .select({ userId: householdMembers.userId })
+    .from(householdMembers)
+    .where(and(eq(householdMembers.householdId, householdId), eq(householdMembers.userId, userId)))
+    .limit(1)
+  if (member) return
+  const planOptions = tx
+    .select({ id: itineraryOptions.id })
+    .from(itineraryOptions)
+    .innerJoin(itinerarySlots, eq(itinerarySlots.id, itineraryOptions.slotId))
+    .where(eq(itinerarySlots.tripId, tripId))
+  const pollOptions = tx
+    .select({ id: tripPollOptions.id })
+    .from(tripPollOptions)
+    .innerJoin(tripPolls, eq(tripPolls.id, tripPollOptions.pollId))
+    .where(eq(tripPolls.tripId, tripId))
+  await tx.delete(optionVotes).where(and(eq(optionVotes.userId, userId), inArray(optionVotes.optionId, planOptions)))
+  await tx.delete(tripPollVotes).where(and(eq(tripPollVotes.userId, userId), inArray(tripPollVotes.optionId, pollOptions)))
+  await tx.delete(tripUpdateMutes).where(and(eq(tripUpdateMutes.tripId, tripId), eq(tripUpdateMutes.userId, userId)))
+}
+
+/**
+ * Someone who says they can't go drops off the arrivals board and gives their bed back. Their
+ * travel and room go with the answer rather than lingering out of sight, where nobody can take
+ * them off, only to come back stale if the answer changes again. A ride they offered someone is
+ * open again too, unless they're in the household, whose members give rides whether or not
+ * they're travelling.
+ */
+async function clearPlansOfNotGoing(tx: Db, guestId: string): Promise<void> {
+  const [guest] = await tx
+    .select({ tripId: tripGuests.tripId, userId: tripGuests.userId, householdId: trips.householdId })
+    .from(tripGuests)
+    .innerJoin(trips, eq(trips.id, tripGuests.tripId))
+    .where(eq(tripGuests.id, guestId))
+    .limit(1)
+  if (!guest) return
+  await tx.delete(tripArrivals).where(and(eq(tripArrivals.tripId, guest.tripId), eq(tripArrivals.guestId, guestId)))
+  await tx.delete(tripRoomAssignments).where(and(eq(tripRoomAssignments.tripId, guest.tripId), eq(tripRoomAssignments.guestId, guestId)))
+  if (!guest.userId) return
+  const [member] = await tx
+    .select({ userId: householdMembers.userId })
+    .from(householdMembers)
+    .where(and(eq(householdMembers.householdId, guest.householdId), eq(householdMembers.userId, guest.userId)))
+    .limit(1)
+  if (member) return
+  await tx
+    .update(tripArrivals)
+    .set({ rideUserId: null, updatedAt: sql`now()` })
+    .where(and(eq(tripArrivals.tripId, guest.tripId), eq(tripArrivals.rideUserId, guest.userId)))
 }
 
 async function hasSharedCosts(db: Db, tripId: string, guestId: string): Promise<boolean> {
@@ -429,18 +503,25 @@ export interface WhoIsGoing {
 /** Who is coming, as the invitation shows it: first names and a count, nothing that identifies. */
 async function whoIsGoing(db: Db, tripId: string): Promise<WhoIsGoing> {
   const travellers = await db
-    .select({ name: sql<string | null>`coalesce(${householdPeople.name}, ${profiles.fullName})` })
+    .select({ name: sql<string | null>`coalesce(${householdPeople.name}, ${profiles.fullName})`, userId: householdPeople.userId })
     .from(tripTravellers)
     .innerJoin(householdPeople, eq(householdPeople.id, tripTravellers.personId))
     .leftJoin(profiles, eq(profiles.id, householdPeople.userId))
     .where(eq(tripTravellers.tripId, tripId))
     .orderBy(asc(tripTravellers.createdAt))
-  const guests = await db
-    .select({ name: profiles.fullName, response: tripGuests.response, partySize: tripGuests.partySize, approvedAt: tripGuests.approvedAt })
+  const everyGuest = await db
+    .select({
+      name: profiles.fullName,
+      userId: tripGuests.userId,
+      response: tripGuests.response,
+      partySize: tripGuests.partySize,
+      approvedAt: tripGuests.approvedAt,
+    })
     .from(tripGuests)
     .leftJoin(profiles, eq(profiles.id, tripGuests.userId))
     .where(eq(tripGuests.tripId, tripId))
     .orderBy(asc(tripGuests.respondedAt))
+  const guests = guestsBesideTravellers(everyGuest, travellers)
   const going = guests.filter(guest => guest.approvedAt !== null && guest.response === 'going')
   const names = [...travellers, ...going].flatMap(row => {
     const name = firstName(row.name)
@@ -565,6 +646,7 @@ export async function respondToTripInvite(
         guestId = await answerThroughLink(ctx, tx, invite, answer, input.now)
       }
 
+      if (input.response === 'not_going') await clearPlansOfNotGoing(tx, guestId)
       await recordAudit({ userId: ctx.userId, householdId: invite.householdId }, tx, {
         action: 'trip_guest.responded',
         entity: 'trip_guest',
@@ -1041,6 +1123,7 @@ export async function updateMyTripAnswer(
         householdId: sql<string>`(select ${trips.householdId} from ${trips} where ${trips.id} = ${tripGuests.tripId})`,
       })
     if (!row) throw new NotFoundError(NOT_ON_TRIP)
+    if (input.response === 'not_going') await clearPlansOfNotGoing(tx, row.id)
     await recordAudit({ userId: ctx.userId, householdId: row.householdId }, tx, {
       action: 'trip_guest.responded',
       entity: 'trip_guest',

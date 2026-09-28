@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { parseForm, runAction } from '@/lib/actions/run'
 import type { ActionState } from '@/lib/actions/state'
-import { getRequestContext, requireSession } from '@/lib/auth/context'
+import { getRequestContext } from '@/lib/auth/context'
 import * as guests from '@/lib/travel/guests'
 
 // Form wrappers around the same service /api/v1/trips/:tripId/guests and /link call. Permissions
@@ -48,10 +48,9 @@ function splitEmails(raw: string): string[] {
 export async function inviteGuestsAction(_previous: ActionState, formData: FormData): Promise<ActionState> {
   return runAction(formData, async () => {
     const ctx = await getRequestContext()
-    const session = await requireSession()
     const { tripId, emails } = parseForm(inviteForm, formData)
     const body = inviteTripGuestsBodySchema.parse({ emails: splitEmails(emails) })
-    const { invited, skipped } = await guests.inviteTripGuests(ctx, session, tripId, body)
+    const { invited, skipped } = await guests.inviteTripGuests(ctx, tripId, body)
     refresh(tripId)
     const sent =
       invited.length === 0

@@ -216,7 +216,7 @@ describe('updates that post themselves', () => {
     const pollId = polls[0]?.id ?? ''
     const added = await addTripPollOption(sam, db, { tripId, pollId, option: { label: 'Lisbon' }, now })
     const optionId = added.polls[0]?.options[0]?.id ?? ''
-    await pickTripPollOption(owner, db, { tripId, pollId, optionId })
+    await pickTripPollOption(owner, db, { tripId, pollId, optionId, now })
     expect((await allUpdates()).filter(update => update.kind === 'destination').map(update => update.detail)).toEqual(['Lisbon'])
   })
 })

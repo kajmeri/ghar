@@ -13,6 +13,7 @@ import {
 } from '@ghar/contracts'
 import { roomFillText } from '@ghar/core/trip-rooms'
 import { useRef, useState, type SyntheticEvent } from 'react'
+import { ConfirmDialog } from '@/app/(app)/_components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { FormError } from '@/components/ui/form-error'
@@ -131,16 +132,28 @@ function RoomCard({ tripId, room, canManage }: { tripId: string; room: TripRoom;
             >
               Change
             </button>
-            <button
-              type='button'
-              disabled={remove.pending}
-              onClick={() => {
+            <ConfirmDialog
+              trigger={
+                <button
+                  type='button'
+                  disabled={remove.pending}
+                  className='min-h-tap text-sm text-ink-muted underline underline-offset-2 disabled:opacity-40'
+                >
+                  {remove.pending ? 'Removing…' : 'Remove room'}
+                </button>
+              }
+              title={`Remove ${room.name}?`}
+              description={
+                room.people.length === 0
+                  ? 'It comes off the trip’s rooms.'
+                  : `It comes off the trip’s rooms, and ${room.people.map(personName).join(', ')} will need somewhere else to sleep.`
+              }
+              confirmLabel='Remove room'
+              tone='destructive'
+              onConfirm={() => {
                 remove.mutate()
               }}
-              className='min-h-tap text-sm text-ink-muted underline underline-offset-2 disabled:opacity-40'
-            >
-              {remove.pending ? 'Removing…' : 'Remove room'}
-            </button>
+            />
           </div>
         )
       ) : null}

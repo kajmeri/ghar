@@ -11,14 +11,24 @@ import {
   partyKey,
   sameParty,
   settleUp,
-  splitCents,
+  splitCost,
   tripBalances,
   type CostShare,
   type TripParty,
 } from '@ghar/core/trip-costs'
-import { firstName, isAdmitted } from '@ghar/core/trip-guests'
+import { firstName, guestsBesideTravellers, isAdmitted } from '@ghar/core/trip-guests'
 import { and, asc, count, desc, eq } from 'drizzle-orm'
-import { households, profiles, tripCosts, tripCostShares, tripGuests, tripPayments, trips, tripTravellers } from '../schema'
+import {
+  householdPeople,
+  households,
+  profiles,
+  tripCosts,
+  tripCostShares,
+  tripGuests,
+  tripPayments,
+  trips,
+  tripTravellers,
+} from '../schema'
 import { recordAudit } from './audit'
 import { auditActor, requireParticipant, type Participant } from './trip-participant'
 import type { Db, SessionContext } from './types'
@@ -109,6 +119,7 @@ function yourParty(participant: Participant): TripParty {
 
 interface GuestRow {
   id: string
+  userId: string | null
   name: string | null
   partySize: number
   response: 'going' | 'maybe' | 'not_going' | null
@@ -119,6 +130,7 @@ async function loadGuests(db: Db, tripId: string): Promise<GuestRow[]> {
   return db
     .select({
       id: tripGuests.id,
+      userId: tripGuests.userId,
       name: profiles.fullName,
       partySize: tripGuests.partySize,
       response: tripGuests.response,
@@ -155,7 +167,11 @@ async function loadLedger(db: Db, participant: Participant): Promise<TripCostsVi
       .from(households)
       .where(eq(households.id, participant.hostHouseholdId))
       .limit(1),
-    db.select({ n: count() }).from(tripTravellers).where(eq(tripTravellers.tripId, tripId)),
+    db
+      .select({ userId: householdPeople.userId })
+      .from(tripTravellers)
+      .innerJoin(householdPeople, eq(householdPeople.id, tripTravellers.personId))
+      .where(eq(tripTravellers.tripId, tripId)),
     loadGuests(db, tripId),
     db
       .select({
@@ -173,7 +189,7 @@ async function loadLedger(db: Db, participant: Participant): Promise<TripCostsVi
       .select({ costId: tripCostShares.costId, guestId: tripCostShares.guestId, shares: tripCostShares.shares })
       .from(tripCostShares)
       .where(eq(tripCostShares.tripId, tripId))
-      // In a steady order (guests, then the household), so a split's pennies land the same way.
+      // Guests, then the household, the order splitCost hands out pennies in anyway.
       .orderBy(asc(tripCostShares.costId), asc(tripCostShares.guestId)),
     db
       .select({
@@ -207,13 +223,17 @@ async function loadLedger(db: Db, participant: Participant): Promise<TripCostsVi
   }))
   const balances = tripBalances(ledgerCosts, ledgerPayments)
 
-  // A guest counts while they're going or might, or while money of theirs is on the ledger.
+  // A guest counts while they're going or might, or while money of theirs is on the ledger. A
+  // guest who has since joined the household and is one of its travellers is in the household's
+  // party now, so their guest party only stays while it has money on the ledger: whatever it
+  // paid or owes still shows and can be settled, but it isn't offered for new splits.
   const onLedger = new Set(balances.keys())
+  const counted = new Set(guestsBesideTravellers(guests, travellers).map(guest => guest.id))
   const parties: TripCostParty[] = [
     {
       party: HOUSEHOLD_PARTY,
       name: household.name,
-      heads: Math.max(1, travellers[0]?.n ?? 0),
+      heads: Math.max(1, travellers.length),
       you: you.kind === 'household',
       active: true,
       balanceCents: balances.get('household') ?? 0,
@@ -222,7 +242,7 @@ async function loadLedger(db: Db, participant: Participant): Promise<TripCostsVi
       .sort((x, y) => responseOrder(x.response) - responseOrder(y.response))
       .flatMap(guest => {
         const party: TripParty = { kind: 'guest', id: guest.id }
-        const active = isAdmitted(guest) && (guest.response === 'going' || guest.response === 'maybe')
+        const active = counted.has(guest.id) && isAdmitted(guest) && (guest.response === 'going' || guest.response === 'maybe')
         if (!active && !onLedger.has(partyKey(party))) return []
         return [
           {
@@ -244,10 +264,7 @@ async function loadLedger(db: Db, participant: Participant): Promise<TripCostsVi
     you,
     parties,
     costs: ledgerCosts.map(cost => {
-      const parts = splitCents(
-        cost.amountCents,
-        cost.shares.map(share => share.shares)
-      )
+      const parts = splitCost(cost.amountCents, cost.shares)
       const split = cost.shares.map((share, index) => ({ party: share.party, shares: share.shares, cents: parts[index] ?? 0 }))
       return {
         id: cost.id,

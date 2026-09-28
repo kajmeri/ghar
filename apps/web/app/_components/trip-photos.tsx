@@ -3,7 +3,7 @@
 import { deleteTripPhoto, TRIP_PHOTO_BATCH_MAX, type TripPhoto, type TripPhotosValue } from '@ghar/contracts'
 import { Dialog } from 'radix-ui'
 import { useRouter } from 'next/navigation'
-import { useRef, useState, useTransition, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, useTransition, type ChangeEvent } from 'react'
 import { ConfirmDialog } from '@/app/(app)/_components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/ui/form-error'
@@ -15,6 +15,9 @@ import { addPhotoToTrip, UploadError } from '@/lib/travel/photo-upload'
 // Photos are shrunk and stripped of their location on the phone, then go straight to private
 // storage. The links to them are signed and short-lived, so the page asks again when they lapse.
 
+/** How long before the links lapse to ask for new ones, so a photo never fails to load first. */
+const RENEW_BEFORE_MS = 2 * 60_000
+
 export function TripPhotos({ tripId, value }: { tripId: string; value: TripPhotosValue }) {
   const router = useRouter()
   const input = useRef<HTMLInputElement>(null)
@@ -22,7 +25,13 @@ export function TripPhotos({ tripId, value }: { tripId: string; value: TripPhoto
   const [error, setError] = useState<string | null>(null)
   const [refreshing, startRefresh] = useTransition()
   const [open, setOpen] = useState<number | null>(null)
-  const retried = useRef(false)
+  const renewedFor = useRef<string | null>(null)
+  // The viewer stays open until the photo is really gone, so a failure shows beside it. Closed
+  // meanwhile, the failure shows above the album instead.
+  const remove = useMutation(async (photoId: string) => {
+    await api.request(deleteTripPhoto, { params: { tripId, photoId } })
+    setOpen(null)
+  })
 
   const add = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = [...(event.target.files ?? [])].slice(0, Math.min(TRIP_PHOTO_BATCH_MAX, value.room))
@@ -46,14 +55,35 @@ export function TripPhotos({ tripId, value }: { tripId: string; value: TripPhoto
     })
   }
 
-  // The signed links last an hour. A page left open longer gets fresh ones, once.
-  const onBroken = () => {
-    if (retried.current) return
-    retried.current = true
-    startRefresh(() => {
-      router.refresh()
-    })
-  }
+  // The signed links last an hour, and a page can stay open far longer. Fresh ones come with a
+  // refresh: shortly before they lapse, on coming back to a tab or phone that slept past that
+  // (a timer doesn't run in the background), or straight away if a photo fails to load. Each set
+  // of links is renewed once, so a set that is somehow no better can't set off a loop.
+  const expiresAt = value.urlsExpireAt
+  const hasPhotos = value.photos.length > 0
+  const [brokenFor, setBrokenFor] = useState<string | null>(null)
+  useEffect(() => {
+    if (!hasPhotos) return
+    const renew = () => {
+      if (renewedFor.current === expiresAt) return
+      renewedFor.current = expiresAt
+      startRefresh(() => {
+        router.refresh()
+      })
+    }
+    const renewAt = brokenFor === expiresAt ? Date.now() : Date.parse(expiresAt) - RENEW_BEFORE_MS
+    const timer = window.setTimeout(renew, Math.max(0, renewAt - Date.now()))
+    const onReturn = () => {
+      if (document.visibilityState === 'visible' && Date.now() >= renewAt) renew()
+    }
+    document.addEventListener('visibilitychange', onReturn)
+    window.addEventListener('focus', onReturn)
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onReturn)
+      window.removeEventListener('focus', onReturn)
+    }
+  }, [expiresAt, hasPhotos, brokenFor, router])
 
   const busy = progress !== null || refreshing
   const current = open === null ? null : (value.photos[open] ?? null)
@@ -95,6 +125,7 @@ export function TripPhotos({ tripId, value }: { tripId: string; value: TripPhoto
         </p>
       ) : null}
       <FormError>{error}</FormError>
+      <FormError>{open === null ? remove.error : null}</FormError>
 
       {value.photos.length === 0 ? (
         <div className='flex flex-col items-start gap-2 rounded-card border border-dashed border-line px-4 py-6'>
@@ -124,7 +155,16 @@ export function TripPhotos({ tripId, value }: { tripId: string; value: TripPhoto
                 }}
                 aria-label={photo.caption ?? `Photo${photo.addedBy ? ` from ${photo.addedBy}` : ''}`}
               >
-                <img src={photo.url} alt='' loading='lazy' decoding='async' className='size-full object-cover' onError={onBroken} />
+                <img
+                  src={photo.url}
+                  alt=''
+                  loading='lazy'
+                  decoding='async'
+                  className='size-full object-cover'
+                  onError={() => {
+                    setBrokenFor(expiresAt)
+                  }}
+                />
               </button>
             </li>
           ))}
@@ -132,7 +172,6 @@ export function TripPhotos({ tripId, value }: { tripId: string; value: TripPhoto
       )}
 
       <PhotoViewer
-        tripId={tripId}
         photo={current}
         position={open}
         count={value.photos.length}
@@ -140,27 +179,33 @@ export function TripPhotos({ tripId, value }: { tripId: string; value: TripPhoto
         onClose={() => {
           setOpen(null)
         }}
+        onRemove={remove.mutate}
+        removing={remove.pending}
+        removeError={remove.error}
       />
     </section>
   )
 }
 
 function PhotoViewer({
-  tripId,
   photo,
   position,
   count,
   onMove,
   onClose,
+  onRemove,
+  removing,
+  removeError,
 }: {
-  tripId: string
   photo: TripPhoto | null
   position: number | null
   count: number
   onMove: (index: number) => void
   onClose: () => void
+  onRemove: (photoId: string) => void
+  removing: boolean
+  removeError: string | null
 }) {
-  const remove = useMutation((photoId: string) => api.request(deleteTripPhoto, { params: { tripId, photoId } }))
   const at = position ?? 0
   const byline = photo ? (photo.mine ? 'Added by you' : photo.addedBy ? `Added by ${photo.addedBy}` : null) : null
 
@@ -229,8 +274,8 @@ function PhotoViewer({
                 <div className='ml-auto'>
                   <ConfirmDialog
                     trigger={
-                      <Button type='button' variant='outline' disabled={remove.pending}>
-                        {remove.pending ? 'Taking down…' : 'Take down'}
+                      <Button type='button' variant='outline' disabled={removing}>
+                        {removing ? 'Taking down…' : 'Take down'}
                       </Button>
                     }
                     title='Take this photo down?'
@@ -238,14 +283,13 @@ function PhotoViewer({
                     confirmLabel='Take down'
                     tone='destructive'
                     onConfirm={() => {
-                      remove.mutate(photo.id)
-                      onClose()
+                      onRemove(photo.id)
                     }}
                   />
                 </div>
               ) : null}
             </div>
-            <FormError>{remove.error}</FormError>
+            <FormError>{removeError}</FormError>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

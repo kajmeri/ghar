@@ -8,6 +8,7 @@ import {
   partyKey,
   settleUp,
   splitCents,
+  splitCost,
   tripBalances,
   type TripParty,
 } from '../src/trip-costs'
@@ -26,6 +27,25 @@ describe('splitCents', () => {
 
   it('gives nothing when there are no shares', () => {
     expect(splitCents(500, [])).toEqual([])
+  })
+})
+
+describe('splitCost', () => {
+  it('lands the pennies on the same people whatever order the shares come in', () => {
+    // 100 cents three ways: one penny over, and it goes to the first in the one fixed order,
+    // guests by id and then the household. Noor sorts before Sam.
+    const formOrder = splitCost(100, [
+      { party: HOUSEHOLD_PARTY, shares: 1 },
+      { party: sam, shares: 1 },
+      { party: noor, shares: 1 },
+    ])
+    const ledgerOrder = splitCost(100, [
+      { party: noor, shares: 1 },
+      { party: sam, shares: 1 },
+      { party: HOUSEHOLD_PARTY, shares: 1 },
+    ])
+    expect(formOrder).toEqual([33, 33, 34])
+    expect(ledgerOrder).toEqual([34, 33, 33])
   })
 })
 

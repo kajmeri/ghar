@@ -6,7 +6,7 @@ import { ARRIVAL_READS_PER_DAY } from '@ghar/core/trip-arrivals'
 import type { TripPersonKey } from '@ghar/core/trip-guests'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createInvitation } from '../src/queries/invitations'
-import { createPerson } from '../src/queries/people'
+import { createPerson, listPeople } from '../src/queries/people'
 import { acceptInvitation, createHousehold, updateProfile } from '../src/queries/session'
 import {
   claimArrivalRead,
@@ -16,7 +16,7 @@ import {
   setArrivalRide,
   type SaveTripArrivalInput,
 } from '../src/queries/trip-arrivals'
-import { inviteTripGuests, respondToTripInvite } from '../src/queries/trip-guests'
+import { inviteTripGuests, respondToTripInvite, updateMyTripAnswer } from '../src/queries/trip-guests'
 import { createTripRoom, deleteTripRoom, listTripRooms, placeTripPerson, updateTripRoom } from '../src/queries/trip-rooms'
 import { createTrip, updateTrip } from '../src/queries/trips'
 import type { Db, SessionContext } from '../src/queries/types'
@@ -296,5 +296,68 @@ describe('rooms', () => {
     expect((await queryAs(client, sam.userId, 'select id from trip_rooms')).length).toBeGreaterThan(0)
     expect(await queryAs(client, stranger.userId, 'select id from trip_rooms')).toHaveLength(0)
     expect(await queryAs(client, stranger.userId, 'select id from trip_room_assignments')).toHaveLength(0)
+  })
+})
+
+describe('a household viewer who travels', () => {
+  it('sees their own travel but can’t fill it in or have a confirmation read', async () => {
+    const vik = (await listPeople(a, db)).find(entry => entry.userId === viewer.userId)
+    if (!vik) throw new Error('Expected Vik in the household')
+    await updateTrip(a, db, otherTripId, { travellerIds: [asha.id, vik.id] })
+    const vikKey: TripPersonKey = { kind: 'traveller', id: vik.id }
+
+    const board = await listTripArrivals(viewer, db, otherTripId)
+    expect(board.people.find(entry => entry.you)).toMatchObject({ name: 'Vik', canEdit: false })
+    expect(board.canRead).toBe(false)
+    await expect(saveTripArrival(viewer, db, arrival(vikKey, { tripId: otherTripId }))).rejects.toThrow(ForbiddenError)
+    await expect(claimArrivalRead(viewer, db, otherTripId)).rejects.toThrow(ForbiddenError)
+
+    // The household can still fill it in for them, and only it can take it off.
+    const saved = await saveTripArrival(owner, db, arrival(vikKey, { tripId: otherTripId }))
+    const vikIn = saved.arrivals.find(row => row.name === 'Vik')
+    expect(vikIn?.canEdit).toBe(true)
+    await expect(deleteTripArrival(viewer, db, { tripId: otherTripId, arrivalId: vikIn?.id ?? '' })).rejects.toThrow(ForbiddenError)
+  })
+})
+
+describe('a guest who can’t go after all', () => {
+  it('takes their travel, bed and ride offers off the trip with them, for good', async () => {
+    const sintra = (
+      await createTrip(a, db, {
+        name: 'Sintra',
+        destination: 'Sintra',
+        startsOn: null,
+        endsOn: null,
+        status: 'idea',
+        coverImageUrl: null,
+        budgetCents: null,
+        notes: null,
+        travellerIds: [asha.id],
+      })
+    ).id
+    await inviteTripGuests(a, db, { tripId: sintra, invites: [{ email: 'lee@example.com', tokenHash: 'hash-lee' }], now })
+    const lee = await person('lee@example.com', 'Lee Park')
+    await respondToTripInvite(lee, db, { tokenHash: 'hash-lee', response: 'going', partySize: 1, now })
+    const leeKey = key((await listTripArrivals(owner, db, sintra)).people, 'Lee')
+
+    await saveTripArrival(lee, db, arrival(leeKey, { tripId: sintra }))
+    const board = await saveTripArrival(owner, db, arrival(asha, { tripId: sintra, wantsRide: true }))
+    const ashaIn = board.arrivals.find(row => row.name === 'Asha')
+    if (!ashaIn) throw new Error('Expected Asha’s arrival')
+    await setArrivalRide(lee, db, { tripId: sintra, arrivalId: ashaIn.id, offer: true })
+    const loft = (await createTripRoom(owner, db, { tripId: sintra, name: 'Loft', sleeps: 1 })).rooms[0]
+    if (!loft) throw new Error('Expected a room')
+    await placeTripPerson(owner, db, { tripId: sintra, person: leeKey, roomId: loft.id })
+
+    await updateMyTripAnswer(lee, db, { tripId: sintra, response: 'not_going', partySize: 1, now })
+    const after = await listTripArrivals(owner, db, sintra)
+    expect(after.arrivals.map(row => [row.name, row.ride])).toEqual([['Asha', 'wanted']])
+    expect(await queryAs(client, owner.userId, `select id from trip_arrivals where guest_id = '${leeKey.id}'`)).toHaveLength(0)
+    expect(await queryAs(client, owner.userId, `select id from trip_room_assignments where guest_id = '${leeKey.id}'`)).toHaveLength(0)
+
+    // Changing their mind again starts them with a blank slate, not last time's plans.
+    await updateMyTripAnswer(lee, db, { tripId: sintra, response: 'going', partySize: 1, now })
+    expect((await listTripArrivals(owner, db, sintra)).arrivals.map(row => row.name)).toEqual(['Asha'])
+    expect((await listTripRooms(owner, db, sintra)).unplaced.map(entry => entry.name)).toEqual(['Asha', 'Lee'])
   })
 })

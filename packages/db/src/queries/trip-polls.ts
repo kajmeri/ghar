@@ -226,7 +226,7 @@ export async function deleteTripPoll(ctx: SessionContext, db: Db, input: { tripI
 export async function pickTripPollOption(
   ctx: SessionContext,
   db: Db,
-  input: { tripId: string; pollId: string; optionId: string }
+  input: { tripId: string; pollId: string; optionId: string; now: Date }
 ): Promise<TripPollsView> {
   const participant = await requireParticipant(ctx, db, input.tripId)
   requireManager(participant)
@@ -238,7 +238,8 @@ export async function pickTripPollOption(
       .where(and(eq(tripPollOptions.id, input.optionId), eq(tripPollOptions.pollId, poll.id)))
       .limit(1)
     if (!option) throw new NotFoundError(OPTION_NOT_FOUND)
-    const patch = poll.kind === 'dates' ? tripDatesFromOption(option) : { destination: option.label }
+    const patch =
+      poll.kind === 'dates' ? tripDatesFromOption(option, todayInTimeZone(participant.timeZone, input.now)) : { destination: option.label }
     const tripKey = and(eq(trips.id, input.tripId), eq(trips.householdId, participant.hostHouseholdId))
     const [before] = await tx
       .select({ startsOn: trips.startsOn, endsOn: trips.endsOn, destination: trips.destination })
@@ -330,28 +331,35 @@ export async function voteOnTripPollOption(
 ): Promise<TripPollsView> {
   const participant = await requireParticipant(ctx, db, input.tripId)
   requireVoter(participant)
-  const option = await requireOption(db, input)
-  if (input.vote === null) {
-    await db.delete(tripPollVotes).where(and(eq(tripPollVotes.optionId, option.id), eq(tripPollVotes.userId, ctx.userId)))
-  } else {
-    await db
-      .insert(tripPollVotes)
-      .values({ optionId: option.id, userId: ctx.userId, vote: input.vote })
-      .onConflictDoUpdate({ target: [tripPollVotes.optionId, tripPollVotes.userId], set: { vote: input.vote } })
-  }
+  await db.transaction(async tx => {
+    // Holds the option and its poll until the vote is in, so a pick, a close or the option being
+    // taken back waits for it, or has already gone and the vote finds nothing to land on.
+    const option = await requireOption(tx, input, { lock: true })
+    if (input.vote === null) {
+      await tx.delete(tripPollVotes).where(and(eq(tripPollVotes.optionId, option.id), eq(tripPollVotes.userId, ctx.userId)))
+    } else {
+      await tx
+        .insert(tripPollVotes)
+        .values({ optionId: option.id, userId: ctx.userId, vote: input.vote })
+        .onConflictDoUpdate({ target: [tripPollVotes.optionId, tripPollVotes.userId], set: { vote: input.vote } })
+    }
+  })
   return loadPolls(db, participant)
 }
 
 async function requireOption(
   db: Db,
-  input: { tripId: string; pollId: string; optionId: string }
+  input: { tripId: string; pollId: string; optionId: string },
+  options: { lock?: boolean } = {}
 ): Promise<{ id: string; createdByUserId: string | null }> {
-  const [option] = await db
+  const query = db
     .select({ id: tripPollOptions.id, createdByUserId: tripPollOptions.createdByUserId })
     .from(tripPollOptions)
     .innerJoin(tripPolls, eq(tripPolls.id, tripPollOptions.pollId))
     .where(and(eq(tripPollOptions.id, input.optionId), eq(tripPolls.id, input.pollId), eq(tripPolls.tripId, input.tripId)))
     .limit(1)
+  // A share lock lets votes go in side by side while anything deleting the rows waits.
+  const [option] = options.lock ? await query.for('share') : await query
   if (!option) throw new NotFoundError(OPTION_NOT_FOUND)
   return option
 }

@@ -4,10 +4,13 @@ import {
   assertEmailInviteIsFor,
   assertPartySize,
   firstName,
+  guestsBesideTravellers,
   guestStatus,
   MAX_INVITE_EMAILS,
   normalizeGuestEmails,
   tripHeadcount,
+  tripPeople,
+  tripRoster,
 } from '../src/trip-guests'
 
 const letIn = new Date('2026-09-24T12:00:00Z')
@@ -34,6 +37,37 @@ describe('the headcount', () => {
       ],
     })
     expect(count).toEqual({ going: 5, maybe: 4 })
+  })
+})
+
+describe('a guest who joined the household', () => {
+  const travellers = [
+    { personId: 'p1', name: 'Asha Rao', userId: 'u1' },
+    // Pat was a guest, joined the household, and was added as a traveller.
+    { personId: 'p2', name: 'Pat Lee', userId: 'u-pat' },
+    { personId: 'p3', name: 'Kiddo', userId: null },
+  ]
+  const guests = [
+    { guestId: 'g-pat', name: 'Pat Lee', userId: 'u-pat', partySize: 1, response: 'going' as const, approvedAt: letIn },
+    { guestId: 'g-sam', name: 'Sam Roy', userId: 'u-sam', partySize: 2, response: 'going' as const, approvedAt: letIn },
+    { guestId: 'g-new', name: null, userId: null, partySize: 1, response: null, approvedAt: letIn },
+  ]
+
+  it('counts once, as the traveller', () => {
+    expect(guestsBesideTravellers(guests, travellers).map(guest => guest.guestId)).toEqual(['g-sam', 'g-new'])
+    expect(tripRoster({ travellers, guests }).map(entry => entry.key.id)).toEqual(['p1', 'p2', 'p3', 'g-sam'])
+    const people = tripPeople({ travellers, guests, viewerUserId: 'u-pat' })
+    expect(people.map(person => [person.name, person.host, person.you])).toEqual([
+      ['Asha', true, false],
+      ['Pat', true, true],
+      ['Kiddo', true, false],
+      ['Sam', false, false],
+    ])
+  })
+
+  it('still counts as a guest until the household puts them on the trip', () => {
+    const others = travellers.filter(traveller => traveller.userId !== 'u-pat')
+    expect(tripRoster({ travellers: others, guests }).map(entry => entry.key.id)).toEqual(['p1', 'p3', 'g-pat', 'g-sam'])
   })
 })
 

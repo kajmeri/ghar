@@ -1,7 +1,7 @@
 import type { PGlite } from '@electric-sql/pglite'
 import type { RequestContext } from '@ghar/contracts'
 import { invitationExpiresAt } from '@ghar/core/invitations'
-import { acceptInvitation, createHousehold, createInvitation, type Db } from '@ghar/db/queries'
+import { acceptInvitation, createHousehold, createInvitation, updateProfile, type Db } from '@ghar/db/queries'
 import { createOption, createSlot, createTrip } from '@ghar/db/queries'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
@@ -333,5 +333,23 @@ describe('a guest’s calendar feed', () => {
     expect((await call(createFeed, 'POST', { tripId })).status).toBe(404)
     signInAs(null)
     expect((await call(createFeed, 'POST', { tripId })).status).toBe(401)
+  })
+})
+
+describe('who a trip invitation is from', () => {
+  it('names the inviter by first name, or the household, and never by address', async () => {
+    signInAs(ownerAccount, owner)
+    await call(invite, 'POST', { tripId }, { emails: ['ravi@example.com'] })
+    const unnamed = test.outbox.at(-1)
+    expect(unnamed?.subject).toBe('The Mehtas invited you to Goa in December')
+    expect(unnamed?.text).toContain('The Mehtas invited you on a trip.')
+    expect(`${unnamed?.text ?? ''}${unnamed?.html ?? ''}`).not.toContain(ownerAccount.email)
+
+    await updateProfile(ownerAccount, db, { fullName: 'Vikram Mehta' })
+    await call(invite, 'POST', { tripId }, { emails: ['lina@example.com'] })
+    const named = test.outbox.at(-1)
+    expect(named?.subject).toBe('Vikram invited you to Goa in December')
+    expect(named?.text).toContain('Vikram from The Mehtas invited you on a trip.')
+    expect(named?.text).not.toContain('Vikram Mehta')
   })
 })
