@@ -25,7 +25,10 @@ import {
   setMyCalendarFeed,
   setTripShareLinkApproval,
   updateMyTripAnswer,
+  voteOnSharedOption,
 } from '../src/queries/trip-guests'
+import { addTripPollOption, listTripPolls, openTripPoll, voteOnTripPollOption } from '../src/queries/trip-polls'
+import { listTripUpdates, setTripUpdatesMuted } from '../src/queries/trip-updates'
 import { createOption, createSlot } from '../src/queries/itinerary'
 import { createTrip } from '../src/queries/trips'
 import type { Db, SessionContext } from '../src/queries/types'
@@ -357,7 +360,7 @@ describe('the plan and the calendar, as a guest', () => {
     // What's still open lists what's in the running, so the guest can weigh in.
     expect(shared.itinerary[1]?.slots[0]?.choices.map(choice => choice.title)).toEqual(['Palolem', 'Agonda'])
     const text = JSON.stringify(shared)
-    for (const secret of ['ABC123', '600000', 'sea table', 'Owner is a friend', '7781', 'Villa code']) {
+    for (const secret of ['ABC123', '600000', 'sea table', 'Owner is a friend', 'Gate code', 'Villa code']) {
       expect(text).not.toContain(secret)
     }
   })
@@ -397,5 +400,68 @@ describe('the plan and the calendar, as a guest', () => {
     await setMyCalendarFeed(priya, db, { tripId, tokenHash: 'feed-3', tokenSealed: 'sealed-3' })
     await removeTripGuest(a, db, { tripId, guestId: priyaGuestId })
     await expect(readTripCalendarFeed(db, 'feed-3')).rejects.toThrow(NotFoundError)
+  })
+})
+
+describe('taking a guest off the trip', () => {
+  const owner = () => ({ userId: a.userId, email: 'owner-a@example.com' })
+
+  async function leftBehind(userId: string): Promise<number> {
+    const result = await client.query<{ n: number }>(
+      `select (select count(*) from option_votes where user_id = $1)::int
+        + (select count(*) from trip_poll_votes where user_id = $1)::int
+        + (select count(*) from trip_update_mutes where user_id = $1)::int as n`,
+      [userId]
+    )
+    return result.rows[0]?.n ?? -1
+  }
+
+  it('takes their votes and muting with them, keeps what they suggested, and brings nothing back if they return', async () => {
+    const ravi = await person('ravi@example.com', 'Ravi Rao')
+    await inviteTripGuests(a, db, { tripId, invites: [{ email: 'ravi@example.com', tokenHash: 'hash-ravi' }], now })
+    const { guestId } = await respondToTripInvite(ravi, db, { tokenHash: 'hash-ravi', response: 'going', partySize: 1, now })
+
+    const beach = (await getSharedTrip(ravi, db, tripId)).itinerary.flatMap(day => day.slots).find(slot => slot.label === 'Beach')
+    await voteOnSharedOption(ravi, db, { tripId, optionId: beach?.choices[0]?.id ?? '', vote: 'yes' })
+
+    const opened = await openTripPoll(owner(), db, tripId, { kind: 'place', decideBy: null, now })
+    const pollId = opened.polls[0]?.id ?? ''
+    const withIdea = await addTripPollOption(ravi, db, { tripId, pollId, option: { label: 'Gokarna' }, now })
+    const gokarna = withIdea.polls[0]?.options.find(option => option.label === 'Gokarna')
+    await voteOnTripPollOption(ravi, db, { tripId, pollId, optionId: gokarna?.id ?? '', vote: 'yes' })
+    await setTripUpdatesMuted(ravi, db, { tripId, muted: true })
+    expect(await leftBehind(ravi.userId)).toBe(3)
+
+    await removeTripGuest(a, db, { tripId, guestId })
+    expect(await leftBehind(ravi.userId)).toBe(0)
+    // Their idea stays in the poll for everyone else, without their vote on it.
+    expect((await listTripPolls(owner(), db, tripId)).polls[0]?.options.find(option => option.label === 'Gokarna')).toMatchObject({
+      yes: 0,
+    })
+
+    // Let on again, they start from nothing.
+    await inviteTripGuests(a, db, { tripId, invites: [{ email: 'ravi@example.com', tokenHash: 'hash-ravi-2' }], now })
+    await respondToTripInvite(ravi, db, { tokenHash: 'hash-ravi-2', response: 'going', partySize: 1, now })
+    const again = (await getSharedTrip(ravi, db, tripId)).itinerary.flatMap(day => day.slots).find(slot => slot.label === 'Beach')
+    expect(again?.choices[0]).toMatchObject({ yes: 0, myVote: null })
+    expect((await listTripUpdates(ravi, db, tripId)).muted).toBe(false)
+  })
+
+  it('leaves the votes of someone who has since joined the household', async () => {
+    const gia = await person('gia@example.com', 'Gia Shah')
+    await inviteTripGuests(a, db, { tripId, invites: [{ email: 'gia@example.com', tokenHash: 'hash-gia' }], now })
+    const { guestId } = await respondToTripInvite(gia, db, { tokenHash: 'hash-gia', response: 'going', partySize: 1, now })
+    await createInvitation(a, db, {
+      email: 'gia@example.com',
+      role: 'adult',
+      tokenHash: 'hash-gia-join',
+      expiresAt: invitationExpiresAt(now),
+    })
+    await acceptInvitation(gia, db, { tokenHash: 'hash-gia-join', now })
+
+    const poll = (await listTripPolls(owner(), db, tripId)).polls[0]
+    await voteOnTripPollOption(gia, db, { tripId, pollId: poll?.id ?? '', optionId: poll?.options[0]?.id ?? '', vote: 'yes' })
+    await removeTripGuest(a, db, { tripId, guestId })
+    expect((await listTripPolls(gia, db, tripId)).polls[0]?.options[0]?.myVote).toBe('yes')
   })
 })

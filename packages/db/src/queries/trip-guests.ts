@@ -36,9 +36,13 @@ import {
   tripGuestCalendarFeeds,
   tripGuests,
   tripPayments,
+  tripPollOptions,
+  tripPolls,
+  tripPollVotes,
   trips,
   tripShareLinks,
   tripTravellers,
+  tripUpdateMutes,
 } from '../schema'
 import { recordAudit } from './audit'
 import { isUniqueViolation } from './pg-errors'
@@ -237,7 +241,7 @@ export async function approveTripGuest(
 
 /**
  * Takes someone off the trip, or turns down someone who asked. Their emailed link stops working
- * with the row. Someone from the link could ask again while the link is on; turning it off or
+ * with the row, and their votes go with them. Someone from the link could ask again while the link is on; turning it off or
  * making a new one is how to stop that.
  */
 export async function removeTripGuest(ctx: RequestContext, db: Db, input: { tripId: string; guestId: string }): Promise<{ id: string }> {
@@ -251,11 +255,42 @@ export async function removeTripGuest(ctx: RequestContext, db: Db, input: { trip
     const [row] = await tx
       .delete(tripGuests)
       .where(and(eq(tripGuests.id, input.guestId), eq(tripGuests.tripId, trip.id)))
-      .returning({ id: tripGuests.id, email: tripGuests.email })
+      .returning({ id: tripGuests.id, email: tripGuests.email, userId: tripGuests.userId })
     if (!row) throw new NotFoundError(GUEST_NOT_FOUND)
+    if (row.userId) await clearGuestTraces(tx, trip.id, row.userId, ctx.householdId)
     await recordAudit(ctx, tx, { action: 'trip_guest.removed', entity: 'trip_guest', entityId: row.id, metadata: { tripId: trip.id } })
     return { id: row.id }
   })
+}
+
+/**
+ * What a guest leaves behind on the trip that is kept by account rather than by guest row, so it
+ * doesn't go with the row: their votes on the plan and on the polls, and their choice not to get
+ * updates by email. Left behind, their votes would keep counting and come back if they were let
+ * on again. Options they suggested stay, since others may have voted for them and the household
+ * can take them off. Someone who has since joined the household votes as a member now, so what's
+ * theirs is left alone.
+ */
+async function clearGuestTraces(tx: Db, tripId: string, userId: string, householdId: string): Promise<void> {
+  const [member] = await tx
+    .select({ userId: householdMembers.userId })
+    .from(householdMembers)
+    .where(and(eq(householdMembers.householdId, householdId), eq(householdMembers.userId, userId)))
+    .limit(1)
+  if (member) return
+  const planOptions = tx
+    .select({ id: itineraryOptions.id })
+    .from(itineraryOptions)
+    .innerJoin(itinerarySlots, eq(itinerarySlots.id, itineraryOptions.slotId))
+    .where(eq(itinerarySlots.tripId, tripId))
+  const pollOptions = tx
+    .select({ id: tripPollOptions.id })
+    .from(tripPollOptions)
+    .innerJoin(tripPolls, eq(tripPolls.id, tripPollOptions.pollId))
+    .where(eq(tripPolls.tripId, tripId))
+  await tx.delete(optionVotes).where(and(eq(optionVotes.userId, userId), inArray(optionVotes.optionId, planOptions)))
+  await tx.delete(tripPollVotes).where(and(eq(tripPollVotes.userId, userId), inArray(tripPollVotes.optionId, pollOptions)))
+  await tx.delete(tripUpdateMutes).where(and(eq(tripUpdateMutes.tripId, tripId), eq(tripUpdateMutes.userId, userId)))
 }
 
 async function hasSharedCosts(db: Db, tripId: string, guestId: string): Promise<boolean> {
