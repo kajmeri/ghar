@@ -48,7 +48,7 @@ export default async function SettingsPage() {
             <Mail aria-hidden className='size-5 shrink-0 text-ink-muted' />
             <span className='min-w-0 flex-1'>
               <span className='block font-medium break-words'>Daily email</span>
-              <span className='block text-sm text-ink-muted'>What’s in it, when it comes, or turn it off</span>
+              <span className='block text-sm text-ink-muted'>What’s in it, or turn it off</span>
             </span>
             <ChevronRight aria-hidden className='size-5 shrink-0 text-ink-muted' />
           </Link>

@@ -3,6 +3,7 @@ import { runCalendarSync } from '@/lib/calendar/sync'
 import { runCron, runJob } from '@/lib/cron'
 import { openSecret } from '@/lib/crypto'
 import { getDb } from '@/lib/db'
+import { runDigest } from '@/lib/digest/service'
 import { runExpiryReminders } from '@/lib/documents/expiry-reminders'
 import { runRefillReminders } from '@/lib/health/refill-reminders'
 import { runHealthReminders } from '@/lib/health/reminders'
@@ -10,6 +11,7 @@ import { env } from '@/lib/env'
 import { runCategorization } from '@/lib/finances/run-categorization'
 import { runMailIngest } from '@/lib/mail/ingest'
 import { runNetWorthSnapshots } from '@/lib/networth/snapshots'
+import { getOneTapKey } from '@/lib/one-tap'
 import { getBookingExtractor } from '@/lib/providers/booking-extract'
 import { getTransactionCategorizer } from '@/lib/providers/categorize'
 import { getEmailProvider } from '@/lib/providers/email'
@@ -36,7 +38,9 @@ import { runTripUpdateDigest } from '@/lib/travel/update-digest'
 // the net worth snapshot comes last so it reads the balances they brought in; a second run rewrites the same day's rows rather than adding more.
 // The transaction sync asks Plaid only for what changed since its stored cursor, and advances the
 // cursor only once every row of that batch has landed. Categorization only looks at transactions
-// nothing has decided about yet, so a second run finds nothing left to ask about.
+// nothing has decided about yet, so a second run finds nothing left to ask about. The daily email goes
+// last, so it reports on what every job before it brought in. It claims each person's day with a row
+// before sending, so a second run sends nothing more; a day with nothing to say gives its claim back.
 
 export const maxDuration = 300
 /** The Gmail check stops reading this long after the run began, leaving time for the jobs after it. */
@@ -161,6 +165,12 @@ export async function GET(request: Request): Promise<Response> {
       await runJob(db, 'bank.liabilities_sync', () => runLiabilitiesSync(bankDeps(db)), deps),
       await runJob(db, 'bank.investments_sync', () => runInvestmentsSync(bankDeps(db)), deps),
       await runJob(db, 'finances.networth_snapshot', () => runNetWorthSnapshots({ db, now: new Date() }), deps),
+      await runJob(
+        db,
+        'digest.send',
+        () => runDigest({ db, email: getEmailProvider(), appUrl: env().APP_URL, now: new Date(), oneTapKey: getOneTapKey }),
+        deps
+      ),
     ]
   })
 }

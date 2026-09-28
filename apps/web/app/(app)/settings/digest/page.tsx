@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: 'Daily email' }
 
 export default async function DigestSettingsPage() {
   const { ctx, session } = await getPageContext()
-  const { preferences, timezone, availableSections } = await digest.getDigestSettings(ctx)
+  const { preferences, availableSections } = await digest.getDigestSettings(ctx)
   const sections = availableSections.map(value => ({
     value,
     title: DIGEST_SECTION_TITLES[value],
@@ -21,20 +21,17 @@ export default async function DigestSettingsPage() {
   return (
     <>
       <BackLink href='/settings'>Settings</BackLink>
-      <PageHeader title='Daily email' description='What needs doing at home, in one email. Everyone in the household sets their own.' />
+      <PageHeader
+        title='Daily email'
+        description='What needs doing at home, in one email each morning. Everyone in the household sets their own.'
+      />
       <div className='flex flex-col gap-10'>
-        <DigestPreferencesForm
-          enabled={preferences.enabled}
-          chosen={preferences.sections}
-          sendHour={preferences.sendHour}
-          timezone={timezone}
-          sections={sections}
-        />
+        <DigestPreferencesForm enabled={preferences.enabled} chosen={preferences.sections} sections={sections} />
         <section aria-labelledby='preview-heading'>
           <SectionHeader id='preview-heading' title='See it now' />
           <p className='mb-3 text-sm text-ink-muted'>
-            Sends today’s email to {session.email ?? 'your address'} now, with the sections above as last saved, even if it’s off. Its
-            links work.
+            Sends today’s email to {session.email ?? 'your address'} now, with the sections above as last saved, even if it’s off. Its links
+            work.
           </p>
           <DigestPreviewForm />
         </section>

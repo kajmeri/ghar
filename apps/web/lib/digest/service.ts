@@ -39,7 +39,7 @@ import { getOneTapKey, oneTapPath } from '@/lib/one-tap'
 
 // The daily digest, one email per person. Each person's is read as them, so it holds only what their
 // role can see, then core's assembleDigest decides what's worth saying. A day's digest is claimed with
-// a row before it's put together, so two runs at once, or a second run in the hour, send nothing more.
+// a row before it's put together, so two runs at once, or a second run that day, send nothing more.
 // A digest with nothing to say isn't sent, and gives its claim back so a later run that day can try.
 // One person's trouble never stops the rest, and nothing about what's in a digest is logged.
 
@@ -56,7 +56,7 @@ export interface DigestDeps {
 export type DigestResult = {
   /** People looked at. */
   recipients: number
-  /** Turned off, or not their hour. */
+  /** Turned off. */
   notDue: number
   sent: number
   /** Nothing to say today. */
@@ -75,8 +75,8 @@ const EXPIRED_LINK_KEEP_MS = 7 * 86_400_000
 const PRICE_CHECK_WINDOW_MS = 36 * 3_600_000
 
 /**
- * Sends each person whose hour it is their digest. `householdId` and `userId` narrow the run, and
- * `force` skips the hour and on/off check (still once a day) for trying it out.
+ * Sends each person who has it on their digest, once a day: the daily cron calls this. `householdId`
+ * and `userId` narrow the run, and `force` skips the on/off check (still once a day) for trying it out.
  */
 export async function runDigest(
   deps: DigestDeps,
@@ -88,7 +88,7 @@ export async function runDigest(
     if (options.householdId !== undefined && recipient.householdId !== options.householdId) continue
     if (options.userId !== undefined && recipient.userId !== options.userId) continue
     result.recipients += 1
-    if (!options.force && !isDigestDue(recipient.preferences, deps.now, recipient.timezone)) {
+    if (!options.force && !isDigestDue(recipient.preferences)) {
       result.notDue += 1
       continue
     }

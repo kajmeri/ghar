@@ -299,6 +299,7 @@ Every job is idempotent, so a re-run is always safe:
 | `health.refill_reminders`    | Each reminder is claimed with a row per medicine and refill date      |
 | `travel.decision_nudges`     | Each nudge is claimed with a row per person and deadline before it's sent |
 | `travel.trip_updates`        | A trip's unsent updates are marked sent before the email goes          |
+| `digest.send`                | Each person's day is claimed with a row before their email is sent     |
 
 A per-link failure (one calendar, one inbox) is recorded on that link, not as a job failure. See the
 [runbook](runbook.md#recover-a-failed-sync).

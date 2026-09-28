@@ -1,8 +1,9 @@
 import { z } from 'zod'
 import { defineEndpoint } from '../endpoint'
 
-// The daily email: whether a person gets it, which sections, and at what hour in the household's
-// zone. Everyone sets their own. These lists mirror @ghar/core/digest. A test keeps them equal.
+// The daily email: whether a person gets it and which sections. Everyone sets their own. It goes
+// out once a day, in the morning, with the daily run. These lists mirror @ghar/core/digest. A test
+// keeps them equal.
 
 export const digestSectionSchema = z.enum([
   'auto_categorized',
@@ -20,14 +21,23 @@ export const digestPreferencesSchema = z.object({
   enabled: z.boolean(),
   /** Sections the person's role can't see are kept but never sent. */
   sections: z.array(digestSectionSchema),
-  /** 0 to 23, in the household's zone. */
-  sendHour: z.number().int().min(0).max(23),
+  /**
+   * @deprecated Ignored. The digest goes out once a day with the daily run. Still accepted, 0 to 23,
+   * so older apps that send it keep working. Left out, the stored hour stays as it was.
+   */
+  sendHour: z
+    .number()
+    .int()
+    .min(0)
+    .max(23)
+    .optional()
+    .meta({ deprecated: true, description: 'Ignored. The digest goes out once a day with the daily run.' }),
 })
 export type DigestPreferencesBody = z.infer<typeof digestPreferencesSchema>
 
 export const digestSettingsSchema = z.object({
   preferences: digestPreferencesSchema,
-  /** The zone sendHour is in. */
+  /** The household's zone. */
   timezone: z.string(),
   /** The sections this person's role can be sent, in the email's order. */
   availableSections: z.array(digestSectionSchema),

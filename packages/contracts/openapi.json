@@ -23224,6 +23224,8 @@
             }
           },
           "sendHour": {
+            "deprecated": true,
+            "description": "Ignored. The digest goes out once a day with the daily run.",
             "type": "integer",
             "minimum": 0,
             "maximum": 23
@@ -23231,8 +23233,7 @@
         },
         "required": [
           "enabled",
-          "sections",
-          "sendHour"
+          "sections"
         ]
       },
       "DigestSection": {
@@ -31450,6 +31451,8 @@
             }
           },
           "sendHour": {
+            "deprecated": true,
+            "description": "Ignored. The digest goes out once a day with the daily run.",
             "type": "integer",
             "minimum": 0,
             "maximum": 23
@@ -31462,7 +31465,6 @@
         "required": [
           "enabled",
           "sections",
-          "sendHour",
           "userId"
         ]
       },

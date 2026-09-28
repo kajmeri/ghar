@@ -1,5 +1,5 @@
 import type { PGlite } from '@electric-sql/pglite'
-import { DEFAULT_DIGEST_PREFERENCES } from '@ghar/core/digest'
+import { DEFAULT_DIGEST_PREFERENCES, DEFAULT_DIGEST_SEND_HOUR } from '@ghar/core/digest'
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@ghar/core/errors'
 import { invitationExpiresAt } from '@ghar/core/invitations'
 import type { BookingFields } from '@ghar/core/travel'
@@ -123,9 +123,9 @@ beforeAll(async () => {
 
 describe('mail links', () => {
   it('links a person’s own inbox and never reads the token back out with the link', async () => {
-    await expect(upsertMailLink(viewer, db, { accountEmail: 'viewer@gmail.com', refreshTokenEncrypted: 'sealed-v' })).rejects.toBeInstanceOf(
-      ForbiddenError
-    )
+    await expect(
+      upsertMailLink(viewer, db, { accountEmail: 'viewer@gmail.com', refreshTokenEncrypted: 'sealed-v' })
+    ).rejects.toBeInstanceOf(ForbiddenError)
 
     const link = await upsertMailLink(member, db, { accountEmail: 'member@gmail.com', refreshTokenEncrypted: 'sealed-1' })
     expect(link).not.toHaveProperty('refreshTokenEncrypted')
@@ -173,7 +173,9 @@ describe('the message ledger', () => {
 
     await recordMailMessage(actor, db, { userId: member.userId, messageId: 'msg-flaky', outcome: 'failed' })
     await recordMailMessage(actor, db, { userId: member.userId, messageId: 'msg-flaky', outcome: 'failed' })
-    expect(await listSettledMessageIds(actor, db, { userId: member.userId, messageIds: ids })).toEqual(new Set(['msg-skipped', 'msg-flaky']))
+    expect(await listSettledMessageIds(actor, db, { userId: member.userId, messageIds: ids })).toEqual(
+      new Set(['msg-skipped', 'msg-flaky'])
+    )
 
     // Another household never sees this person's ledger.
     expect(await listSettledMessageIds(system(other), db, { userId: member.userId, messageIds: ids })).toEqual(new Set())
@@ -278,7 +280,9 @@ describe('digest preferences', () => {
     await setDigestPreferences(viewer, db, { enabled: false, sections: [], sendHour: 7 })
     expect((await getDigestPreferences(viewer, db)).enabled).toBe(false)
 
-    await expect(setDigestPreferences(member, db, { enabled: true, sections: ['bills'], sendHour: 24 })).rejects.toBeInstanceOf(ValidationError)
+    await expect(setDigestPreferences(member, db, { enabled: true, sections: ['bills'], sendHour: 24 })).rejects.toBeInstanceOf(
+      ValidationError
+    )
     await expect(
       setDigestPreferences(member, db, { enabled: true, sections: ['bills', 'gossip' as 'bills'], sendHour: 7 })
     ).rejects.toBeInstanceOf(ValidationError)
@@ -287,9 +291,23 @@ describe('digest preferences', () => {
     expect(await queryAs(client, owner.userId, 'select send_hour from digest_preferences')).toEqual([])
   })
 
+  it('keeps the stored hour when a save leaves it out', async () => {
+    // The hour is no longer chosen, so the settings page saves without one.
+    expect(await setDigestPreferences(member, db, { enabled: true, sections: ['bills'] })).toEqual({
+      enabled: true,
+      sections: ['bills'],
+      sendHour: 6,
+    })
+    expect(await setDigestPreferences(owner, db, { enabled: true, sections: ['bills'] })).toMatchObject({
+      sendHour: DEFAULT_DIGEST_SEND_HOUR,
+    })
+  })
+
   it('lists every member with their email and preferences', async () => {
     const recipients = await listDigestRecipients(db)
-    expect(recipients.filter(row => row.householdId === owner.householdId).map(row => [row.email, row.role, row.preferences.enabled])).toEqual([
+    expect(
+      recipients.filter(row => row.householdId === owner.householdId).map(row => [row.email, row.role, row.preferences.enabled])
+    ).toEqual([
       ['owner@example.com', 'owner', true],
       ['member@example.com', 'member', true],
       ['viewer@example.com', 'viewer', false],
@@ -321,8 +339,20 @@ describe('digest preferences', () => {
     if (!category) throw new Error('expected the coffee category')
 
     const since = hours(-1)
-    const filed = await createManualTransaction(owner, db, { date: '2026-09-13', name: 'SQ *BLUE BOTTLE', merchantName: 'Blue Bottle', amountCents: -650, tripId: null })
-    const byHand = await createManualTransaction(owner, db, { date: '2026-09-13', name: 'Farmers market', merchantName: null, amountCents: -2_400, tripId: null })
+    const filed = await createManualTransaction(owner, db, {
+      date: '2026-09-13',
+      name: 'SQ *BLUE BOTTLE',
+      merchantName: 'Blue Bottle',
+      amountCents: -650,
+      tripId: null,
+    })
+    const byHand = await createManualTransaction(owner, db, {
+      date: '2026-09-13',
+      name: 'Farmers market',
+      merchantName: null,
+      amountCents: -2_400,
+      tripId: null,
+    })
     await db.update(transactions).set({ categoryId: category.id, categorySource: 'rule' }).where(eq(transactions.id, filed.id))
     await db.update(transactions).set({ categoryId: category.id, categorySource: 'user' }).where(eq(transactions.id, byHand.id))
 
@@ -337,9 +367,19 @@ describe('digest preferences', () => {
 
 describe('one-tap links', () => {
   it('works once, for its own action and thing, before it expires', async () => {
-    const [transaction] = await db.select({ id: transactions.id }).from(transactions).where(eq(transactions.householdId, owner.householdId)).limit(1)
+    const [transaction] = await db
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(eq(transactions.householdId, owner.householdId))
+      .limit(1)
     if (!transaction) throw new Error('expected a transaction')
-    const grant = { userId: owner.userId, action: 'categorize_transaction' as const, entityId: transaction.id, dueOn: null, expiresAt: hours(72) }
+    const grant = {
+      userId: owner.userId,
+      action: 'categorize_transaction' as const,
+      entityId: transaction.id,
+      dueOn: null,
+      expiresAt: hours(72),
+    }
 
     await expect(createActionToken(member, db, grant)).rejects.toBeInstanceOf(ForbiddenError)
     await expect(createActionToken(system(other), db, grant)).rejects.toBeInstanceOf(NotFoundError)
@@ -378,9 +418,15 @@ describe('one-tap links', () => {
 describe('bills marked paid by hand', () => {
   it('marks a due date paid once and takes it back', async () => {
     const bill = await createBill(owner, db, { ...rent, name: 'Rent, unit 2' })
-    await expect(markBillPaid(member, db, { billId: bill.id, dueOn: '2026-09-01', paidOn: '2026-09-02' })).rejects.toBeInstanceOf(ForbiddenError)
-    await expect(markBillPaid(owner, db, { billId: bill.id, dueOn: '2026-09-02', paidOn: '2026-09-02' })).rejects.toBeInstanceOf(ValidationError)
-    await expect(markBillPaid(other, db, { billId: bill.id, dueOn: '2026-09-01', paidOn: '2026-09-02' })).rejects.toBeInstanceOf(NotFoundError)
+    await expect(markBillPaid(member, db, { billId: bill.id, dueOn: '2026-09-01', paidOn: '2026-09-02' })).rejects.toBeInstanceOf(
+      ForbiddenError
+    )
+    await expect(markBillPaid(owner, db, { billId: bill.id, dueOn: '2026-09-02', paidOn: '2026-09-02' })).rejects.toBeInstanceOf(
+      ValidationError
+    )
+    await expect(markBillPaid(other, db, { billId: bill.id, dueOn: '2026-09-01', paidOn: '2026-09-02' })).rejects.toBeInstanceOf(
+      NotFoundError
+    )
 
     await markBillPaid(owner, db, { billId: bill.id, dueOn: '2026-09-01', paidOn: '2026-09-02' })
     await markBillPaid(owner, db, { billId: bill.id, dueOn: '2026-09-01', paidOn: '2026-09-05' })
