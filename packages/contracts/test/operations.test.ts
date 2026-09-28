@@ -3,6 +3,7 @@ import { suggestionFromScan } from '@ghar/core/document-scan'
 import { DOCUMENT_KINDS, DOCUMENT_MIME_TYPES, MAX_DOCUMENT_BYTES } from '@ghar/core/documents'
 import { ASSET_KINDS } from '@ghar/core/home'
 import { EXPIRY_SUBJECT_KINDS, REMINDER_LEAD_DAYS_MAX, REMINDER_LEAD_DAYS_MIN } from '@ghar/core/expiries'
+import { PACKING_SUGGESTION_KINDS, packingSuggestions } from '@ghar/core/packing-suggestions'
 import { PERSON_NAME_MAX_LENGTH, tripDocumentIssuePhrase, tripDocumentIssueTone } from '@ghar/core/people'
 import { MAX_RENEWAL_CADENCE_MONTHS, MAX_RENEWAL_CENTS, RENEWAL_KINDS } from '@ghar/core/renewals'
 import { describe, expect, it } from 'vitest'
@@ -19,6 +20,7 @@ import {
   REMINDER_LEAD_MIN_DAYS,
 } from '../src/v1/documents'
 import { assetKindSchema, completeMaintenanceBodySchema } from '../src/v1/home'
+import { packingSuggestionKindSchema, packingSuggestionsSchema } from '../src/v1/packing'
 import { PERSON_NAME_MAX, personBodySchema, personChangesSchema, tripDocumentIssueKindSchema } from '../src/v1/people'
 import { expiryKindSchema, RENEWAL_MAX_CADENCE_MONTHS, RENEWAL_MAX_CENTS, renewalBodySchema, renewalKindSchema } from '../src/v1/renewals'
 
@@ -35,11 +37,32 @@ describe('household operations lists', () => {
     expect(RENEWAL_MAX_CENTS).toBe(MAX_RENEWAL_CENTS)
     expect([REMINDER_LEAD_MIN_DAYS, REMINDER_LEAD_MAX_DAYS]).toEqual([REMINDER_LEAD_DAYS_MIN, REMINDER_LEAD_DAYS_MAX])
     expect(PERSON_NAME_MAX).toBe(PERSON_NAME_MAX_LENGTH)
+    expect(packingSuggestionKindSchema.options).toEqual([...PACKING_SUGGESTION_KINDS])
     // Every kind tripDocumentIssues can report has a phrase and a tone.
     for (const kind of tripDocumentIssueKindSchema.options) {
       expect(tripDocumentIssuePhrase({ kind, expiresOn: '2027-01-01' }, '2026-09-23')).not.toBe('')
       expect(['negative', 'caution']).toContain(tripDocumentIssueTone(kind))
     }
+  })
+})
+
+describe('packing suggestions', () => {
+  it('carry what core suggests, keys included', () => {
+    const person = '9a4c1f0e-1111-4222-8333-444455556666'
+    const medicine = '9a4c1f0e-1111-4222-8333-777788889999'
+    const result = packingSuggestions({
+      trip: { international: true, startsOn: '2026-12-20' },
+      travellers: [{ id: person, name: 'Mia', birthDate: '2025-06-20', userId: null, role: null }],
+      grownUpPersonIds: [],
+      names: new Map(),
+      bookings: [{ kind: 'car', status: 'booked' }],
+      medicines: [{ id: medicine, personId: person, name: 'Amoxicillin' }],
+      items: [],
+      dismissedKeys: [],
+      today: '2026-09-28',
+    })
+    expect(result.suggestions.length).toBeGreaterThan(5)
+    expect(packingSuggestionsSchema.parse(result)).toEqual(result)
   })
 })
 

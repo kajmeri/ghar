@@ -225,6 +225,13 @@
       "when": 1790620129831,
       "tag": "0031_people_birth_dates_home_country",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790622781066,
+      "tag": "0032_packing_suggestions",
+      "breakpoints": true
     }
   ]
 }

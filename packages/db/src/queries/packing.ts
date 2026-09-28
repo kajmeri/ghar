@@ -2,7 +2,7 @@ import { requirePermission } from '@ghar/core/auth'
 import { NotFoundError, ValidationError } from '@ghar/core/errors'
 import { draftsFromTemplate, templateDraftsFromItems } from '@ghar/core/packing'
 import { and, eq, getTableColumns, inArray, max, sql } from 'drizzle-orm'
-import { packingItems, packingTemplateItems, packingTemplates } from '../schema'
+import { packingItems, packingSuggestionDismissals, packingTemplateItems, packingTemplates } from '../schema'
 import { recordAudit } from './audit'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { requireHouseholdMembers, requireTrip } from './scope'
@@ -245,4 +245,76 @@ export async function applyPackingTemplate(
     await db.insert(packingItems).values(drafts.map(draft => ({ tripId, ...draft, assignedUserId: null })))
   }
   return { items: await listPackingItems(ctx, db, tripId), addedCount: drafts.length }
+}
+
+// Suggestions. The rules are in @ghar/core/packing-suggestions; these keep what was added and
+// what was dismissed.
+
+export interface SuggestedItemDraft {
+  readonly label: string
+  readonly category: string
+  readonly assignedUserId: string | null
+  readonly suggestionKey: string
+}
+
+/**
+ * Adds suggestions to the end of the list, in the order given. One that's already on the list is
+ * skipped, so tapping add on two phones at once makes one item. Returns what was added.
+ */
+export async function addSuggestedPackingItems(
+  ctx: RequestContext,
+  db: Db,
+  tripId: string,
+  drafts: readonly SuggestedItemDraft[]
+): Promise<PackingItemRow[]> {
+  requirePermission(ctx, 'travel.manage')
+  await requireTrip(ctx, db, tripId)
+  const assigned = [...new Set(drafts.flatMap(draft => (draft.assignedUserId === null ? [] : [draft.assignedUserId])))]
+  if (assigned.length > 0) await requireHouseholdMembers(ctx, db, assigned)
+  if (drafts.length === 0) return []
+
+  const [highest] = await db
+    .select({ value: max(packingItems.sortOrder) })
+    .from(packingItems)
+    .where(eq(packingItems.tripId, tripId))
+  const start = highest?.value ?? 0
+  return db
+    .insert(packingItems)
+    .values(drafts.map((draft, index) => ({ tripId, ...draft, sortOrder: start + index + 1 })))
+    .onConflictDoNothing({
+      target: [packingItems.tripId, packingItems.suggestionKey],
+      where: sql`${packingItems.suggestionKey} is not null`,
+    })
+    .returning()
+}
+
+export async function listDismissedSuggestionKeys(ctx: RequestContext, db: Db, tripId: string): Promise<string[]> {
+  await requireTrip(ctx, db, tripId)
+  const rows = await db
+    .select({ key: packingSuggestionDismissals.suggestionKey })
+    .from(packingSuggestionDismissals)
+    .where(eq(packingSuggestionDismissals.tripId, tripId))
+  return rows.map(row => row.key)
+}
+
+/** Hides suggestions on this trip for everyone. Dismissing one twice is fine. */
+export async function dismissPackingSuggestions(ctx: RequestContext, db: Db, tripId: string, keys: readonly string[]): Promise<void> {
+  requirePermission(ctx, 'travel.manage')
+  await requireTrip(ctx, db, tripId)
+  if (keys.length === 0) return
+  await db
+    .insert(packingSuggestionDismissals)
+    .values([...new Set(keys)].map(suggestionKey => ({ tripId, suggestionKey, dismissedBy: ctx.userId })))
+    .onConflictDoNothing()
+}
+
+/** Brings back everything dismissed on this trip. Returns how many came back. */
+export async function restorePackingSuggestions(ctx: RequestContext, db: Db, tripId: string): Promise<number> {
+  requirePermission(ctx, 'travel.manage')
+  await requireTrip(ctx, db, tripId)
+  const restored = await db
+    .delete(packingSuggestionDismissals)
+    .where(eq(packingSuggestionDismissals.tripId, tripId))
+    .returning({ key: packingSuggestionDismissals.suggestionKey })
+  return restored.length
 }

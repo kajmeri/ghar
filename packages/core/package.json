@@ -32,6 +32,7 @@
     "./mail": "./src/mail.ts",
     "./money": "./src/money.ts",
     "./packing": "./src/packing.ts",
+    "./packing-suggestions": "./src/packing-suggestions.ts",
     "./people": "./src/people.ts",
     "./progress": "./src/progress.ts",
     "./quick-log": "./src/quick-log.ts",

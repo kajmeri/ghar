@@ -9,7 +9,9 @@ import {
   updatePackingItem,
   type HouseholdMember,
   type PackingItem,
+  type PackingSuggestions,
   type PackingTemplate,
+  type Person,
 } from '@ghar/contracts'
 import { compareMembers, memberLabel, memberLabelFor } from '@ghar/core/household'
 import { byAssignee, byCategory, packingProgress } from '@ghar/core/packing'
@@ -23,6 +25,7 @@ import { Meter } from '@/components/ui/meter'
 import { useMutation } from '@/hooks/use-mutation'
 import { api, errorMessage } from '@/lib/api/client'
 import { formText } from '@/lib/form'
+import { PackingSuggestionsCard } from './packing-suggestions'
 
 /**
  * One shared list. Group it by person to see what you are carrying, or by category to see
@@ -32,7 +35,9 @@ export function PackingPanel({
   tripId,
   items,
   members,
+  people,
   travellingUserIds,
+  suggestions,
   currentUserId,
   canEdit,
 }: {
@@ -40,8 +45,12 @@ export function PackingPanel({
   items: PackingItem[]
   /** Everyone in the household. Used to name an assignment, including a stale one. */
   members: HouseholdMember[]
+  /** Everyone in the household, to name a traveller a suggestion needs a birth date for. */
+  people: Person[]
   /** Who is going. Only these are offered, because only they can carry anything. */
   travellingUserIds: string[]
+  /** Null when there's nothing to suggest to this viewer: they can't add, or the trip is over. */
+  suggestions: PackingSuggestions | null
   currentUserId: string
   /** A viewer sees the list and who is packing what, and changes nothing. */
   canEdit: boolean
@@ -87,6 +96,8 @@ export function PackingPanel({
           label='Packing progress'
         />
       </Card>
+
+      {canEdit && suggestions ? <PackingSuggestionsCard tripId={tripId} value={suggestions} people={people} /> : null}
 
       {canEdit ? (
         <>

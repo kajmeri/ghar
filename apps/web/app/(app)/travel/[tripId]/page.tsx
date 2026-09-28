@@ -23,6 +23,7 @@ import { listTripGuests } from '@/lib/travel/guests'
 import { getTripRecap, loadTripAlbum } from '@/lib/travel/photos'
 import { listTripPolls } from '@/lib/travel/polls'
 import { listTripUpdates } from '@/lib/travel/updates'
+import { loadPackingSuggestions } from '@/lib/travel/packing-suggestions'
 import { loadTripBudget, loadTripDetail, loadTripIdeas } from '@/lib/travel/trips'
 import { BudgetPanel } from './_components/budget-panel'
 import { GuestsSummary } from './_components/guests-summary'
@@ -186,9 +187,11 @@ export default async function TripPage({
           tripId={trip.id}
           items={detail.packing}
           members={detail.members}
+          people={detail.people}
           travellingUserIds={detail.people.flatMap(person =>
             person.userId !== null && trip.travellerIds.includes(person.id) ? [person.userId] : []
           )}
+          suggestions={can(role, 'travel.manage') && phase !== 'past' ? await loadPackingSuggestions(session, trip.id) : null}
           currentUserId={userId}
           canEdit={can(role, 'travel.manage')}
         />

@@ -118,3 +118,93 @@ export const applyPackingTemplate = defineEndpoint({
   body: z.object({ templateId: z.uuid() }),
   response: z.object({ items: z.array(packingItemSchema), addedCount: z.int().nonnegative() }),
 })
+
+// Suggestions: what the trip probably needs, from who is going and what is booked. Nothing is
+// added until someone taps add, and a dismissed one stays hidden on that trip for everyone.
+
+/** Kept in step with PACKING_SUGGESTION_KINDS in @ghar/core/packing-suggestions. */
+export const packingSuggestionKindSchema = z.enum([
+  'passport',
+  'id',
+  'proof_of_age',
+  'consent_letter',
+  'driving_permit',
+  'plug_adapter',
+  'stroller',
+  'diapers',
+  'baby_food',
+  'car_seat',
+  'booster_seat',
+  'medicine',
+])
+
+/** A kind, then the person or medicine it's for when there's one each: `passport:<personId>`. */
+export const packingSuggestionKeySchema = z
+  .string()
+  .max(64)
+  .regex(/^[a-z_]+(:[0-9a-f-]{36})?$/, 'That isn’t a suggestion Ghar makes')
+
+export const packingSuggestionSchema = z.object({
+  key: packingSuggestionKeySchema,
+  kind: packingSuggestionKindSchema,
+  label: z.string(),
+  /** The category it's filed under once added. */
+  category: z.string(),
+  /** Why Ghar suggests it, in a sentence. */
+  reason: z.string(),
+  /** The traveller it's for, when it's one person's. */
+  personId: z.uuid().nullable(),
+})
+export type PackingSuggestion = z.infer<typeof packingSuggestionSchema>
+
+export const packingSuggestionsSchema = z.object({
+  /** Documents first, then children's things, then medicines. */
+  suggestions: z.array(packingSuggestionSchema),
+  /** How many would show but were dismissed on this trip. */
+  dismissedCount: z.int().nonnegative(),
+  /** Travellers who could be children but have no birth date, so the age rules skip them. */
+  unknownAgeTravellerIds: z.array(z.uuid()),
+})
+export type PackingSuggestions = z.infer<typeof packingSuggestionsSchema>
+
+/**
+ * What the trip probably needs that isn't on the list. Medicines are only suggested to someone who
+ * can see them.
+ */
+export const listPackingSuggestions = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/trips/:tripId/packing/suggestions',
+  params: tripParamsSchema,
+  response: packingSuggestionsSchema,
+})
+
+const suggestionKeysBodySchema = z.object({ keys: z.array(packingSuggestionKeySchema).min(1).max(50) })
+
+/**
+ * Adds suggestions to the end of the list: one, or all of them. Ghar works them out again, so a key
+ * that no longer applies is refused, and one already on the list is skipped. Returns the whole list.
+ */
+export const addPackingSuggestions = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/trips/:tripId/packing/suggestions/add',
+  params: tripParamsSchema,
+  body: suggestionKeysBodySchema,
+  response: z.object({ items: z.array(packingItemSchema), addedCount: z.int().nonnegative() }),
+})
+
+/** Hides suggestions on this trip for everyone on it. */
+export const dismissPackingSuggestions = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/trips/:tripId/packing/suggestions/dismiss',
+  params: tripParamsSchema,
+  body: suggestionKeysBodySchema,
+  response: packingSuggestionsSchema,
+})
+
+/** Brings back every suggestion dismissed on this trip. */
+export const restorePackingSuggestions = defineEndpoint({
+  method: 'DELETE',
+  path: '/api/v1/trips/:tripId/packing/suggestions/dismissed',
+  params: tripParamsSchema,
+  response: packingSuggestionsSchema,
+})

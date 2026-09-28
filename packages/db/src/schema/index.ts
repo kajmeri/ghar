@@ -115,6 +115,7 @@ import {
 import { TRIP_STATUSES } from '@ghar/core/trips'
 import { DIGEST_SECTIONS, ONE_TAP_ACTIONS, oneTapActionHasDate, type DigestSection } from '@ghar/core/digest'
 import { BOOKING_DRAFT_STATUSES, MAIL_LINK_STATUSES, MAIL_MESSAGE_OUTCOMES, MAIL_SUBJECT_MAX_LENGTH } from '@ghar/core/mail'
+import { PACKING_SUGGESTION_KEY_MAX_LENGTH } from '@ghar/core/packing-suggestions'
 import { EARLIEST_BIRTH_DATE, PERSON_NAME_MAX_LENGTH } from '@ghar/core/people'
 import { SYNC_ENTITIES, type SyncEntity } from '@ghar/core/sync'
 import { sql, type SQL } from 'drizzle-orm'
@@ -1782,6 +1783,8 @@ export const packingItems = pgTable(
     /** Free text, not an enum: every household groups its bags differently. */
     category: text(),
     sortOrder: integer().notNull().default(0),
+    /** The suggestion it was added from, so it isn't suggested again once renamed. */
+    suggestionKey: text(),
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
@@ -1790,6 +1793,34 @@ export const packingItems = pgTable(
     index('packing_items_assigned_user_idx')
       .on(table.assignedUserId)
       .where(sql`${table.assignedUserId} is not null`),
+    // Adding the same suggestion twice, from two phones at once, makes one item.
+    uniqueIndex('packing_items_suggestion_key_idx')
+      .on(table.tripId, table.suggestionKey)
+      .where(sql`${table.suggestionKey} is not null`),
+  ]
+).enableRLS()
+
+/** Suggestions someone said no to on a trip. They stay hidden for everyone on it. */
+export const packingSuggestionDismissals = pgTable(
+  'packing_suggestion_dismissals',
+  {
+    tripId: uuid()
+      .notNull()
+      .references(() => trips.id, { onDelete: 'cascade' }),
+    /** A key from packingSuggestions in @ghar/core/packing-suggestions. */
+    suggestionKey: text().notNull(),
+    dismissedBy: uuid().references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamptz().notNull().defaultNow(),
+  },
+  table => [
+    primaryKey({ columns: [table.tripId, table.suggestionKey] }),
+    index('packing_suggestion_dismissals_dismissed_by_idx')
+      .on(table.dismissedBy)
+      .where(sql`${table.dismissedBy} is not null`),
+    check(
+      'packing_suggestion_dismissals_key_length',
+      sql`char_length(${table.suggestionKey}) between 1 and ${sql.raw(String(PACKING_SUGGESTION_KEY_MAX_LENGTH))}`
+    ),
   ]
 ).enableRLS()
 

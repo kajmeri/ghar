@@ -17211,6 +17211,289 @@
         }
       }
     },
+    "/api/v1/trips/{tripId}/packing/suggestions": {
+      "get": {
+        "operationId": "listPackingSuggestions",
+        "tags": [
+          "packing"
+        ],
+        "description": "What the trip probably needs that isn't on the list. Medicines are only suggested to someone who\ncan see them.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackingSuggestions"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/packing/suggestions/add": {
+      "post": {
+        "operationId": "addPackingSuggestions",
+        "tags": [
+          "packing"
+        ],
+        "description": "Adds suggestions to the end of the list: one, or all of them. Ghar works them out again, so a key\nthat no longer applies is refused, and one already on the list is skipped. Returns the whole list.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "keys": {
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PackingSuggestionKey"
+                    }
+                  }
+                },
+                "required": [
+                  "keys"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PackingItem"
+                      }
+                    },
+                    "addedCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "addedCount"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/packing/suggestions/dismiss": {
+      "post": {
+        "operationId": "dismissPackingSuggestions",
+        "tags": [
+          "packing"
+        ],
+        "description": "Hides suggestions on this trip for everyone on it.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "keys": {
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PackingSuggestionKey"
+                    }
+                  }
+                },
+                "required": [
+                  "keys"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackingSuggestions"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/trips/{tripId}/packing/suggestions/dismissed": {
+      "delete": {
+        "operationId": "restorePackingSuggestions",
+        "tags": [
+          "packing"
+        ],
+        "description": "Brings back every suggestion dismissed on this trip.",
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackingSuggestions"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/trips/{tripId}/packing/{itemId}": {
       "patch": {
         "operationId": "updatePackingItem",
@@ -28588,6 +28871,95 @@
           "isPacked",
           "category",
           "sortOrder"
+        ]
+      },
+      "PackingSuggestion": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/PackingSuggestionKey"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PackingSuggestionKind"
+          },
+          "label": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "personId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "label",
+          "category",
+          "reason",
+          "personId"
+        ]
+      },
+      "PackingSuggestionKey": {
+        "type": "string",
+        "maxLength": 64,
+        "pattern": "^[a-z_]+(:[0-9a-f-]{36})?$"
+      },
+      "PackingSuggestionKind": {
+        "type": "string",
+        "enum": [
+          "passport",
+          "id",
+          "proof_of_age",
+          "consent_letter",
+          "driving_permit",
+          "plug_adapter",
+          "stroller",
+          "diapers",
+          "baby_food",
+          "car_seat",
+          "booster_seat",
+          "medicine"
+        ]
+      },
+      "PackingSuggestions": {
+        "type": "object",
+        "properties": {
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PackingSuggestion"
+            }
+          },
+          "dismissedCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "unknownAgeTravellerIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "suggestions",
+          "dismissedCount",
+          "unknownAgeTravellerIds"
         ]
       },
       "PackingTemplate": {
