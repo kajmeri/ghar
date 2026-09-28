@@ -1,5 +1,5 @@
 import { can, type HouseholdRole, type Permission } from './auth/permissions'
-import { addCalendarDays, formatCalendarDate, wallClockTimeInTimeZone, type CalendarDate, type TimeZone } from './dates'
+import { addCalendarDays, formatCalendarDate, type CalendarDate } from './dates'
 import type { BudgetPace } from './finances/budget'
 import type { ManualValueReminder } from './finances/networth'
 import { EXPIRY_SUBJECT_KINDS, type ExpirySubjectKind } from './expiries'
@@ -10,7 +10,16 @@ import type { Cents } from './money'
 // section with nothing to say is left out, and a digest with no sections isn't sent.
 
 /** In the order the email shows them. */
-export const DIGEST_SECTIONS = ['auto_categorized', 'needs_review', 'budget', 'bills', 'manual_values', 'upkeep', 'price_drops', 'calendar'] as const
+export const DIGEST_SECTIONS = [
+  'auto_categorized',
+  'needs_review',
+  'budget',
+  'bills',
+  'manual_values',
+  'upkeep',
+  'price_drops',
+  'calendar',
+] as const
 export type DigestSection = (typeof DIGEST_SECTIONS)[number]
 
 export const DIGEST_SECTION_TITLES: Record<DigestSection, string> = {
@@ -49,9 +58,8 @@ export const DIGEST_SECTION_PERMISSIONS: Record<DigestSection, Permission> = {
   calendar: 'calendar.view',
 }
 
+/** What's stored for people who never chose an hour. Nothing reads it any more; see DigestPreferences. */
 export const DEFAULT_DIGEST_SEND_HOUR = 7
-/** A digest goes out at the first run within this many hours of the chosen hour, and never after midnight. */
-export const DIGEST_SEND_WINDOW_HOURS = 3
 /** Unpaid bills due from today through this many days ahead. */
 export const DIGEST_BILL_DAYS = 7
 /** Maintenance due from today through this many days ahead, and anything overdue. */
@@ -64,11 +72,14 @@ export const DIGEST_LIST_LIMIT = 8
 export interface DigestPreferences {
   enabled: boolean
   sections: readonly DigestSection[]
-  /** 0 to 23, in the household's zone. */
+  /**
+   * Ignored. The digest goes out with the daily run each morning, since the host runs cron once a
+   * day. Still stored and returned, 0 to 23, so apps that send it keep working.
+   */
   sendHour: number
 }
 
-/** Everyone gets every section they can see at 7am until they change it. */
+/** Everyone gets every section they can see until they change it. */
 export const DEFAULT_DIGEST_PREFERENCES: DigestPreferences = {
   enabled: true,
   sections: DIGEST_SECTIONS,
@@ -84,19 +95,12 @@ export function digestSectionsFor(role: HouseholdRole, chosen: readonly DigestSe
   return DIGEST_SECTIONS.filter(section => chosen.includes(section) && can(role, DIGEST_SECTION_PERMISSIONS[section]))
 }
 
-export function hourInTimeZone(instant: Date, timeZone: TimeZone): number {
-  return Number(wallClockTimeInTimeZone(instant, timeZone).slice(0, 2))
-}
-
 /**
- * Whether a person's digest is due at `now`: from their hour for DIGEST_SEND_WINDOW_HOURS, cut off
- * at midnight. A run that misses the hour still sends, and a late one never sends a day's digest on
- * the next day. Whether it already went out today is the caller's to check.
+ * Whether a person's digest is due. It goes out with the daily run, so it's due whenever it's on.
+ * Whether it already went out today is the caller's to check.
  */
-export function isDigestDue(preferences: Pick<DigestPreferences, 'enabled' | 'sendHour'>, now: Date, timeZone: TimeZone): boolean {
-  if (!preferences.enabled) return false
-  const hour = hourInTimeZone(now, timeZone)
-  return hour >= preferences.sendHour && hour < Math.min(preferences.sendHour + DIGEST_SEND_WINDOW_HOURS, 24)
+export function isDigestDue(preferences: Pick<DigestPreferences, 'enabled'>): boolean {
+  return preferences.enabled
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -222,17 +226,23 @@ function block(section: DigestSection, input: DigestInput): DigestBlock | null {
       return input.budget !== null && input.budget.availableCents > 0 ? { section, budget: input.budget } : null
     case 'bills': {
       if (input.bills.length === 0) return null
-      const { list, more } = capped(input.bills.toSorted((a, b) => lateFirst(a, b) || a.dueOn.localeCompare(b.dueOn) || a.name.localeCompare(b.name)))
+      const { list, more } = capped(
+        input.bills.toSorted((a, b) => lateFirst(a, b) || a.dueOn.localeCompare(b.dueOn) || a.name.localeCompare(b.name))
+      )
       return { section, bills: list, more }
     }
     case 'manual_values': {
       if (input.manualValues.length === 0) return null
-      const { list, more } = capped(input.manualValues.toSorted((a, b) => a.latestValueOn.localeCompare(b.latestValueOn) || a.name.localeCompare(b.name)))
+      const { list, more } = capped(
+        input.manualValues.toSorted((a, b) => a.latestValueOn.localeCompare(b.latestValueOn) || a.name.localeCompare(b.name))
+      )
       return { section, accounts: list, more }
     }
     case 'upkeep': {
       if (input.upkeep.length === 0) return null
-      const { list, more } = capped(input.upkeep.toSorted((a, b) => lateFirst(a, b) || a.dueOn.localeCompare(b.dueOn) || a.title.localeCompare(b.title)))
+      const { list, more } = capped(
+        input.upkeep.toSorted((a, b) => lateFirst(a, b) || a.dueOn.localeCompare(b.dueOn) || a.title.localeCompare(b.title))
+      )
       return { section, items: list, more }
     }
     case 'price_drops': {
@@ -246,7 +256,9 @@ function block(section: DigestSection, input: DigestInput): DigestBlock | null {
           date,
           items: input.calendar
             .filter(item => item.date === date)
-            .toSorted((a, b) => Number(b.allDay) - Number(a.allDay) || a.startsAt.getTime() - b.startsAt.getTime() || a.title.localeCompare(b.title))
+            .toSorted(
+              (a, b) => Number(b.allDay) - Number(a.allDay) || a.startsAt.getTime() - b.startsAt.getTime() || a.title.localeCompare(b.title)
+            )
             .slice(0, DIGEST_LIST_LIMIT),
         }))
         .filter(day => day.items.length > 0)

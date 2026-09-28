@@ -46,30 +46,26 @@ describe('digestSectionsFor', () => {
 })
 
 describe('isDigestDue', () => {
-  const morning = { enabled: true, sendHour: 7 }
-
-  it('is due from the chosen hour for a few hours, in the household’s zone', () => {
-    expect(isDigestDue(morning, new Date('2026-09-14T10:59:00Z'), 'America/New_York')).toBe(false)
-    expect(isDigestDue(morning, new Date('2026-09-14T11:00:00Z'), 'America/New_York')).toBe(true)
-    expect(isDigestDue(morning, new Date('2026-09-14T13:59:00Z'), 'America/New_York')).toBe(true)
-    expect(isDigestDue(morning, new Date('2026-09-14T14:00:00Z'), 'America/New_York')).toBe(false)
-  })
-
-  it('never sends a late evening digest after midnight', () => {
-    const late = { enabled: true, sendHour: 22 }
-    expect(isDigestDue(late, new Date('2026-09-15T03:30:00Z'), 'America/New_York')).toBe(true)
-    expect(isDigestDue(late, new Date('2026-09-15T04:30:00Z'), 'America/New_York')).toBe(false)
+  it('is due whenever it’s on, whatever hour was once chosen', () => {
+    const lateEvening = { enabled: true, sendHour: 22 }
+    expect(isDigestDue({ enabled: true })).toBe(true)
+    expect(isDigestDue(lateEvening)).toBe(true)
   })
 
   it('is never due when turned off', () => {
-    expect(isDigestDue({ enabled: false, sendHour: 7 }, new Date('2026-09-14T11:00:00Z'), 'America/New_York')).toBe(false)
+    expect(isDigestDue({ enabled: false })).toBe(false)
   })
 })
 
 describe('assembleDigest', () => {
   it('sends nothing when no section has anything to say', () => {
     expect(assembleDigest(empty)).toBeNull()
-    expect(assembleDigest({ ...empty, budget: { periodStart: '2026-09-01', availableCents: 0, spentCents: 0, remainingCents: 0, pace: 'on_pace', elapsedShare: 0.45 } })).toBeNull()
+    expect(
+      assembleDigest({
+        ...empty,
+        budget: { periodStart: '2026-09-01', availableCents: 0, spentCents: 0, remainingCents: 0, pace: 'on_pace', elapsedShare: 0.45 },
+      })
+    ).toBeNull()
   })
 
   it('leaves out sections that are empty or not chosen', () => {
@@ -100,7 +96,11 @@ describe('assembleDigest', () => {
     })
     const [sorted, review] = digest?.blocks ?? []
     expect(sorted?.section === 'auto_categorized' && [sorted.transactions.length, sorted.more]).toEqual([DIGEST_LIST_LIMIT, 3])
-    expect(review?.section === 'needs_review' && [review.count, review.transactions.length, review.more]).toEqual([40, DIGEST_LIST_LIMIT, 32])
+    expect(review?.section === 'needs_review' && [review.count, review.transactions.length, review.more]).toEqual([
+      40,
+      DIGEST_LIST_LIMIT,
+      32,
+    ])
   })
 
   it('reminds about stale manual values oldest first, with no figures to leak', () => {

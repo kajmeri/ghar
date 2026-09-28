@@ -1,4 +1,5 @@
 import { HOUSEHOLD_ROLES } from '@ghar/core/auth'
+import { hasTwoDecimalMinorUnit } from '@ghar/core/money'
 import { describe, expect, it } from 'vitest'
 import { householdRoleSchema } from '../src/context'
 import { createHouseholdBodySchema } from '../src/v1/households'
@@ -32,5 +33,14 @@ describe('request bodies', () => {
       timezone: 'UTC',
       currency: 'USD',
     })
+  })
+
+  it('refuse a household currency without two decimal places, as core does', () => {
+    const body = { name: 'Home', timezone: 'UTC' }
+    expect(createHouseholdBodySchema.safeParse({ ...body, currency: 'JPY' }).success).toBe(false)
+    expect(createHouseholdBodySchema.safeParse({ ...body, currency: 'KWD' }).success).toBe(false)
+    for (const currency of Intl.supportedValuesOf('currency')) {
+      expect(createHouseholdBodySchema.safeParse({ ...body, currency }).success, currency).toBe(hasTwoDecimalMinorUnit(currency))
+    }
   })
 })

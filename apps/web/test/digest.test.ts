@@ -1,6 +1,6 @@
 import type { PGlite } from '@electric-sql/pglite'
 import { addCalendarDays, addCalendarMonths, todayInTimeZone } from '@ghar/core/dates'
-import { DIGEST_SECTIONS, hourInTimeZone, type DigestPreferences } from '@ghar/core/digest'
+import { DIGEST_SECTIONS, type DigestPreferences } from '@ghar/core/digest'
 import { invitationExpiresAt } from '@ghar/core/invitations'
 import {
   acceptInvitation,
@@ -80,11 +80,10 @@ async function household(): Promise<Seeded> {
     amountCents: -650,
   })
   // As if the sync ran yesterday and a rule filed it.
-  await client.query(`update transactions set category_id = $1, category_source = 'rule', needs_review = false, created_at = $2 where id = $3`, [
-    category.id,
-    new Date(NOW.getTime() - 86_400_000).toISOString(),
-    filed,
-  ])
+  await client.query(
+    `update transactions set category_id = $1, category_source = 'rule', needs_review = false, created_at = $2 where id = $3`,
+    [category.id, new Date(NOW.getTime() - 86_400_000).toISOString(), filed]
+  )
   await createBill(owner, db, {
     name: 'Rent',
     payee: 'Maple Court Apartments',
@@ -115,9 +114,9 @@ async function household(): Promise<Seeded> {
   }
 }
 
-/** Everything, at this hour, unless told otherwise. */
+/** Everything, unless told otherwise. */
 function prefer(ctx: RequestContext, overrides: Partial<DigestPreferences> = {}) {
-  return setDigestPreferences(ctx, db, { enabled: true, sections: [...DIGEST_SECTIONS], sendHour: hourInTimeZone(NOW, TZ), ...overrides })
+  return setDigestPreferences(ctx, db, { enabled: true, sections: [...DIGEST_SECTIONS], ...overrides })
 }
 
 function depsWith(email: EmailProvider = createMemoryProvider()): DigestDeps {
@@ -163,18 +162,24 @@ describe('the daily digest', () => {
     expect(email.sent).toHaveLength(1)
   })
 
-  it('waits for the person’s hour, and sends nothing when it’s off', async () => {
+  it('sends with the daily run whatever hour was once chosen', async () => {
     const { owner } = await household()
     const email = createMemoryProvider()
 
-    await prefer(owner, { sendHour: (hourInTimeZone(NOW, TZ) + 12) % 24 })
-    expect(await runDigest(depsWith(email), { householdId: owner.householdId })).toMatchObject({ recipients: 1, notDue: 1, sent: 0 })
+    // An hour chosen before the picker went away doesn't hold it back.
+    await prefer(owner, { sendHour: (NOW.getUTCHours() + 12) % 24 })
+    expect(await runDigest(depsWith(email), { householdId: owner.householdId })).toMatchObject({ recipients: 1, notDue: 0, sent: 1 })
+  })
+
+  it('sends nothing when it’s off', async () => {
+    const { owner } = await household()
+    const email = createMemoryProvider()
 
     await prefer(owner, { enabled: false })
     expect(await runDigest(depsWith(email), { householdId: owner.householdId })).toMatchObject({ recipients: 1, notDue: 1, sent: 0 })
     expect(email.sent).toEqual([])
 
-    // Trying it out skips the hour and the switch.
+    // Trying it out skips the switch.
     expect(await runDigest(depsWith(email), { householdId: owner.householdId, force: true })).toMatchObject({ sent: 1 })
   })
 

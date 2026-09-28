@@ -15,7 +15,10 @@ export function RecentCharges({ transactions, currency }: { transactions: Transa
         id='recent-heading'
         title='Recently'
         action={
-          <Link href={TRANSACTIONS_PATH} className='text-sm underline underline-offset-4 hover:no-underline'>
+          <Link
+            href={TRANSACTIONS_PATH}
+            className='inline-flex min-h-tap items-center text-sm underline underline-offset-4 hover:no-underline'
+          >
             All transactions
           </Link>
         }

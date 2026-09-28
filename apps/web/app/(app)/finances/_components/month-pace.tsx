@@ -39,7 +39,10 @@ export function MonthPace({ pace, currency }: { pace: MonthPaceValue; currency: 
             {domain.ticks.map(tick => (
               <span
                 key={tick}
-                className={cn('absolute right-0 text-xs text-ink-muted tabular-nums', y(tick) > 90 ? '-translate-y-full' : '-translate-y-1/2')}
+                className={cn(
+                  'absolute right-0 text-xs text-ink-muted tabular-nums',
+                  y(tick) > 90 ? '-translate-y-full' : '-translate-y-1/2'
+                )}
                 style={{ top: `${y(tick)}%` }}
               >
                 {formatCents(tick, { currency, notation: 'compact' })}
@@ -125,7 +128,12 @@ export function MonthPace({ pace, currency }: { pace: MonthPaceValue; currency: 
             <Key swatch={<span className='w-4 border-t-[2.5px] border-ink' />} label={`${thisMonth} so far`} value={money(spent)} />
             <Key
               swatch={<span className='w-4 border-t-2 border-ink/25' />}
-              label={`${lastMonth} by the ${formatCalendarDate(dateOf(day), 'do')}`}
+              label={
+                // Never a day last month didn't have: on March 30 it's all of February.
+                pace.previousDay < day
+                  ? `All of ${lastMonth}`
+                  : `${lastMonth} by the ${formatCalendarDate(addCalendarDays(pace.previousMonthStart, pace.previousDay - 1), 'do')}`
+              }
               value={money(pace.previousByNowCents)}
             />
             {pace.budgetCents === null || pace.budgetByNowCents === null ? null : (

@@ -46,6 +46,8 @@ export function initialNextDueOn(schedule: MaintenanceSchedule): CalendarDate | 
  * - The newest completion sets the schedule. A job with a cadence is next due one cadence later;
  *   a one-off job has nothing left to do.
  * - Logging an older completion, to fill in history, never moves the schedule backwards.
+ * - The first completion of a job with a due date typed in never brings that date forward: a
+ *   filter changed back in March doesn't make a job due in October overdue today.
  */
 export function scheduleAfterCompletion(
   schedule: MaintenanceSchedule,
@@ -54,10 +56,10 @@ export function scheduleAfterCompletion(
   if (schedule.lastDoneOn !== null && completedOn < schedule.lastDoneOn) {
     return { lastDoneOn: schedule.lastDoneOn, nextDueOn: schedule.nextDueOn }
   }
-  return {
-    lastDoneOn: completedOn,
-    nextDueOn: schedule.cadenceMonths === null ? null : nextDueAfter(completedOn, schedule.cadenceMonths),
-  }
+  if (schedule.cadenceMonths === null) return { lastDoneOn: completedOn, nextDueOn: null }
+  const computed = nextDueAfter(completedOn, schedule.cadenceMonths)
+  const typed = schedule.lastDoneOn === null ? schedule.nextDueOn : null
+  return { lastDoneOn: completedOn, nextDueOn: typed !== null && typed > computed ? typed : computed }
 }
 
 /**
@@ -65,17 +67,19 @@ export function scheduleAfterCompletion(
  *
  * - Taking back an older entry leaves the schedule alone.
  * - Taking back the newest works the schedule out again from the newest entry left.
- * - With nothing left, the job is due on the day it was wrongly marked done: it was due by then.
+ * - With nothing left, the job goes back to its schedule from before that completion was logged,
+ *   so undoing a mistaken "done" doesn't make it due today.
  */
 export function scheduleAfterRemoval(
   schedule: MaintenanceSchedule,
-  removedOn: CalendarDate,
+  removed: { completedOn: CalendarDate; lastDoneBefore: CalendarDate | null; nextDueBefore: CalendarDate | null },
   newestRemainingOn: CalendarDate | null
 ): { lastDoneOn: CalendarDate | null; nextDueOn: CalendarDate | null } {
   const unchanged = { lastDoneOn: schedule.lastDoneOn, nextDueOn: schedule.nextDueOn }
+  const removedOn = removed.completedOn
   if (schedule.lastDoneOn === null || removedOn < schedule.lastDoneOn) return unchanged
   if (newestRemainingOn !== null && newestRemainingOn >= removedOn) return unchanged
-  if (newestRemainingOn === null) return { lastDoneOn: null, nextDueOn: removedOn }
+  if (newestRemainingOn === null) return { lastDoneOn: removed.lastDoneBefore, nextDueOn: removed.nextDueBefore }
   return {
     lastDoneOn: newestRemainingOn,
     nextDueOn: schedule.cadenceMonths === null ? null : nextDueAfter(newestRemainingOn, schedule.cadenceMonths),

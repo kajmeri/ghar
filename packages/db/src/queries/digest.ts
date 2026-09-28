@@ -2,6 +2,7 @@ import { requirePermission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
 import {
   DEFAULT_DIGEST_PREFERENCES,
+  DEFAULT_DIGEST_SEND_HOUR,
   DIGEST_SECTIONS,
   isDigestSection,
   type DigestPreferences,
@@ -34,19 +35,33 @@ export async function getDigestPreferences(ctx: RequestContext, db: Db): Promise
   return row ? fromRow(row) : DEFAULT_DIGEST_PREFERENCES
 }
 
-/** Anyone can choose how they get their own digest. Sections their role can't see are kept but never sent. */
-export async function setDigestPreferences(ctx: RequestContext, db: Db, input: DigestPreferences): Promise<DigestPreferences> {
+/**
+ * Anyone can choose how they get their own digest. Sections their role can't see are kept but never
+ * sent. The hour is no longer used: when it's left out, the stored one stays as it was.
+ */
+export async function setDigestPreferences(
+  ctx: RequestContext,
+  db: Db,
+  input: Omit<DigestPreferences, 'sendHour'> & { sendHour?: number }
+): Promise<DigestPreferences> {
+  const { sendHour } = input
   const fieldErrors: Record<string, string[]> = {}
   if (!input.sections.every(section => isDigestSection(section))) fieldErrors.sections = ['Choose from the listed sections.']
-  if (!Number.isInteger(input.sendHour) || input.sendHour < 0 || input.sendHour > 23) fieldErrors.sendHour = ['Choose an hour of the day.']
+  if (sendHour !== undefined && (!Number.isInteger(sendHour) || sendHour < 0 || sendHour > 23)) {
+    fieldErrors.sendHour = ['Choose an hour of the day.']
+  }
   if (Object.keys(fieldErrors).length > 0) {
     throw new ValidationError('Check the highlighted fields.', { details: { fieldErrors } })
   }
 
-  const values = { enabled: input.enabled, sections: DIGEST_SECTIONS.filter(section => input.sections.includes(section)), sendHour: input.sendHour }
+  const values = {
+    enabled: input.enabled,
+    sections: DIGEST_SECTIONS.filter(section => input.sections.includes(section)),
+    ...(sendHour === undefined ? {} : { sendHour }),
+  }
   const [row] = await db
     .insert(digestPreferences)
-    .values({ householdId: ctx.householdId, userId: ctx.userId, ...values })
+    .values({ householdId: ctx.householdId, userId: ctx.userId, sendHour: DEFAULT_DIGEST_SEND_HOUR, ...values })
     .onConflictDoUpdate({
       target: [digestPreferences.householdId, digestPreferences.userId],
       set: { ...values, updatedAt: sql`now()` },
@@ -106,7 +121,10 @@ export async function listDigestRecipients(db: Db): Promise<DigestRecipient[]> {
           {
             ...row,
             email,
-            preferences: enabled === null || sections === null || sendHour === null ? DEFAULT_DIGEST_PREFERENCES : fromRow({ enabled, sections, sendHour }),
+            preferences:
+              enabled === null || sections === null || sendHour === null
+                ? DEFAULT_DIGEST_PREFERENCES
+                : fromRow({ enabled, sections, sendHour }),
           },
         ]
   )
@@ -116,7 +134,11 @@ export async function listDigestRecipients(db: Db): Promise<DigestRecipient[]> {
  * Claims one person's digest for one of the household's days before it's sent. Returns the claim's
  * id, or null when that day's digest already went out.
  */
-export async function claimDigestSend(actor: SystemContext, db: Db, input: { userId: string; digestOn: CalendarDate }): Promise<string | null> {
+export async function claimDigestSend(
+  actor: SystemContext,
+  db: Db,
+  input: { userId: string; digestOn: CalendarDate }
+): Promise<string | null> {
   const [claimed] = await db
     .insert(digestSends)
     .values({ householdId: actor.householdId, userId: input.userId, digestOn: input.digestOn })

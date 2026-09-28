@@ -267,6 +267,7 @@ Every job in `/api/cron/daily` is safe to repeat:
 - The calendar sync asks Google only for what changed.
 - The Gmail check never reads a message twice.
 - Expiry reminders are claimed before they're sent.
+- Each person's daily email is claimed for the day before it's sent.
 
 To re-run, press Run next to the job in Vercel → Settings → Cron Jobs, or call the route with
 `CRON_SECRET` exported in your shell rather than typed into the command:

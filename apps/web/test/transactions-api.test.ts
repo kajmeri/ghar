@@ -22,6 +22,7 @@ import { GET as overview } from '@/app/api/v1/finances/overview/route'
 import { PATCH as tag } from '@/app/api/v1/transactions/[transactionId]/route'
 import { GET as list, POST as create } from '@/app/api/v1/transactions/route'
 import { GET as summary } from '@/app/api/v1/transactions/summary/route'
+import { transactionsQuery } from '@/lib/finances/display'
 
 // /api/v1/transactions against PGlite: what the money screen reads and what the sheet writes. The
 // household is whoever the test says is signed in, and nothing here trusts a household id from a
@@ -285,6 +286,28 @@ describe('listing charges', () => {
     // The same cursor against a narrower list would skip rows, so it is refused instead.
     const changed = await listCharges({ limit: '2', cursor: first.body.nextCursor ?? '', q: 'hardware' })
     expect(changed.status).toBe(400)
+  })
+
+  it('pages a list narrowed to dates, the way "Show more" asks', async () => {
+    test.session = owner
+    const filters = { q: '', account: '', category: '', review: false, from: '2026-08-05', to: '2026-08-31' }
+    const query = Object.fromEntries(
+      Object.entries(transactionsQuery(filters)).flatMap(([name, value]) => (value === undefined ? [] : [[name, String(value)]]))
+    )
+    expect(query).toEqual({ from: '2026-08-05', to: '2026-08-31' })
+    const first = await listCharges({ ...query, limit: '1' })
+    expect(first.status).toBe(200)
+    expect(first.body.nextCursor).toEqual(expect.any(String))
+
+    const second = await listCharges({ ...query, limit: '10', cursor: first.body.nextCursor ?? '' })
+    expect(second.status).toBe(200)
+    expect([...first.body.items, ...second.body.items].map(item => item.postedOn).toSorted()).toEqual([
+      '2026-08-10',
+      '2026-08-18',
+      '2026-08-20',
+    ])
+    // Leaving the dates off the next page is a different question, and its cursor is refused.
+    expect((await listCharges({ limit: '10', cursor: first.body.nextCursor ?? '' })).status).toBe(400)
   })
 })
 

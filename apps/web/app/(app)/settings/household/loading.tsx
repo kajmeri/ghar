@@ -20,6 +20,13 @@ export default function Loading() {
           <SectionHeaderSkeleton />
           <CardSkeleton lines={4} />
         </div>
+        <div>
+          <SectionHeaderSkeleton />
+          <div className='flex flex-col gap-3'>
+            <CardSkeleton lines={3} />
+            <CardSkeleton lines={3} />
+          </div>
+        </div>
       </div>
     </LoadingRegion>
   )

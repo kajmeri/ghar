@@ -43,6 +43,7 @@ describe('the month so far, day by day', () => {
     expect(pace.previous).toHaveLength(31)
     expect(pace.previous[5]).toBe(10_000)
     expect(pace.previousByNowCents).toBe(10_000)
+    expect(pace.previousDay).toBe(5)
     // August's 31st folds into the last point, so its total is still August's.
     expect(pace.previous[30]).toBe(16_000)
     expect(pace.budgetCents).toBe(60_000)
@@ -50,6 +51,37 @@ describe('the month so far, day by day', () => {
     expect(pace.domain.minCents).toBe(0)
     expect(pace.domain.maxCents).toBeGreaterThanOrEqual(60_000)
     expect(pace.empty).toBe(false)
+  })
+
+  it('compares all of a shorter last month once today is past its end', () => {
+    const rows = [spend('2026-02-03', 'food', 4_000), spend('2026-02-28', 'food', 1_000), spend('2026-03-02', 'food', 2_000)]
+    for (const today of ['2026-03-29', '2026-03-30', '2026-03-31']) {
+      const pace = monthPace({ rows, categories, today, budgetCents: null })
+      expect(pace.previousByNowCents).toBe(5_000)
+      expect(pace.previousDay).toBe(28)
+    }
+    // Before February runs out, the same day of it.
+    expect(monthPace({ rows, categories, today: '2026-03-28', budgetCents: null })).toMatchObject({
+      previousByNowCents: 5_000,
+      previousDay: 28,
+    })
+    expect(monthPace({ rows, categories, today: '2026-03-27', budgetCents: null })).toMatchObject({
+      previousByNowCents: 4_000,
+      previousDay: 27,
+    })
+  })
+
+  it('stops a longer last month at today’s date, as the month-to-date totals do', () => {
+    const pace = monthPace({
+      rows: [spend('2026-08-30', 'food', 3_000), spend('2026-08-31', 'food', 7_000)],
+      categories,
+      today: '2026-09-30',
+      budgetCents: null,
+    })
+    expect(pace.previousByNowCents).toBe(3_000)
+    expect(pace.previousDay).toBe(30)
+    // The line still ends on August's whole total.
+    expect(pace.previous[30]).toBe(10_000)
   })
 
   it('says when there is nothing to draw, and has no plan line without a plan', () => {

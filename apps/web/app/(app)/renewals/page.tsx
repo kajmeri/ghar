@@ -25,8 +25,11 @@ export default async function RenewalsPage({ searchParams }: PageProps<'/renewal
   const today = todayInTimeZone(session.household.timeZone)
   const canManage = can(session.context.role, 'documents.manage')
 
-  const [expiries, options] = await Promise.all([
-    renewals.listAllExpiries(session, showOlder ? undefined : addCalendarDays(today, -EXPIRED_LOOKBACK_DAYS)),
+  const lookbackFrom = addCalendarDays(today, -EXPIRED_LOOKBACK_DAYS)
+  const [expiries, hasOlder, options] = await Promise.all([
+    renewals.listAllExpiries(session, showOlder ? undefined : lookbackFrom),
+    // Only offer older ones when there are some.
+    showOlder ? false : renewals.hasExpiriesBefore(session, lookbackFrom),
     canManage ? renewals.listRenewalFormOptions(session) : null,
   ])
   const addButton = options ? <RenewalSheet options={options} currency={session.household.currency} /> : undefined
@@ -39,7 +42,12 @@ export default async function RenewalsPage({ searchParams }: PageProps<'/renewal
       description: showOlder ? undefined : 'In the past year',
       rows: live.filter(expiry => expiry.state === 'expired').toReversed(),
     },
-    { id: 'soon', title: 'Coming up', description: 'Close enough that reminders have started', rows: live.filter(expiry => expiry.state === 'expiring') },
+    {
+      id: 'soon',
+      title: 'Coming up',
+      description: 'Close enough that reminders have started',
+      rows: live.filter(expiry => expiry.state === 'expiring'),
+    },
     { id: 'later', title: 'Later', rows: live.filter(expiry => expiry.state === 'current') },
     {
       id: 'not-renewing',
@@ -54,23 +62,28 @@ export default async function RenewalsPage({ searchParams }: PageProps<'/renewal
       <PageHeader
         title='Renewals'
         description='Papers, warranties and anything else with a date it runs out'
-        action={expiries.length > 0 ? addButton : undefined}
+        action={expiries.length > 0 || hasOlder ? addButton : undefined}
       />
-      {expiries.length > 0 ? (
+      {expiries.length > 0 || hasOlder ? (
         <div className='flex flex-col gap-8'>
+          {expiries.length === 0 ? (
+            <p className='rounded-card border border-line bg-surface p-4 text-ink-muted'>
+              Nothing ran out in the past year and nothing is coming up. Show older ones to see what ran out before then.
+            </p>
+          ) : null}
           {groups.map(group => (
             <section key={group.id} aria-labelledby={`${group.id}-heading`}>
               <SectionHeader id={`${group.id}-heading`} title={group.title} description={group.description} />
               <ExpiryList label={group.title} expiries={group.rows} today={today} />
             </section>
           ))}
-          {showOlder ? null : (
+          {hasOlder ? (
             <div>
               <Button asChild variant='ghost'>
                 <Link href='/renewals?older=1'>Show older ones</Link>
               </Button>
             </div>
-          )}
+          ) : null}
         </div>
       ) : canManage ? (
         <EmptyState

@@ -7207,6 +7207,58 @@
             "$ref": "#/components/responses/InternalError"
           }
         }
+      },
+      "patch": {
+        "operationId": "updateMyHousehold",
+        "tags": [
+          "households"
+        ],
+        "description": "Moves the household to another time zone. Owners and adults only (403 otherwise); 400 for a\nzone the server doesn't know, or a body that tries to change the currency.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHouseholdBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyHouseholdResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
       }
     },
     "/api/v1/households/me/invitations": {
@@ -23224,6 +23276,8 @@
             }
           },
           "sendHour": {
+            "deprecated": true,
+            "description": "Ignored. The digest goes out once a day with the daily run.",
             "type": "integer",
             "minimum": 0,
             "maximum": 23
@@ -23231,8 +23285,7 @@
         },
         "required": [
           "enabled",
-          "sections",
-          "sendHour"
+          "sections"
         ]
       },
       "DigestSection": {
@@ -27377,6 +27430,11 @@
           "previousByNowCents": {
             "$ref": "#/components/schemas/Cents"
           },
+          "previousDay": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 31
+          },
           "budgetCents": {
             "anyOf": [
               {
@@ -27412,6 +27470,7 @@
           "current",
           "previous",
           "previousByNowCents",
+          "previousDay",
           "budgetCents",
           "budgetByNowCents",
           "domain",
@@ -31450,6 +31509,8 @@
             }
           },
           "sendHour": {
+            "deprecated": true,
+            "description": "Ignored. The digest goes out once a day with the daily run.",
             "type": "integer",
             "minimum": 0,
             "maximum": 23
@@ -31462,7 +31523,6 @@
         "required": [
           "enabled",
           "sections",
-          "sendHour",
           "userId"
         ]
       },
@@ -33869,6 +33929,20 @@
           "canEmail",
           "muted"
         ]
+      },
+      "UpdateHouseholdBody": {
+        "type": "object",
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "timezone"
+        ],
+        "additionalProperties": false
       },
       "UpdateManualAccountBody": {
         "type": "object",

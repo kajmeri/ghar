@@ -42,6 +42,16 @@ export function currentTermEnd(term: RenewalTerm, today: CalendarDate): Calendar
   return next
 }
 
+/**
+ * The date to show for a renewal today. An automatic renewal past its date has already renewed,
+ * even when the daily run hasn't moved the stored date on yet (it hasn't run today, it failed, or
+ * the date was only just typed in), so it shows its current term rather than "Expired". One marked
+ * not renewing lapsed on purpose and keeps its date, as the daily run leaves it.
+ */
+export function shownTermEnd(term: RenewalTerm & { notRenewing: boolean }, today: CalendarDate): CalendarDate {
+  return term.notRenewing ? term.expiresOn : currentTermEnd(term, today)
+}
+
 /** The date a renewal done by hand runs to: one term on from the date it ran out. Null without a cadence. */
 export function nextTermEnd(term: Pick<RenewalTerm, 'expiresOn' | 'cadenceMonths'>): CalendarDate | null {
   return term.cadenceMonths === null ? null : addCalendarMonths(term.expiresOn, term.cadenceMonths)

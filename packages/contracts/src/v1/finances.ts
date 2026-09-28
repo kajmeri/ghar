@@ -406,7 +406,10 @@ export const monthPaceSchema = z.object({
   current: z.array(centsSchema).max(32),
   /** The same for last month, held to this month's length. */
   previous: z.array(centsSchema).max(32),
+  /** Last month up to previousDay. */
   previousByNowCents: centsSchema,
+  /** Today's day of the month, or last month's last day when it had fewer. */
+  previousDay: z.int().min(1).max(31),
   /** Null until someone plans the month. */
   budgetCents: centsSchema.nullable(),
   /** What the plan expects spent by today, if spending went evenly. */

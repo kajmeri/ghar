@@ -12,11 +12,11 @@ import * as digest from '@/lib/digest/service'
 export async function saveDigestPreferencesAction(_previous: ActionState, formData: FormData): Promise<ActionState> {
   return runAction(formData, async () => {
     const ctx = await getRequestContext()
-    // Checkboxes repeat a name, which parseForm's one-value-per-field reading can't hold.
+    // Checkboxes repeat a name, which parseForm's one-value-per-field reading can't hold. There's no
+    // hour to send: the digest goes out with the daily run, and the stored hour is left alone.
     const parsed = digestPreferencesSchema.safeParse({
       enabled: formData.get('enabled') === 'on',
       sections: formData.getAll('sections').filter(value => typeof value === 'string'),
-      sendHour: Number(formData.get('sendHour')),
     })
     if (!parsed.success) {
       throw new ValidationError('Check the highlighted fields.', {

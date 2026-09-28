@@ -33,16 +33,40 @@ export const getMyHousehold = defineEndpoint({
   response: myHouseholdResponseSchema,
 })
 
+/**
+ * Whether a currency's amounts have exactly two decimal places. Money is stored as integer
+ * hundredths whatever the currency, so yen or dinars would be stored wrong. Mirrors
+ * hasTwoDecimalMinorUnit in @ghar/core/money. A test keeps them equal.
+ */
+function hasTwoDecimals(currency: string): boolean {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits === 2
+  } catch {
+    return false
+  }
+}
+
 export const createHouseholdBodySchema = z.object({
   name: z.string().trim().min(1, 'Give your household a name.').max(80, 'Keep the name to 80 characters or fewer.'),
   timezone: z.string().trim().min(1, 'Choose a time zone.').max(64),
+  /** ISO 4217, with two decimal places: USD or EUR, not JPY or KWD. */
   currency: z
     .string()
     .trim()
     .toUpperCase()
-    .regex(/^[A-Z]{3}$/, 'Use a three-letter currency code, like USD.'),
+    .regex(/^[A-Z]{3}$/, 'Use a three-letter currency code, like USD.')
+    .refine(hasTwoDecimals, 'Choose a currency with two decimal places, like USD or EUR.'),
 })
 export type CreateHouseholdBody = z.infer<typeof createHouseholdBodySchema>
+
+/**
+ * What can change once a household is made: only the time zone. The currency is fixed, because
+ * every amount is stored in it, so a body that names one is refused rather than quietly ignored.
+ */
+export const updateHouseholdBodySchema = z.strictObject({
+  timezone: z.string().trim().min(1, 'Choose a time zone.').max(64),
+})
+export type UpdateHouseholdBody = z.infer<typeof updateHouseholdBodySchema>
 
 export const householdOptionsSchema = z.object({
   /** Every IANA zone the server knows, UTC included. */
@@ -66,5 +90,16 @@ export const createHousehold = defineEndpoint({
   method: 'POST',
   path: '/api/v1/households',
   body: createHouseholdBodySchema,
+  response: myHouseholdResponseSchema,
+})
+
+/**
+ * Moves the household to another time zone. Owners and adults only (403 otherwise); 400 for a
+ * zone the server doesn't know, or a body that tries to change the currency.
+ */
+export const updateMyHousehold = defineEndpoint({
+  method: 'PATCH',
+  path: '/api/v1/households/me',
+  body: updateHouseholdBodySchema,
   response: myHouseholdResponseSchema,
 })

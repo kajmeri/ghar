@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ValidationError } from '../src/errors'
-import { addCents, currencySymbol, formatCents, parseMoneyInput } from '../src/money'
+import { addCents, currencySymbol, formatCents, hasTwoDecimalMinorUnit, parseMoneyInput } from '../src/money'
 
 describe('formatCents', () => {
   it.each([
@@ -108,5 +108,17 @@ describe('addCents', () => {
 
   it('refuses a total past the safe integer range', () => {
     expect(() => addCents(Number.MAX_SAFE_INTEGER, 1)).toThrow(ValidationError)
+  })
+})
+
+describe('hasTwoDecimalMinorUnit', () => {
+  it('holds for currencies whose hundredths parseMoneyInput and formatCents agree on', () => {
+    for (const currency of ['USD', 'EUR', 'GBP', 'INR']) expect(hasTwoDecimalMinorUnit(currency)).toBe(true)
+    // "12.34" typed in yen would be stored as 1234 and shown as ¥1,234.
+    for (const currency of ['JPY', 'KRW', 'KWD', 'BHD']) expect(hasTwoDecimalMinorUnit(currency)).toBe(false)
+  })
+
+  it('is false for something that isn’t a currency code', () => {
+    expect(hasTwoDecimalMinorUnit('dollars')).toBe(false)
   })
 })

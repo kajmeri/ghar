@@ -387,6 +387,9 @@ export async function completeMaintenanceTask(
         costCents: input.costCents,
         notes: input.notes,
         documentId: input.documentId,
+        // So taking this back, if it's the only one, can put the schedule back as it was.
+        lastDoneBefore: current.lastDoneOn,
+        nextDueBefore: current.nextDueOn,
       })
       .returning()
     if (!entry) throw new Error('The completion was not logged')
@@ -427,7 +430,7 @@ export async function deleteMaintenanceCompletion(
 
     await tx
       .update(maintenance)
-      .set({ ...scheduleAfterRemoval(current, removed.completedOn, newest?.completedOn ?? null), updatedAt: sql`now()` })
+      .set({ ...scheduleAfterRemoval(current, removed, newest?.completedOn ?? null), updatedAt: sql`now()` })
       .where(taskKey(ctx, taskId))
     await recordAudit(ctx, tx, {
       action: 'maintenance.completion_deleted',

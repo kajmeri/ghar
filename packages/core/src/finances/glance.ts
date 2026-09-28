@@ -31,8 +31,13 @@ export interface MonthPace {
    * into the final point so its total is still the real one.
    */
   previous: Cents[]
-  /** Last month by the same day, for "against this point last month". */
+  /**
+   * Last month by the same day, for "against this point last month". When last month was shorter
+   * than today's date, all of it, the same stretch monthToDateWindows compares.
+   */
   previousByNowCents: Cents
+  /** The day of last month previousByNowCents runs to: today's, or last month's last when it had fewer. */
+  previousDay: number
   /** The plan for the month, drawn as a straight line from nothing to it. Null without one. */
   budgetCents: Cents | null
   /** What the plan expects spent by today, if spending went evenly. */
@@ -79,6 +84,7 @@ export function monthPace(input: {
   const daysInMonth = daysInPeriod(start)
   const previousDays = daysInPeriod(previousStart)
   const day = Number(today.slice(8, 10))
+  const previousDay = Math.min(day, previousDays)
 
   const inWindow = (from: CalendarDate, days: number) => {
     const to = addCalendarDays(from, days)
@@ -100,7 +106,9 @@ export function monthPace(input: {
     day,
     current,
     previous,
-    previousByNowCents: previous[Math.min(day, daysInMonth)] ?? 0,
+    // From the unfolded month: on the 30th after a 31-day month, only its first 30 days count.
+    previousByNowCents: previousFull[previousDay] ?? 0,
+    previousDay,
     budgetCents,
     budgetByNowCents: budgetCents === null ? null : Math.round((budgetCents * day) / daysInMonth),
     domain: niceDomain(Math.min(0, ...values), Math.max(0, ...values), 3),
