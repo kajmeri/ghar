@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import * as schema from './schema'
 
-export type Database = ReturnType<typeof createDb>
+export type Database = ReturnType<typeof createDbFromPool>
 
 /**
  * Creates the Drizzle client. Call once per server process.
@@ -15,7 +15,21 @@ export type Database = ReturnType<typeof createDb>
  * instead of 30.
  */
 export function createDb(databaseUrl: string) {
-  const client = postgres(databaseUrl, { prepare: false, max: 5, idle_timeout: 20, connect_timeout: 10 })
+  return createDbFromPool(createPool(databaseUrl))
+}
+
+export type Pool = ReturnType<typeof createPool>
+
+export function createPool(databaseUrl: string) {
+  return postgres(databaseUrl, { prepare: false, max: 5, idle_timeout: 20, connect_timeout: 10 })
+}
+
+/**
+ * Wraps an existing pool. The Drizzle client caches column names per table, so a dev server that
+ * kept one client across hot reloads would miss a column added to the schema since it started.
+ * Keep the pool across reloads and build the client fresh with the current schema.
+ */
+export function createDbFromPool(client: Pool) {
   return drizzle({ client, schema, casing: 'snake_case' })
 }
 

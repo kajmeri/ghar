@@ -1,12 +1,14 @@
 import 'server-only'
-import { createDb, type Database } from '@ghar/db'
+import { createDbFromPool, createPool, type Database, type Pool } from '@ghar/db'
 import { env } from '@/lib/env'
 
-// Kept on globalThis so hot reloads in development reuse one connection pool.
-const globalForDb = globalThis as typeof globalThis & { gharDb?: Database }
+// The pool is kept on globalThis so hot reloads in development reuse its connections. The Drizzle
+// client isn't: it caches the schema's columns, so it's rebuilt whenever this module reloads.
+const globalForDb = globalThis as typeof globalThis & { gharPool?: Pool }
+let db: Database | undefined
 
 /** The shared Drizzle client. apps/web is the only workspace allowed to import @ghar/db. */
 export function getDb(): Database {
-  globalForDb.gharDb ??= createDb(env().DATABASE_URL)
-  return globalForDb.gharDb
+  db ??= createDbFromPool((globalForDb.gharPool ??= createPool(env().DATABASE_URL)))
+  return db
 }
