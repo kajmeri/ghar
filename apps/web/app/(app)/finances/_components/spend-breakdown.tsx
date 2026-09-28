@@ -30,7 +30,10 @@ export function SpendBreakdown({
         title='Where it’s going'
         description='This month so far, biggest first'
         action={
-          <Link href={transactionsHref(month)} className='text-sm underline underline-offset-4 hover:no-underline'>
+          <Link
+            href={transactionsHref(month)}
+            className='inline-flex min-h-tap items-center text-sm underline underline-offset-4 hover:no-underline'
+          >
             See every charge
           </Link>
         }
