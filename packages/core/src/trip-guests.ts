@@ -92,6 +92,25 @@ export function tripHeadcount(input: {
   return { going, maybe }
 }
 
+/**
+ * The guests who count as guests, beside the household's travellers. Someone let on as a guest
+ * who later joins the hosting household keeps their guest row (it comes back into use if they
+ * leave again), and once the household adds them as a traveller they would be on the trip twice.
+ * They count once, as the traveller: the household's own list decides who of its people is going.
+ *
+ * Matched by account, and only against travellers. Joining the household alone hides nothing:
+ * until the household puts them on the trip, their guest answer is the only place they're going,
+ * and dropping it would take them off every count. Whoever they were bringing goes with the
+ * guest row, since the household's travellers are counted one each.
+ */
+export function guestsBesideTravellers<T extends { readonly userId: string | null }>(
+  guests: readonly T[],
+  travellers: readonly { readonly userId: string | null }[]
+): T[] {
+  const travelling = new Set(travellers.flatMap(traveller => (traveller.userId === null ? [] : [traveller.userId])))
+  return guests.filter(guest => guest.userId === null || !travelling.has(guest.userId))
+}
+
 export function assertPartySize(partySize: number): void {
   if (!Number.isInteger(partySize) || partySize < 1 || partySize > MAX_PARTY_SIZE) {
     throw new ValidationError(`A party is 1 to ${String(MAX_PARTY_SIZE)} people.`, {
@@ -337,7 +356,7 @@ export function tripPeople(input: {
     you: traveller.userId === input.viewerUserId,
   }))
   const guests = (response: 'going' | 'maybe'): TripPerson[] =>
-    input.guests
+    guestsBesideTravellers(input.guests, input.travellers)
       .filter(guest => isAdmitted(guest) && guest.response === response)
       .map(guest => ({
         name: firstName(guest.name),
@@ -390,8 +409,10 @@ export function tripRoster(input: {
     heads: 1,
     host: true,
   }))
+  // A guest who is now one of the travellers is only the traveller here, so an arrival or bed
+  // kept under their guest row drops off the board rather than showing them twice.
   const guests = (response: 'going' | 'maybe'): RosterEntry[] =>
-    input.guests
+    guestsBesideTravellers(input.guests, input.travellers)
       .filter(guest => isAdmitted(guest) && guest.response === response)
       .map(guest => ({
         key: { kind: 'guest', id: guest.guestId },

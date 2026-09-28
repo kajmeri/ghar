@@ -5,7 +5,7 @@ import { invitationExpiresAt } from '@ghar/core/invitations'
 import { HOUSEHOLD_PARTY, type TripParty } from '@ghar/core/trip-costs'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createInvitation } from '../src/queries/invitations'
-import { createPerson } from '../src/queries/people'
+import { createPerson, listPeople } from '../src/queries/people'
 import { acceptInvitation, createHousehold, updateProfile } from '../src/queries/session'
 import {
   createTripCost,
@@ -17,7 +17,8 @@ import {
   type TripCostInput,
 } from '../src/queries/trip-costs'
 import { inviteTripGuests, listTripGuests, removeTripGuest, respondToTripInvite } from '../src/queries/trip-guests'
-import { createTrip, deleteTrip } from '../src/queries/trips'
+import { listTripArrivals } from '../src/queries/trip-arrivals'
+import { createTrip, deleteTrip, updateTrip } from '../src/queries/trips'
 import type { Db, SessionContext } from '../src/queries/types'
 import { createAuthUser, createTestDatabase, queryAs } from './support/database'
 
@@ -240,5 +241,54 @@ describe('shared costs', () => {
     await deleteTrip(a, db, tripId)
     expect((await client.query('select id from trip_costs')).rows).toHaveLength(0)
     expect((await client.query('select id from trip_payments')).rows).toHaveLength(0)
+  })
+})
+
+describe('a guest who joins the household and is put on the trip', () => {
+  it('counts once, as the traveller, and what they owe as a guest can still be settled', async () => {
+    await inviteTripGuests(a, db, { tripId: otherTripId, invites: [{ email: 'pat@example.com', tokenHash: 'hash-pat' }], now })
+    const pat = await person('pat@example.com', 'Pat Lee')
+    const { guestId } = await respondToTripInvite(pat, db, { tokenHash: 'hash-pat', response: 'going', partySize: 1, now })
+    const patParty: TripParty = { kind: 'guest', id: guestId }
+    await createTripCost(pat, db, {
+      ...cost({ tripId: otherTripId, paidBy: patParty }),
+      amountCents: 100_00,
+      shares: [
+        { party: HOUSEHOLD_PARTY, shares: 1 },
+        { party: patParty, shares: 1 },
+      ],
+    })
+
+    await createInvitation(a, db, {
+      email: 'pat@example.com',
+      role: 'adult',
+      tokenHash: 'hash-pat-join',
+      expiresAt: invitationExpiresAt(now),
+    })
+    await acceptInvitation(pat, db, { tokenHash: 'hash-pat-join', now })
+    const people = await listPeople(a, db)
+    const idFor = (userId: string) => people.find(entry => entry.userId === userId)?.id ?? ''
+    await updateTrip(a, db, otherTripId, { travellerIds: [idFor(owner.userId), idFor(pat.userId)] })
+
+    expect((await listTripGuests(a, db, otherTripId)).headcount).toEqual({ going: 2, maybe: 0 })
+    expect((await listTripArrivals(owner, db, otherTripId)).people.map(entry => [entry.name, entry.host])).toEqual([
+      ['Asha', true],
+      ['Pat', true],
+    ])
+
+    const ledger = await listTripCosts(owner, db, otherTripId)
+    expect(ledger.parties.map(entry => [entry.name, entry.heads, entry.active, entry.balanceCents])).toEqual([
+      ['The Mehtas', 2, true, -50_00],
+      ['Pat', 1, false, 50_00],
+    ])
+    expect(ledger.transfers).toEqual([{ from: HOUSEHOLD_PARTY, to: patParty, amountCents: 50_00, canRecord: true }])
+    await recordTripPayment(owner, db, {
+      tripId: otherTripId,
+      from: HOUSEHOLD_PARTY,
+      to: patParty,
+      amountCents: 50_00,
+      paidOn: '2027-03-16',
+    })
+    expect((await listTripCosts(owner, db, otherTripId)).transfers).toEqual([])
   })
 })

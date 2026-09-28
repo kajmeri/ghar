@@ -6,6 +6,7 @@ import {
   assertEmailInviteIsFor,
   assertPartySize,
   firstName,
+  guestsBesideTravellers,
   guestStatus,
   MAX_TRIP_GUESTS,
   normalizeGuestEmails,
@@ -124,10 +125,16 @@ export async function listTripGuests(ctx: RequestContext, db: Db, tripId: string
   const rows = await selectGuests(db)
     .where(eq(tripGuests.tripId, trip.id))
     .orderBy(sql`${tripGuests.approvedAt} is null desc`, asc(tripGuests.createdAt), asc(tripGuests.id))
-  const [travellers] = await db.select({ n: count() }).from(tripTravellers).where(eq(tripTravellers.tripId, trip.id))
+  const travellers = await db
+    .select({ userId: householdPeople.userId })
+    .from(tripTravellers)
+    .innerJoin(householdPeople, eq(householdPeople.id, tripTravellers.personId))
+    .where(eq(tripTravellers.tripId, trip.id))
   return {
+    // The list keeps everyone asked, so the household can still take them off; the count doesn't
+    // count anyone twice.
     guests: rows.map(withStatus),
-    headcount: tripHeadcount({ travellerCount: travellers?.n ?? 0, guests: rows }),
+    headcount: tripHeadcount({ travellerCount: travellers.length, guests: guestsBesideTravellers(rows, travellers) }),
   }
 }
 
@@ -464,18 +471,25 @@ export interface WhoIsGoing {
 /** Who is coming, as the invitation shows it: first names and a count, nothing that identifies. */
 async function whoIsGoing(db: Db, tripId: string): Promise<WhoIsGoing> {
   const travellers = await db
-    .select({ name: sql<string | null>`coalesce(${householdPeople.name}, ${profiles.fullName})` })
+    .select({ name: sql<string | null>`coalesce(${householdPeople.name}, ${profiles.fullName})`, userId: householdPeople.userId })
     .from(tripTravellers)
     .innerJoin(householdPeople, eq(householdPeople.id, tripTravellers.personId))
     .leftJoin(profiles, eq(profiles.id, householdPeople.userId))
     .where(eq(tripTravellers.tripId, tripId))
     .orderBy(asc(tripTravellers.createdAt))
-  const guests = await db
-    .select({ name: profiles.fullName, response: tripGuests.response, partySize: tripGuests.partySize, approvedAt: tripGuests.approvedAt })
+  const everyGuest = await db
+    .select({
+      name: profiles.fullName,
+      userId: tripGuests.userId,
+      response: tripGuests.response,
+      partySize: tripGuests.partySize,
+      approvedAt: tripGuests.approvedAt,
+    })
     .from(tripGuests)
     .leftJoin(profiles, eq(profiles.id, tripGuests.userId))
     .where(eq(tripGuests.tripId, tripId))
     .orderBy(asc(tripGuests.respondedAt))
+  const guests = guestsBesideTravellers(everyGuest, travellers)
   const going = guests.filter(guest => guest.approvedAt !== null && guest.response === 'going')
   const names = [...travellers, ...going].flatMap(row => {
     const name = firstName(row.name)
