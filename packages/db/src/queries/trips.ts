@@ -1,8 +1,8 @@
 import { requirePermission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
 import type { TripStatus } from '@ghar/core/trips'
-import { and, count, eq, getTableColumns, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
-import { bookings, itinerarySlots, packingItems, tripPhotos, trips, tripTravellers } from '../schema'
+import { and, count, eq, getTableColumns, gte, inArray, isNull, lt, notInArray, or, sql } from 'drizzle-orm'
+import { bookings, itinerarySlots, packingItems, tripArrivals, tripPhotos, tripRoomAssignments, trips, tripTravellers } from '../schema'
 import { recordAudit } from './audit'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { requireHouseholdPeople, requireOwnPerson } from './people'
@@ -62,7 +62,12 @@ const tripOrder: Keyset = {
 }
 
 /** One page of listTrips, in the same order with the id breaking ties. `phase` defaults to all here too. */
-export async function listTripsPage(ctx: RequestContext, db: Db, options: ListTripsOptions, page: PageRequest): Promise<Page<TripWithCounts>> {
+export async function listTripsPage(
+  ctx: RequestContext,
+  db: Db,
+  options: ListTripsOptions,
+  page: PageRequest
+): Promise<Page<TripWithCounts>> {
   requirePermission(ctx, 'travel.view')
   const fetched = await db
     .select({ ...getTableColumns(trips), pageKeys: pageKeys(tripOrder) })
@@ -161,6 +166,16 @@ export async function updateTrip(ctx: RequestContext, db: Db, tripId: string, pa
       if (personIds.length > 0) {
         await tx.insert(tripTravellers).values(personIds.map(personId => ({ tripId, personId })))
       }
+      // Someone no longer going has no arrival to meet and no bed to keep. Without this the rows
+      // stay hidden and come back out of date if they're put on the trip again.
+      const notGoing = (table: typeof tripArrivals | typeof tripRoomAssignments) =>
+        and(
+          eq(table.tripId, tripId),
+          sql`${table.personId} is not null`,
+          personIds.length > 0 ? notInArray(sql`${table.personId}`, personIds) : undefined
+        )
+      await tx.delete(tripArrivals).where(notGoing(tripArrivals))
+      await tx.delete(tripRoomAssignments).where(notGoing(tripRoomAssignments))
     }
     await recordAudit(ctx, tx, {
       action: 'trip.updated',

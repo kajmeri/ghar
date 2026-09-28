@@ -199,7 +199,7 @@ describe('arrivals', () => {
     expect(back.arrivals.find(row => row.id === samIn.id)?.ride).toBe('wanted')
   })
 
-  it('come off by the person, and drop off the board with them', async () => {
+  it('come off by the person, and go with them when they come off the trip', async () => {
     const miraIn = (await listTripArrivals(owner, db, tripId)).arrivals.find(row => row.name === 'Mira')
     if (!miraIn) throw new Error('Expected Mira’s arrival')
     await expect(deleteTripArrival(sam, db, { tripId, arrivalId: miraIn.id })).rejects.toThrow(ForbiddenError)
@@ -207,9 +207,10 @@ describe('arrivals', () => {
 
     await updateTrip(a, db, tripId, { travellerIds: [asha.id] })
     expect((await listTripArrivals(owner, db, tripId)).arrivals.map(row => row.name)).not.toContain('Mira')
+    // Put back on the trip, she starts again rather than with travel that may no longer be true.
     await updateTrip(a, db, tripId, { travellerIds: [asha.id, mira.id] })
-    const board = await deleteTripArrival(owner, db, { tripId, arrivalId: miraIn.id })
-    expect(board.arrivals.map(row => row.name)).not.toContain('Mira')
+    expect((await listTripArrivals(owner, db, tripId)).arrivals.map(row => row.name)).not.toContain('Mira')
+    await expect(deleteTripArrival(owner, db, { tripId, arrivalId: miraIn.id })).rejects.toThrow(NotFoundError)
   })
 
   it('are read by everyone on the trip and nobody else', async () => {
