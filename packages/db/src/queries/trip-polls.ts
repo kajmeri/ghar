@@ -226,7 +226,7 @@ export async function deleteTripPoll(ctx: SessionContext, db: Db, input: { tripI
 export async function pickTripPollOption(
   ctx: SessionContext,
   db: Db,
-  input: { tripId: string; pollId: string; optionId: string }
+  input: { tripId: string; pollId: string; optionId: string; now: Date }
 ): Promise<TripPollsView> {
   const participant = await requireParticipant(ctx, db, input.tripId)
   requireManager(participant)
@@ -238,7 +238,8 @@ export async function pickTripPollOption(
       .where(and(eq(tripPollOptions.id, input.optionId), eq(tripPollOptions.pollId, poll.id)))
       .limit(1)
     if (!option) throw new NotFoundError(OPTION_NOT_FOUND)
-    const patch = poll.kind === 'dates' ? tripDatesFromOption(option) : { destination: option.label }
+    const patch =
+      poll.kind === 'dates' ? tripDatesFromOption(option, todayInTimeZone(participant.timeZone, input.now)) : { destination: option.label }
     const tripKey = and(eq(trips.id, input.tripId), eq(trips.householdId, participant.hostHouseholdId))
     const [before] = await tx
       .select({ startsOn: trips.startsOn, endsOn: trips.endsOn, destination: trips.destination })

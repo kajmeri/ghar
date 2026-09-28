@@ -155,8 +155,12 @@ describe('when works', () => {
   it('becomes the trip’s dates when the household picks', async () => {
     const [december] = (await listTripPolls(owner, db, tripId)).polls[0]?.options ?? []
     if (!december) throw new Error('Expected an option')
-    await expect(pickTripPollOption(sam, db, { tripId, pollId, optionId: december.id })).rejects.toThrow(ForbiddenError)
-    const value = await pickTripPollOption(owner, db, { tripId, pollId, optionId: december.id })
+    await expect(pickTripPollOption(sam, db, { tripId, pollId, optionId: december.id, now })).rejects.toThrow(ForbiddenError)
+    // Once the range has started, in the host's zone, it can't become the trip's dates.
+    await expect(
+      pickTripPollOption(owner, db, { tripId, pollId, optionId: december.id, now: new Date('2026-12-21T12:00:00Z') })
+    ).rejects.toThrow('Those dates have passed.')
+    const value = await pickTripPollOption(owner, db, { tripId, pollId, optionId: december.id, now })
     expect(value.polls).toEqual([])
     expect(await getTripWithCounts(a, db, tripId)).toMatchObject({ startsOn: '2026-12-20', endsOn: '2026-12-27' })
   })
@@ -171,7 +175,7 @@ describe('where to', () => {
     const withDate = await setTripPollDecideBy(owner, db, { tripId, pollId, decideBy: '2026-10-10', now })
     expect(withDate.polls[0]).toMatchObject({ decideBy: '2026-10-10', options: [{ label: 'North Goa' }] })
     const optionId = withDate.polls[0]?.options[0]?.id ?? ''
-    await pickTripPollOption(owner, db, { tripId, pollId, optionId })
+    await pickTripPollOption(owner, db, { tripId, pollId, optionId, now })
     expect((await getTripWithCounts(a, db, tripId)).destination).toBe('North Goa')
 
     const again = await openTripPoll(owner, db, tripId, { kind: 'place', decideBy: null, now })

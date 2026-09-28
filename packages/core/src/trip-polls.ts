@@ -117,9 +117,14 @@ export function pollLeader(
   return second?.score === first.score ? null : first.id
 }
 
-/** Trip dates from a picked range, checked the same way the trip form checks them. */
-export function tripDatesFromOption(option: PollOptionValue): { startsOn: CalendarDate; endsOn: CalendarDate } {
+/**
+ * Trip dates from a picked range, checked the same way the trip form checks them. A range that
+ * was fine when it was added can have gone by the time anyone picks, and it can't start before
+ * today, in the host's zone, any more than a new one could.
+ */
+export function tripDatesFromOption(option: PollOptionValue, today: CalendarDate): { startsOn: CalendarDate; endsOn: CalendarDate } {
   if (option.startsOn === null || option.endsOn === null) throw new ValidationError('That option has no dates.')
+  if (option.startsOn < today) throw new ValidationError('Those dates have passed. Add dates still to come and pick one of those.')
   return { startsOn: option.startsOn, endsOn: option.endsOn }
 }
 
