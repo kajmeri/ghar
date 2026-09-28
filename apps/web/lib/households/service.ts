@@ -11,6 +11,7 @@ import type {
   MyInvitation,
   PageQuery,
   RequestContext,
+  UpdateHouseholdBody,
 } from '@ghar/contracts'
 import type { HouseholdRole } from '@ghar/core/auth'
 import { invitationExpiresAt, invitationStatus } from '@ghar/core/invitations'
@@ -36,6 +37,16 @@ export async function getMyHousehold(ctx: RequestContext, session: SessionContex
 export async function createHousehold(session: SessionContext, body: CreateHouseholdBody): Promise<MyHouseholdResponse> {
   const { household, membership } = await queries.createHousehold(session, getDb(), body)
   return toMyHousehold(household, session, membership.role)
+}
+
+/** Moves the household to another time zone. The queries check the caller may. */
+export async function updateMyHousehold(
+  ctx: RequestContext,
+  session: SessionContext,
+  body: UpdateHouseholdBody
+): Promise<MyHouseholdResponse> {
+  const household = await queries.updateHouseholdTimeZone(ctx, getDb(), { timezone: body.timezone })
+  return toMyHousehold(household, session, ctx.role)
 }
 
 export async function listMembers(ctx: RequestContext): Promise<Member[]> {

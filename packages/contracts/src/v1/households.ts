@@ -59,6 +59,15 @@ export const createHouseholdBodySchema = z.object({
 })
 export type CreateHouseholdBody = z.infer<typeof createHouseholdBodySchema>
 
+/**
+ * What can change once a household is made: only the time zone. The currency is fixed, because
+ * every amount is stored in it, so a body that names one is refused rather than quietly ignored.
+ */
+export const updateHouseholdBodySchema = z.strictObject({
+  timezone: z.string().trim().min(1, 'Choose a time zone.').max(64),
+})
+export type UpdateHouseholdBody = z.infer<typeof updateHouseholdBodySchema>
+
 export const householdOptionsSchema = z.object({
   /** Every IANA zone the server knows, UTC included. */
   timeZones: z.array(z.string()),
@@ -81,5 +90,16 @@ export const createHousehold = defineEndpoint({
   method: 'POST',
   path: '/api/v1/households',
   body: createHouseholdBodySchema,
+  response: myHouseholdResponseSchema,
+})
+
+/**
+ * Moves the household to another time zone. Owners and adults only (403 otherwise); 400 for a
+ * zone the server doesn't know, or a body that tries to change the currency.
+ */
+export const updateMyHousehold = defineEndpoint({
+  method: 'PATCH',
+  path: '/api/v1/households/me',
+  body: updateHouseholdBodySchema,
   response: myHouseholdResponseSchema,
 })

@@ -5,6 +5,7 @@ import { invitationStatus } from '@ghar/core/invitations'
 import { TriangleAlert } from 'lucide-react'
 import type { Metadata } from 'next'
 import { getPageContext } from '@/lib/auth/context'
+import { currencyLabel, timeZoneOptions } from '@/lib/households/options'
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/lib/households/roles'
 import * as households from '@/lib/households/service'
 import * as people from '@/lib/people/service'
@@ -15,6 +16,7 @@ import { InvitationControls } from './_components/invitation-controls'
 import { InviteForm } from './_components/invite-form'
 import { MemberControls } from './_components/member-controls'
 import { AddPersonForm, PersonControls } from './_components/people-controls'
+import { TimeZoneForm } from './_components/time-zone-form'
 
 export const metadata: Metadata = { title: 'Household' }
 
@@ -26,6 +28,7 @@ export default async function HouseholdSettingsPage() {
   const canChangeRole = can(ctx.role, 'members.changeRole')
   const canRemove = can(ctx.role, 'members.remove')
   const canManagePeople = can(ctx.role, 'people.manage')
+  const canUpdateHousehold = can(ctx.role, 'household.update')
 
   const [{ household }, members, invitations, everyone] = await Promise.all([
     households.getMyHousehold(ctx, session),
@@ -35,6 +38,10 @@ export default async function HouseholdSettingsPage() {
   ])
   // Members are listed above. These are the others: children, and anyone who has left.
   const others = everyone.filter(person => person.userId === null)
+  // A zone saved under an older name the list no longer offers stays selectable, so saving the form
+  // never swaps it for the first zone in the list.
+  const zones = timeZoneOptions()
+  const timeZones = zones.includes(household.timezone) ? zones : [household.timezone, ...zones]
   const inviteRoles = INVITABLE_ROLES[ctx.role].map(value => ({
     value,
     label: ROLE_LABELS[value],
@@ -170,6 +177,26 @@ export default async function HouseholdSettingsPage() {
         ) : (
           <p className='rounded-card border border-line bg-surface p-4 text-ink-muted'>Ask an owner or adult to invite someone.</p>
         )}
+
+        <section aria-labelledby='region-heading'>
+          <SectionHeader id='region-heading' title='Time zone and currency' />
+          <div className='flex flex-col gap-3'>
+            {canUpdateHousehold ? (
+              <TimeZoneForm timezone={household.timezone} timeZones={timeZones} />
+            ) : (
+              <div className='rounded-card border border-line bg-surface p-4'>
+                <p className='text-sm font-medium'>Time zone</p>
+                <p className='break-words'>{household.timezone.replaceAll('_', ' ')}</p>
+                <p className='text-sm text-ink-muted'>Ask an owner or adult to change it.</p>
+              </div>
+            )}
+            <div className='rounded-card border border-line bg-surface p-4'>
+              <p className='text-sm font-medium'>Currency</p>
+              <p>{currencyLabel(household.currency)}</p>
+              <p className='text-sm text-ink-muted'>Set when the household was made. It can’t change, since every amount is kept in it.</p>
+            </div>
+          </div>
+        </section>
       </div>
     </>
   )

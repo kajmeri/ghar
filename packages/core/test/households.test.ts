@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ValidationError } from '../src/errors'
-import { validateHouseholdSettings } from '../src/households'
+import { validateHouseholdSettings, validateHouseholdTimeZone } from '../src/households'
 
 describe('validateHouseholdSettings', () => {
   it('trims the name and upper-cases the currency', () => {
@@ -42,5 +42,19 @@ describe('validateHouseholdSettings', () => {
 
   it('refuses a name over 80 characters', () => {
     expect(() => validateHouseholdSettings({ name: 'a'.repeat(81), timezone: 'UTC', currency: 'USD' })).toThrow(ValidationError)
+  })
+})
+
+describe('validateHouseholdTimeZone', () => {
+  it('trims a zone the runtime knows', () => {
+    expect(validateHouseholdTimeZone(' Asia/Kolkata ')).toBe('Asia/Kolkata')
+    expect(validateHouseholdTimeZone('UTC')).toBe('UTC')
+  })
+
+  it('names the field when the zone is unknown or blank', () => {
+    for (const zone of ['Mars/Olympus_Mons', '', '   ']) {
+      expect(() => validateHouseholdTimeZone(zone)).toThrow(ValidationError)
+      expect(() => validateHouseholdTimeZone(zone)).toThrow('Choose a time zone from the list.')
+    }
   })
 })
