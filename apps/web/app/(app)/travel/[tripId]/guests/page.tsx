@@ -26,6 +26,8 @@ export default async function TripGuestsPage({ params }: { params: Promise<{ tri
   })
   const { headcount, canInvite } = page
   const waiting = page.guests.filter(guest => guest.status === 'asked').length
+  // Someone who came through a link that lets people straight in can answer again after being taken off.
+  const linkLetsIn = page.link !== null && !page.link.requiresApproval
 
   return (
     <div className='flex flex-col gap-6'>
@@ -73,7 +75,7 @@ export default async function TripGuestsPage({ params }: { params: Promise<{ tri
         ) : (
           <ul className='flex flex-col divide-y divide-line rounded-card border border-line bg-surface'>
             {page.guests.map(guest => (
-              <GuestRow key={guest.id} guest={guest} tripId={tripId} canInvite={canInvite} />
+              <GuestRow key={guest.id} guest={guest} tripId={tripId} canInvite={canInvite} linkLetsIn={linkLetsIn} />
             ))}
           </ul>
         )}
@@ -82,7 +84,7 @@ export default async function TripGuestsPage({ params }: { params: Promise<{ tri
   )
 }
 
-function GuestRow({ guest, tripId, canInvite }: { guest: TripGuest; tripId: string; canInvite: boolean }) {
+function GuestRow({ guest, tripId, canInvite, linkLetsIn }: { guest: TripGuest; tripId: string; canInvite: boolean; linkLetsIn: boolean }) {
   const who = guest.name ?? guest.email
   const detail = [
     guest.name ? guest.email : null,
@@ -99,7 +101,15 @@ function GuestRow({ guest, tripId, canInvite }: { guest: TripGuest; tripId: stri
         </div>
         {detail.length > 0 ? <p className='truncate text-sm text-ink-muted tabular-nums'>{detail.join(' · ')}</p> : null}
       </div>
-      {canInvite ? <GuestControls tripId={tripId} guestId={guest.id} who={who} waiting={guest.status === 'asked'} /> : null}
+      {canInvite ? (
+        <GuestControls
+          tripId={tripId}
+          guestId={guest.id}
+          who={who}
+          waiting={guest.status === 'asked'}
+          canComeBack={linkLetsIn && guest.source === 'link'}
+        />
+      ) : null}
     </li>
   )
 }
