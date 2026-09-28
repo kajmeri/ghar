@@ -42,11 +42,13 @@ export async function loadRoster(db: Db, tripId: string): Promise<RosterEntry[]>
 
 /**
  * Whether the caller can fill in this person's travel: a guest their own, and the household its
- * own travellers, which a traveller with an account can also do for themselves.
+ * own travellers, which a traveller with an account can also do for themselves if they can
+ * change things on the trip. A viewer who travels only looks, like everywhere else on the trip,
+ * and so can't spend the trip's reads of pasted confirmations either.
  */
 export function canEditFor(participant: Participant, entry: RosterEntry): boolean {
   if (entry.key.kind === 'guest') return participant.access === 'guest' && entry.key.id === participant.guestId
-  return participant.access === 'household' && (participant.canManage || entry.userId === participant.userId)
+  return participant.access === 'household' && (participant.canManage || (participant.canVote && entry.userId === participant.userId))
 }
 
 export const NOT_ON_ROSTER = "They're not on the trip's list of who's going."

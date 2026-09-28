@@ -6,7 +6,7 @@ import { ARRIVAL_READS_PER_DAY } from '@ghar/core/trip-arrivals'
 import type { TripPersonKey } from '@ghar/core/trip-guests'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createInvitation } from '../src/queries/invitations'
-import { createPerson } from '../src/queries/people'
+import { createPerson, listPeople } from '../src/queries/people'
 import { acceptInvitation, createHousehold, updateProfile } from '../src/queries/session'
 import {
   claimArrivalRead,
@@ -296,5 +296,26 @@ describe('rooms', () => {
     expect((await queryAs(client, sam.userId, 'select id from trip_rooms')).length).toBeGreaterThan(0)
     expect(await queryAs(client, stranger.userId, 'select id from trip_rooms')).toHaveLength(0)
     expect(await queryAs(client, stranger.userId, 'select id from trip_room_assignments')).toHaveLength(0)
+  })
+})
+
+describe('a household viewer who travels', () => {
+  it('sees their own travel but can’t fill it in or have a confirmation read', async () => {
+    const vik = (await listPeople(a, db)).find(entry => entry.userId === viewer.userId)
+    if (!vik) throw new Error('Expected Vik in the household')
+    await updateTrip(a, db, otherTripId, { travellerIds: [asha.id, vik.id] })
+    const vikKey: TripPersonKey = { kind: 'traveller', id: vik.id }
+
+    const board = await listTripArrivals(viewer, db, otherTripId)
+    expect(board.people.find(entry => entry.you)).toMatchObject({ name: 'Vik', canEdit: false })
+    expect(board.canRead).toBe(false)
+    await expect(saveTripArrival(viewer, db, arrival(vikKey, { tripId: otherTripId }))).rejects.toThrow(ForbiddenError)
+    await expect(claimArrivalRead(viewer, db, otherTripId)).rejects.toThrow(ForbiddenError)
+
+    // The household can still fill it in for them, and only it can take it off.
+    const saved = await saveTripArrival(owner, db, arrival(vikKey, { tripId: otherTripId }))
+    const vikIn = saved.arrivals.find(row => row.name === 'Vik')
+    expect(vikIn?.canEdit).toBe(true)
+    await expect(deleteTripArrival(viewer, db, { tripId: otherTripId, arrivalId: vikIn?.id ?? '' })).rejects.toThrow(ForbiddenError)
   })
 })
