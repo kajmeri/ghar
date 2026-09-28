@@ -53,17 +53,48 @@ describe('maintenance schedule', () => {
     })
   })
 
+  it('keeps a typed due date when the first completion logged is an old one', () => {
+    const fresh = { cadenceMonths: 3, lastDoneOn: null, nextDueOn: '2026-10-15' }
+    // Done in March: three months on is June, long past, so the typed October date stays.
+    expect(scheduleAfterCompletion(fresh, '2026-03-01')).toEqual({ lastDoneOn: '2026-03-01', nextDueOn: '2026-10-15' })
+    // Done today: three months on is later than the typed date, so that wins.
+    expect(scheduleAfterCompletion(fresh, '2026-09-14')).toEqual({ lastDoneOn: '2026-09-14', nextDueOn: '2026-12-14' })
+    // Without a typed date there is nothing to keep.
+    expect(scheduleAfterCompletion({ ...fresh, nextDueOn: null }, '2026-03-01')).toEqual({
+      lastDoneOn: '2026-03-01',
+      nextDueOn: '2026-06-01',
+    })
+  })
+
   it('works the schedule out again when the newest completion is taken back', () => {
     const done = { cadenceMonths: 3, lastDoneOn: '2026-09-14', nextDueOn: '2026-12-14' }
-    expect(scheduleAfterRemoval(done, '2026-09-14', '2026-06-01')).toEqual({ lastDoneOn: '2026-06-01', nextDueOn: '2026-09-01' })
-    expect(scheduleAfterRemoval(done, '2026-09-14', null)).toEqual({ lastDoneOn: null, nextDueOn: '2026-09-14' })
+    const removed = { completedOn: '2026-09-14', lastDoneBefore: '2026-06-01', nextDueBefore: '2026-09-01' }
+    expect(scheduleAfterRemoval(done, removed, '2026-06-01')).toEqual({ lastDoneOn: '2026-06-01', nextDueOn: '2026-09-01' })
+  })
+
+  it('puts the schedule back as it was when the only completion is taken back', () => {
+    const done = { cadenceMonths: 3, lastDoneOn: '2026-09-14', nextDueOn: '2026-12-14' }
+    expect(scheduleAfterRemoval(done, { completedOn: '2026-09-14', lastDoneBefore: null, nextDueBefore: '2026-10-15' }, null)).toEqual({
+      lastDoneOn: null,
+      nextDueOn: '2026-10-15',
+    })
+    // A last-done date typed in when the job was added comes back too.
+    expect(
+      scheduleAfterRemoval(done, { completedOn: '2026-09-14', lastDoneBefore: '2026-06-01', nextDueBefore: '2026-09-01' }, null)
+    ).toEqual({ lastDoneOn: '2026-06-01', nextDueOn: '2026-09-01' })
+    // A job that had no date before goes back to having none, rather than being due today.
+    expect(scheduleAfterRemoval(done, { completedOn: '2026-09-14', lastDoneBefore: null, nextDueBefore: null }, null)).toEqual({
+      lastDoneOn: null,
+      nextDueOn: null,
+    })
   })
 
   it('leaves the schedule alone when an older or duplicate completion is taken back', () => {
     const done = { cadenceMonths: 3, lastDoneOn: '2026-09-14', nextDueOn: '2026-12-14' }
-    expect(scheduleAfterRemoval(done, '2026-06-01', '2026-09-14')).toEqual({ lastDoneOn: '2026-09-14', nextDueOn: '2026-12-14' })
-    expect(scheduleAfterRemoval(done, '2026-09-14', '2026-09-14')).toEqual({ lastDoneOn: '2026-09-14', nextDueOn: '2026-12-14' })
-    expect(scheduleAfterRemoval(filter, '2026-06-01', '2026-06-01')).toEqual({ lastDoneOn: '2026-06-01', nextDueOn: '2026-09-01' })
+    const entry = (completedOn: string) => ({ completedOn, lastDoneBefore: null, nextDueBefore: null })
+    expect(scheduleAfterRemoval(done, entry('2026-06-01'), '2026-09-14')).toEqual({ lastDoneOn: '2026-09-14', nextDueOn: '2026-12-14' })
+    expect(scheduleAfterRemoval(done, entry('2026-09-14'), '2026-09-14')).toEqual({ lastDoneOn: '2026-09-14', nextDueOn: '2026-12-14' })
+    expect(scheduleAfterRemoval(filter, entry('2026-06-01'), '2026-06-01')).toEqual({ lastDoneOn: '2026-06-01', nextDueOn: '2026-09-01' })
   })
 
   it('names the state', () => {

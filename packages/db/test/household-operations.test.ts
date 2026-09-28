@@ -234,7 +234,8 @@ describe('assets and maintenance', () => {
 
     await expect(deleteMaintenanceCompletion(other, db, flush.id, done.entry.id)).rejects.toBeInstanceOf(NotFoundError)
     const undone = await deleteMaintenanceCompletion(member, db, flush.id, done.entry.id)
-    expect(undone).toMatchObject({ lastDoneOn: null, nextDueOn: today })
+    // Back to the schedule it had before, not due today.
+    expect(undone).toMatchObject({ lastDoneOn: '2026-06-01', nextDueOn: '2026-09-01' })
     await expect(deleteMaintenanceCompletion(member, db, flush.id, done.entry.id)).rejects.toBeInstanceOf(NotFoundError)
   })
 })

@@ -2231,6 +2231,13 @@ export const maintenanceLog = pgTable(
     notes: text(),
     /** The receipt or invoice. */
     documentId: uuid().references(() => documents.id, { onDelete: 'set null' }),
+    /**
+     * The job's schedule just before this was logged. Taking back the only completion puts it back,
+     * so undoing a mistaken "done" doesn't leave the job due today. Null when it had no date then,
+     * and on entries logged before these were kept.
+     */
+    lastDoneBefore: date({ mode: 'string' }),
+    nextDueBefore: date({ mode: 'string' }),
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
@@ -2966,7 +2973,11 @@ export const actionTokens = pgTable(
     // Compared as text: a value added to the enum can't be named as one in the migration that adds it.
     check(
       'action_tokens_due_on',
-      sql`(${table.action}::text in (${sql.raw(ONE_TAP_ACTIONS.filter(oneTapActionHasDate).map(action => `'${action}'`).join(', '))})) = (${table.dueOn} is not null)`
+      sql`(${table.action}::text in (${sql.raw(
+        ONE_TAP_ACTIONS.filter(oneTapActionHasDate)
+          .map(action => `'${action}'`)
+          .join(', ')
+      )})) = (${table.dueOn} is not null)`
     ),
   ]
 ).enableRLS()
