@@ -16,7 +16,7 @@ const envSchema = z.object({
   /** The publishable key, or the legacy anon key. Safe to expose, but only the server uses it. */
   SUPABASE_PUBLISHABLE_KEY: z.preprocess(unset, z.string().min(1)),
   /**
-   * Server only, never logged. The seed script uses it, and with STORAGE_PROVIDER=supabase the
+   * Server only, never logged. The seed script uses it, and in production the
    * server signs document upload and file links with it. Nothing else may use it in request code
    * that runs in production.
    */
@@ -71,12 +71,6 @@ const envSchema = z.object({
   ROUTING_PROVIDER: z.preprocess(unset, z.enum(['estimate', 'osrm']).default('estimate')),
   /** An OSRM server's origin, for ROUTING_PROVIDER=osrm. It receives the trip's coordinates. */
   OSRM_URL: z.preprocess(unset, z.url({ protocol: /^https?$/ }).optional()).transform(url => url?.replace(/\/+$/, '')),
-  /**
-   * Where document files live. `fake` keeps them in the dev server's memory until it restarts;
-   * production refuses it. `supabase` uses the private `documents` bucket and needs
-   * SUPABASE_SECRET_KEY.
-   */
-  STORAGE_PROVIDER: z.preprocess(unset, z.enum(['fake', 'supabase']).default('fake')),
   /**
    * Server errors and the daily cron's check-ins go to this Sentry project. Without it they go only to
    * the server log, redacted (see lib/providers/monitoring).

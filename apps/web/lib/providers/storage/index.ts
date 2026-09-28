@@ -6,16 +6,15 @@ import type { StorageProvider } from './types'
 
 export { StorageRequestError, type SignedUrl, type StorageProvider, type StoredBytes, type StoredFile } from './types'
 
+/**
+ * Production keeps files in the private Supabase bucket. Everywhere else they live in the dev
+ * server's memory, so local work never writes into the real bucket.
+ */
 export function getStorageProvider(): StorageProvider {
-  const { STORAGE_PROVIDER, SUPABASE_URL, SUPABASE_SECRET_KEY } = env()
-  if (STORAGE_PROVIDER === 'fake') {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('STORAGE_PROVIDER is fake, and production cannot keep files in memory.')
-    }
-    return createFakeStorageProvider()
-  }
+  if (process.env.NODE_ENV !== 'production') return createFakeStorageProvider()
+  const { SUPABASE_URL, SUPABASE_SECRET_KEY } = env()
   if (!SUPABASE_SECRET_KEY) {
-    throw new Error('STORAGE_PROVIDER is supabase, but SUPABASE_SECRET_KEY is not set.')
+    throw new Error('SUPABASE_SECRET_KEY is not set, and production keeps files in Supabase Storage.')
   }
   return createSupabaseStorageProvider({ url: SUPABASE_URL, secretKey: SUPABASE_SECRET_KEY })
 }

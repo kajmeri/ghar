@@ -1,6 +1,6 @@
 import { receiveFakeUpload, serveFakeFile } from '@/lib/providers/storage/fake'
 
-// Development's stand-in for Supabase Storage's signed links, for STORAGE_PROVIDER=fake. The token
+// Development's stand-in for Supabase Storage's signed links, outside production. The token
 // is the only credential, as it is there. Production answers 404.
 
 interface Context {

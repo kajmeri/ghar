@@ -55,7 +55,7 @@ vi.mock('@/lib/providers/storage', async importOriginal => {
     ...actual,
     getStorageProvider: () => {
       // What production does with no storage configured.
-      if (test.storageDown) throw new Error('STORAGE_PROVIDER is fake, and production cannot keep files in memory.')
+      if (test.storageDown) throw new Error('SUPABASE_SECRET_KEY is not set, and production keeps files in Supabase Storage.')
       return createFakeStorageProvider(test.storage)
     },
   }

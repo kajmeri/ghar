@@ -2,7 +2,8 @@
  * Seeds a demo household so the UI is never built against empty tables: a five-day trip whose
  * itinerary is half decided, eighteen months of net worth history, and every other section filled in
  * (seed-records.ts and seed-travel.ts). Safe to run again: everything it creates is looked up first.
- * Documents are uploaded to the Supabase documents bucket, so set STORAGE_PROVIDER=supabase to open them.
+ * Documents are uploaded to the Supabase documents bucket, so they open in production. Local
+ * development keeps files in memory and can't open them.
  *
  *   pnpm --filter web db:seed
  *
