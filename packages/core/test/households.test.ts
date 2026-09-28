@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ValidationError } from '../src/errors'
-import { validateHouseholdSettings, validateHouseholdTimeZone } from '../src/households'
+import { COUNTRY_CODES, normalizeHomeCountry, validateHouseholdSettings, validateHouseholdTimeZone } from '../src/households'
 
 describe('validateHouseholdSettings', () => {
   it('trims the name and upper-cases the currency', () => {
@@ -56,5 +56,27 @@ describe('validateHouseholdTimeZone', () => {
       expect(() => validateHouseholdTimeZone(zone)).toThrow(ValidationError)
       expect(() => validateHouseholdTimeZone(zone)).toThrow('Choose a time zone from the list.')
     }
+  })
+})
+
+describe('normalizeHomeCountry', () => {
+  it('takes an assigned code in any case, and clears on null or blank', () => {
+    expect(normalizeHomeCountry(' in ')).toBe('IN')
+    expect(normalizeHomeCountry('US')).toBe('US')
+    expect(normalizeHomeCountry('XK')).toBe('XK')
+    expect(normalizeHomeCountry(null)).toBeNull()
+    expect(normalizeHomeCountry('  ')).toBeNull()
+  })
+
+  it('refuses codes that are not a country: groupings, old codes and made-up ones', () => {
+    for (const code of ['EU', 'UN', 'UK', 'SU', 'ZZ', 'USA', 'U']) {
+      expect(() => normalizeHomeCountry(code)).toThrow('Choose a country from the list.')
+    }
+  })
+
+  it('lists each code once, and every one has a name', () => {
+    expect(new Set(COUNTRY_CODES).size).toBe(COUNTRY_CODES.length)
+    const names = new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' })
+    for (const code of COUNTRY_CODES) expect(names.of(code), code).toBeTruthy()
   })
 })

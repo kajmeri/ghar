@@ -120,7 +120,7 @@ beforeAll(async () => {
   owner = { userId: ownerId, householdId: household.id, role: 'owner' }
   member = await join('health-scan-member@example.com', 'member')
   viewer = await join('health-scan-viewer@example.com', 'viewer')
-  child = (await createPerson(owner, db, { name: 'Asha' })).id
+  child = (await createPerson(owner, db, { name: 'Asha' }, '2026-09-28')).id
   memberPerson = await requireOwnPerson(member, db)
 })
 

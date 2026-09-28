@@ -11,13 +11,14 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { createDocument, getDocument, listPassports, updateDocument, type DocumentInput } from '../src/queries/documents'
 import { createInvitation } from '../src/queries/invitations'
 import { removeMember } from '../src/queries/members'
-import { createPerson, deletePerson, listPeople, renamePerson, requireOwnPerson } from '../src/queries/people'
+import { createPerson, deletePerson, listPeople, requireOwnPerson, updatePerson } from '../src/queries/people'
 import { acceptInvitation, createHousehold, updateProfile } from '../src/queries/session'
 import { createTrip, getTripWithCounts, updateTrip, type CreateTripInput } from '../src/queries/trips'
 import type { Db, RequestContext } from '../src/queries/types'
 import { MIGRATIONS_FOLDER, createAuthUser, createTestDatabase, queryAs } from './support/database'
 
 const now = new Date('2026-09-23T12:00:00Z')
+const TODAY = '2026-09-23'
 
 let client: PGlite
 let db: Db
@@ -92,13 +93,13 @@ describe('people', () => {
   })
 
   it('adds, renames and removes someone without an account, for owners and adults only', async () => {
-    await expect(createPerson(member, db, { name: 'Maya' })).rejects.toThrow(ForbiddenError)
-    await expect(createPerson(owner, db, { name: '   ' })).rejects.toThrow(ValidationError)
+    await expect(createPerson(member, db, { name: 'Maya' }, TODAY)).rejects.toThrow(ForbiddenError)
+    await expect(createPerson(owner, db, { name: '   ' }, TODAY)).rejects.toThrow(ValidationError)
 
-    const maya = await createPerson(owner, db, { name: ' Maya ' })
+    const maya = await createPerson(owner, db, { name: ' Maya ' }, TODAY)
     expect(maya).toMatchObject({ userId: null, name: 'Maya' })
-    expect(await renamePerson(owner, db, maya.id, { name: 'Maya J' })).toMatchObject({ name: 'Maya J' })
-    await expect(renamePerson(other, db, maya.id, { name: 'Mine now' })).rejects.toThrow(NotFoundError)
+    expect(await updatePerson(owner, db, maya.id, { name: 'Maya J' }, TODAY)).toMatchObject({ name: 'Maya J' })
+    await expect(updatePerson(other, db, maya.id, { name: 'Mine now' }, TODAY)).rejects.toThrow(NotFoundError)
 
     await deletePerson(owner, db, maya.id)
     await expect(deletePerson(owner, db, maya.id)).rejects.toThrow(NotFoundError)
@@ -106,21 +107,56 @@ describe('people', () => {
 
   it("won't rename or delete a member from here", async () => {
     const memberPerson = await requireOwnPerson(member, db)
-    await expect(renamePerson(owner, db, memberPerson, { name: 'Samuel' })).rejects.toThrow(ValidationError)
+    await expect(updatePerson(owner, db, memberPerson, { name: 'Samuel' }, TODAY)).rejects.toThrow(ValidationError)
     await expect(deletePerson(owner, db, memberPerson)).rejects.toThrow(ValidationError)
+  })
+
+  it('keeps an optional birth date, for anyone, and only ever in the past', async () => {
+    const baby = await createPerson(owner, db, { name: 'Kabir', birthDate: '2025-02-14' }, TODAY)
+    expect(baby).toMatchObject({ name: 'Kabir', birthDate: '2025-02-14' })
+    expect(await createPerson(owner, db, { name: 'Tara' }, TODAY)).toMatchObject({ birthDate: null })
+
+    await expect(createPerson(owner, db, { name: 'Soon', birthDate: '2026-09-24' }, TODAY)).rejects.toThrow(ValidationError)
+    await expect(updatePerson(owner, db, baby.id, { birthDate: '1899-12-31' }, TODAY)).rejects.toThrow(ValidationError)
+    await expect(updatePerson(owner, db, baby.id, { birthDate: '2025-02-30' }, TODAY)).rejects.toThrow(ValidationError)
+
+    // A birth date alone leaves the name be, and clearing it leaves nothing behind.
+    expect(await updatePerson(owner, db, baby.id, { birthDate: TODAY }, TODAY)).toMatchObject({ name: 'Kabir', birthDate: TODAY })
+    expect(await updatePerson(owner, db, baby.id, { birthDate: null }, TODAY)).toMatchObject({ birthDate: null })
+
+    const audits = await client.query<{ metadata: unknown }>(
+      `select metadata from audit_log where action = 'person.birth_date_changed' and entity_id = '${baby.id}' order by created_at`
+    )
+    expect(audits.rows).toEqual([{ metadata: { set: true } }, { metadata: { set: false } }])
+  })
+
+  it('lets a member set their own birth date, but only owners and adults set anyone else’s', async () => {
+    const memberPerson = await requireOwnPerson(member, db)
+    const ownerPerson = await requireOwnPerson(owner, db)
+    expect(await updatePerson(member, db, memberPerson, { birthDate: '1990-06-01' }, TODAY)).toMatchObject({ birthDate: '1990-06-01' })
+    expect(await updatePerson(owner, db, memberPerson, { birthDate: '1990-06-02' }, TODAY)).toMatchObject({ birthDate: '1990-06-02' })
+    await expect(updatePerson(member, db, ownerPerson, { birthDate: '1985-01-01' }, TODAY)).rejects.toThrow(ForbiddenError)
+    await expect(updatePerson(viewer, db, memberPerson, { birthDate: '1985-01-01' }, TODAY)).rejects.toThrow(ForbiddenError)
+    // Their own birth date isn't a way to rename themselves here.
+    await expect(updatePerson(member, db, memberPerson, { name: 'Samuel' }, TODAY)).rejects.toThrow(ForbiddenError)
+    await expect(updatePerson(other, db, memberPerson, { birthDate: '1985-01-01' }, TODAY)).rejects.toThrow(NotFoundError)
   })
 
   it('is readable by the household only', async () => {
     const mine = await queryAs<{ id: string }>(client, member.userId, 'select id from household_people')
     expect(mine).toHaveLength((await listPeople(owner, db)).length)
-    const theirs = await queryAs<{ id: string }>(client, other.userId, `select id from household_people where household_id = '${owner.householdId}'`)
+    const theirs = await queryAs<{ id: string }>(
+      client,
+      other.userId,
+      `select id from household_people where household_id = '${owner.householdId}'`
+    )
     expect(theirs).toEqual([])
   })
 })
 
 describe('trip travellers', () => {
   it('puts the creator on the trip, and takes anyone in the household', async () => {
-    const kid = await createPerson(owner, db, { name: 'Ari' })
+    const kid = await createPerson(owner, db, { name: 'Ari' }, TODAY)
     const lisbon = await createTrip(member, db, trip({ travellerIds: [kid.id] }))
     const memberPerson = await requireOwnPerson(member, db)
     expect(lisbon.travellerIds).toEqual([memberPerson, kid.id])
@@ -146,7 +182,7 @@ describe('trip travellers', () => {
 
 describe('whose a document is', () => {
   it('names the person, and only one in the household', async () => {
-    const kid = await createPerson(owner, db, { name: 'Ari' })
+    const kid = await createPerson(owner, db, { name: 'Ari' }, TODAY)
     const passport = await createDocument(owner, db, document(owner, { personId: kid.id }))
     expect(passport).toMatchObject({ personId: kid.id, personName: 'Ari', personUserId: null })
 
@@ -161,7 +197,7 @@ describe('whose a document is', () => {
   })
 
   it('finds passports by person, for those who can see sensitive documents', async () => {
-    const kid = await createPerson(owner, db, { name: 'Lea' })
+    const kid = await createPerson(owner, db, { name: 'Lea' }, TODAY)
     const ownerPerson = await requireOwnPerson(owner, db)
     const passport = await createDocument(owner, db, document(owner, { personId: kid.id, expiresOn: '2027-05-01' }))
     await createDocument(owner, db, document(owner, { personId: kid.id, kind: 'id', title: 'School ID' }))

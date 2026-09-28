@@ -284,7 +284,7 @@ describe('the daily digest', () => {
   it('lists checkups due this week for the people each reader may see', async () => {
     const { owner, ownerEmail, join } = await household()
     const member = await join('member')
-    const anika = await createPerson(owner, db, { name: 'Anika' })
+    const anika = await createPerson(owner, db, { name: 'Anika' }, '2026-09-28')
     await createHealthSchedule(
       owner,
       db,

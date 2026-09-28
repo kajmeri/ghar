@@ -11,14 +11,27 @@ import { route } from './handler'
  */
 export interface Session {
   readonly context: RequestContext
-  readonly household: { readonly id: string; readonly name: string; readonly timeZone: string; readonly currency: string }
+  readonly household: {
+    readonly id: string
+    readonly name: string
+    readonly timeZone: string
+    readonly currency: string
+    /** ISO 3166-1 alpha-2, or null until someone sets it. */
+    readonly homeCountry: string | null
+  }
 }
 
 async function sessionFor(context: RequestContext): Promise<Session> {
   const household = await currentHousehold(context)
   return {
     context,
-    household: { id: household.id, name: household.name, timeZone: household.timezone, currency: household.currency },
+    household: {
+      id: household.id,
+      name: household.name,
+      timeZone: household.timezone,
+      currency: household.currency,
+      homeCountry: household.homeCountry,
+    },
   }
 }
 

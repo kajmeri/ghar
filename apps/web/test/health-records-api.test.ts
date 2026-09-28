@@ -77,7 +77,7 @@ beforeAll(async () => {
   viewer = await join('records-viewer@example.com', 'viewer')
   memberPerson = await requireOwnPerson(member, db)
   viewerPerson = await requireOwnPerson(viewer, db)
-  child = (await createPerson(owner, db, { name: 'Anika' })).id
+  child = (await createPerson(owner, db, { name: 'Anika' }, '2026-09-28')).id
 })
 
 describe('health records through the API', () => {

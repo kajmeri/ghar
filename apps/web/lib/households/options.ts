@@ -1,5 +1,6 @@
 import 'server-only'
 import type { HouseholdOptions } from '@ghar/contracts'
+import { COUNTRY_CODES } from '@ghar/core/households'
 import { hasTwoDecimalMinorUnit } from '@ghar/core/money'
 
 export interface CurrencyOption {
@@ -34,7 +35,23 @@ function labelFor(code: string, names: Intl.DisplayNames): string {
   return `${code} · ${names.of(code) ?? code}`
 }
 
-/** What a new household can pick from, for the onboarding form and GET /api/v1/households/options. */
+export interface CountryOption {
+  code: string
+  label: string
+}
+
+/** Every country a household can live in, by name, A to Z. */
+export function countryOptions(locale = 'en-US'): CountryOption[] {
+  const names = new Intl.DisplayNames([locale], { type: 'region' })
+  return COUNTRY_CODES.map(code => ({ code, label: names.of(code) ?? code })).sort((a, b) => a.label.localeCompare(b.label, locale))
+}
+
+/** A country code's name, like "India". */
+export function countryLabel(code: string, locale = 'en-US'): string {
+  return new Intl.DisplayNames([locale], { type: 'region' }).of(code) ?? code
+}
+
+/** What a household can pick from, for the onboarding form, settings and GET /api/v1/households/options. */
 export function householdOptions(locale = 'en-US'): HouseholdOptions {
-  return { timeZones: timeZoneOptions(), currencies: currencyOptions(locale) }
+  return { timeZones: timeZoneOptions(), currencies: currencyOptions(locale), countries: countryOptions(locale) }
 }

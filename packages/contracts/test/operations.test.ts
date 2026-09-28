@@ -19,7 +19,7 @@ import {
   REMINDER_LEAD_MIN_DAYS,
 } from '../src/v1/documents'
 import { assetKindSchema, completeMaintenanceBodySchema } from '../src/v1/home'
-import { PERSON_NAME_MAX, personBodySchema, tripDocumentIssueKindSchema } from '../src/v1/people'
+import { PERSON_NAME_MAX, personBodySchema, personChangesSchema, tripDocumentIssueKindSchema } from '../src/v1/people'
 import { expiryKindSchema, RENEWAL_MAX_CADENCE_MONTHS, RENEWAL_MAX_CENTS, renewalBodySchema, renewalKindSchema } from '../src/v1/renewals'
 
 describe('household operations lists', () => {
@@ -81,7 +81,9 @@ describe('renewal bodies', () => {
 
   it('needs a cadence for something that renews on its own', () => {
     expect(renewalBodySchema.safeParse({ title: 'Costco', expiresOn: '2027-03-31', autoRenews: true }).success).toBe(false)
-    expect(renewalBodySchema.safeParse({ title: 'Costco', expiresOn: '2027-03-31', autoRenews: true, cadenceMonths: 12 }).success).toBe(true)
+    expect(renewalBodySchema.safeParse({ title: 'Costco', expiresOn: '2027-03-31', autoRenews: true, cadenceMonths: 12 }).success).toBe(
+      true
+    )
     // Reminders start between a week and a year ahead.
     expect(renewalBodySchema.safeParse({ title: 'Costco', expiresOn: '2027-03-31', remindFromDays: 6 }).success).toBe(false)
     expect(renewalBodySchema.safeParse({ title: 'Costco', expiresOn: '2027-03-31', remindFromDays: 366 }).success).toBe(false)
@@ -135,6 +137,11 @@ describe('person bodies', () => {
   it('trims a name and refuses a blank one', () => {
     expect(personBodySchema.parse({ name: ' Maya ' })).toEqual({ name: 'Maya' })
     expect(personBodySchema.safeParse({ name: '   ' }).success).toBe(false)
+    expect(personBodySchema.parse({ name: 'Maya', birthDate: '2022-03-15' })).toEqual({ name: 'Maya', birthDate: '2022-03-15' })
+    // A change names at least one thing, and an empty birth date clears it.
+    expect(personChangesSchema.safeParse({}).success).toBe(false)
+    expect(personChangesSchema.parse({ birthDate: '' })).toEqual({ birthDate: '' })
+    expect(personChangesSchema.parse({ birthDate: null })).toEqual({ birthDate: null })
   })
 })
 

@@ -40,7 +40,7 @@ beforeAll(async () => {
   const account = { userId: await createAuthUser(database.client, 'owner@example.com'), email: 'owner@example.com' }
   const { household } = await createHousehold(account, db, { name: 'The Rao household', timezone: 'UTC', currency: 'USD' })
   const context: RequestContext = { userId: account.userId, householdId: household.id, role: 'owner' }
-  session = { context, household: { id: household.id, name: household.name, timeZone: 'UTC', currency: 'USD' } }
+  session = { context, household: { id: household.id, name: household.name, timeZone: 'UTC', currency: 'USD', homeCountry: null } }
 }, 60_000)
 
 describe('whether there are older ones', () => {

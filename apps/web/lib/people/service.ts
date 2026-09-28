@@ -1,8 +1,10 @@
 import 'server-only'
 import type { Person, RequestContext } from '@ghar/contracts'
+import { todayInTimeZone } from '@ghar/core/dates'
 import { comparePeople, personLabel } from '@ghar/core/people'
 import * as queries from '@ghar/db/queries'
 import type { PersonRow } from '@ghar/db/queries'
+import type { Session } from '@/lib/api/authed'
 import { getDb } from '@/lib/db'
 
 // What the /api/v1/people routes and the pages call. The queries decide who may do what.
@@ -12,6 +14,7 @@ export function toPerson(row: PersonRow): Person {
     id: row.id,
     userId: row.userId,
     name: row.name,
+    birthDate: row.birthDate,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
@@ -22,12 +25,20 @@ export async function listPeople(ctx: RequestContext): Promise<Person[]> {
   return (await queries.listPeople(ctx, getDb())).map(toPerson)
 }
 
-export async function createPerson(ctx: RequestContext, body: { name: string }): Promise<Person> {
-  return toPerson(await queries.createPerson(ctx, getDb(), body))
+/** A birth date can't be after today, in the household's zone. */
+const householdToday = (session: Session) => todayInTimeZone(session.household.timeZone)
+
+export async function createPerson(session: Session, body: { name: string; birthDate?: string | null }): Promise<Person> {
+  return toPerson(await queries.createPerson(session.context, getDb(), body, householdToday(session)))
 }
 
-export async function renamePerson(ctx: RequestContext, personId: string, body: { name: string }): Promise<Person> {
-  return toPerson(await queries.renamePerson(ctx, getDb(), personId, body))
+/** A new name, a birth date, or both. */
+export async function updatePerson(
+  session: Session,
+  personId: string,
+  body: { name?: string; birthDate?: string | null }
+): Promise<Person> {
+  return toPerson(await queries.updatePerson(session.context, getDb(), personId, body, householdToday(session)))
 }
 
 export async function deletePerson(ctx: RequestContext, personId: string): Promise<{ deleted: true }> {

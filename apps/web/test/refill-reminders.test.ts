@@ -51,7 +51,7 @@ async function household() {
   })
   await acceptInvitation({ userId: memberId, email: memberEmail }, db, { tokenHash: `hash-${memberEmail}`, now: new Date() })
   const member: RequestContext = { userId: memberId, householdId: row.id, role: 'member' }
-  const child = (await createPerson(owner, db, { name: 'Anika' })).id
+  const child = (await createPerson(owner, db, { name: 'Anika' }, '2026-09-28')).id
   return { owner, ownerEmail, member, memberEmail, memberPerson: await requireOwnPerson(member, db), child }
 }
 

@@ -39,13 +39,13 @@ export async function createHousehold(session: SessionContext, body: CreateHouse
   return toMyHousehold(household, session, membership.role)
 }
 
-/** Moves the household to another time zone. The queries check the caller may. */
+/** Moves the household to another time zone, or sets its home country. The queries check the caller may. */
 export async function updateMyHousehold(
   ctx: RequestContext,
   session: SessionContext,
   body: UpdateHouseholdBody
 ): Promise<MyHouseholdResponse> {
-  const household = await queries.updateHouseholdTimeZone(ctx, getDb(), { timezone: body.timezone })
+  const household = await queries.updateHousehold(ctx, getDb(), body)
   return toMyHousehold(household, session, ctx.role)
 }
 
@@ -169,6 +169,7 @@ function toHousehold(row: queries.HouseholdRow): Household {
     name: row.name,
     timezone: row.timezone,
     currency: row.currency,
+    homeCountry: row.homeCountry,
     createdAt: row.createdAt.toISOString(),
   }
 }

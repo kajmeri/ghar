@@ -9,6 +9,8 @@ export const householdSchema = z.object({
   timezone: z.string(),
   /** ISO 4217 code. */
   currency: z.string().length(3),
+  /** ISO 3166-1 alpha-2. Null until someone sets it. It tells which trips go abroad. */
+  homeCountry: z.string().length(2).nullable(),
   createdAt: z.iso.datetime(),
 })
 export type Household = z.infer<typeof householdSchema>
@@ -60,18 +62,35 @@ export const createHouseholdBodySchema = z.object({
 export type CreateHouseholdBody = z.infer<typeof createHouseholdBodySchema>
 
 /**
- * What can change once a household is made: only the time zone. The currency is fixed, because
- * every amount is stored in it, so a body that names one is refused rather than quietly ignored.
+ * What can change once a household is made: the time zone and the home country. Leave out whatever
+ * you aren't changing. The currency is fixed, because every amount is stored in it, so a body that
+ * names one is refused rather than quietly ignored.
  */
-export const updateHouseholdBodySchema = z.strictObject({
-  timezone: z.string().trim().min(1, 'Choose a time zone.').max(64),
-})
+export const updateHouseholdBodySchema = z
+  .strictObject({
+    timezone: z.string().trim().min(1, 'Choose a time zone.').max(64).optional(),
+    /** Null or an empty string clears it. The server checks it against its list of countries. */
+    homeCountry: z
+      .union([
+        z
+          .string()
+          .trim()
+          .toUpperCase()
+          .regex(/^[A-Z]{2}$/, 'Choose a country from the list.'),
+        z.literal(''),
+      ])
+      .nullable()
+      .optional(),
+  })
+  .refine(body => body.timezone !== undefined || body.homeCountry !== undefined, { message: 'Change the time zone or the home country.' })
 export type UpdateHouseholdBody = z.infer<typeof updateHouseholdBodySchema>
 
 export const householdOptionsSchema = z.object({
   /** Every IANA zone the server knows, UTC included. */
   timeZones: z.array(z.string()),
   currencies: z.array(z.object({ code: z.string().length(3), label: z.string() })),
+  /** Every country a household can live in, by name. */
+  countries: z.array(z.object({ code: z.string().length(2), label: z.string() })),
 })
 export type HouseholdOptions = z.infer<typeof householdOptionsSchema>
 
@@ -94,8 +113,9 @@ export const createHousehold = defineEndpoint({
 })
 
 /**
- * Moves the household to another time zone. Owners and adults only (403 otherwise); 400 for a
- * zone the server doesn't know, or a body that tries to change the currency.
+ * Moves the household to another time zone, or sets its home country. Owners and adults only (403
+ * otherwise); 400 for a zone or country the server doesn't know, or a body that tries to change the
+ * currency.
  */
 export const updateMyHousehold = defineEndpoint({
   method: 'PATCH',

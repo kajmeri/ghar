@@ -36,15 +36,7 @@ import { toPerson } from '@/lib/people/service'
 import { toRenewal } from '@/lib/renewals/service'
 import { toAsset, toLogEntry, toMaintenanceTask } from '@/lib/home/service'
 import { toManualAccount, toManualValue } from '@/lib/networth/serialize'
-import {
-  toBooking,
-  toItinerarySlot,
-  toPackingItem,
-  toPackingTemplate,
-  toTrip,
-  toTripIdea,
-  toTripTransaction,
-} from '@/lib/travel/serialize'
+import { toBooking, toItinerarySlot, toPackingItem, toPackingTemplate, toTrip, toTripIdea, toTripTransaction } from '@/lib/travel/serialize'
 
 // Delta sync for the phone app. A walk reads every entity in SYNC_ENTITIES order, oldest change
 // first, then the deletes, all bounded by a snapshot taken on its first page so it ends while people
@@ -134,6 +126,7 @@ function toHousehold(row: queries.HouseholdRow): Household {
     name: row.name,
     timezone: row.timezone,
     currency: row.currency,
+    homeCountry: row.homeCountry,
     createdAt: row.createdAt.toISOString(),
   }
 }
@@ -352,9 +345,15 @@ async function readEntityPage(ctx: RequestContext, db: Db, entity: SyncEntity, w
     case 'asset':
       return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toAsset(row, env.today) }))
     case 'document':
-      return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toDocument(row, env.today, ctx.userId) }))
+      return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({
+        entity,
+        data: toDocument(row, env.today, ctx.userId),
+      }))
     case 'renewal':
-      return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({ entity, data: toRenewal(row, env.today, ctx.userId) }))
+      return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({
+        entity,
+        data: toRenewal(row, env.today, ctx.userId),
+      }))
     case 'maintenance':
       return collect(entity, await queries.readSyncEntity(ctx, db, entity, window), row => ({
         entity,

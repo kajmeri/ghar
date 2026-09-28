@@ -100,7 +100,7 @@ beforeAll(async () => {
   ownerPerson = await requireOwnPerson(owner, db)
   memberPerson = await requireOwnPerson(member, db)
   viewerPerson = await requireOwnPerson(viewer, db)
-  child = (await createPerson(owner, db, { name: 'Asha' })).id
+  child = (await createPerson(owner, db, { name: 'Asha' }, '2026-09-28')).id
 })
 
 describe('logging a record', () => {
@@ -270,7 +270,7 @@ describe('the database behind it', () => {
   })
 
   it('removes a person’s records with them, and audits a deletion without what it said', async () => {
-    const baby = (await createPerson(owner, db, { name: 'Ravi' })).id
+    const baby = (await createPerson(owner, db, { name: 'Ravi' }, '2026-09-28')).id
     const created = await createHealthEvent(owner, db, event(baby, { note: 'Private detail' }), today)
     await deletePerson(owner, db, baby)
     await expect(getHealthEvent(owner, db, created.id)).rejects.toThrow(NotFoundError)

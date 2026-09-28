@@ -69,7 +69,7 @@ beforeAll(async () => {
   stranger = await person('stranger@example.com')
   await createHousehold(stranger, db, { name: 'Someone else', timezone: 'UTC', currency: 'USD' })
 
-  const kid = await createPerson(a, db, { name: 'Mira' })
+  const kid = await createPerson(a, db, { name: 'Mira' }, '2026-09-28')
   const base = { destination: 'Lisbon', status: 'booked' as const, coverImageUrl: null, budgetCents: null, notes: null }
   tripId = (await createTrip(a, db, { ...base, name: 'Lisbon', startsOn: '2026-09-18', endsOn: '2026-09-21', travellerIds: [kid.id] })).id
   soloTripId = (await createTrip(a, db, { ...base, name: 'Porto', startsOn: '2026-09-20', endsOn: '2026-09-22', travellerIds: [] })).id

@@ -115,7 +115,7 @@ import {
 import { TRIP_STATUSES } from '@ghar/core/trips'
 import { DIGEST_SECTIONS, ONE_TAP_ACTIONS, oneTapActionHasDate, type DigestSection } from '@ghar/core/digest'
 import { BOOKING_DRAFT_STATUSES, MAIL_LINK_STATUSES, MAIL_MESSAGE_OUTCOMES, MAIL_SUBJECT_MAX_LENGTH } from '@ghar/core/mail'
-import { PERSON_NAME_MAX_LENGTH } from '@ghar/core/people'
+import { EARLIEST_BIRTH_DATE, PERSON_NAME_MAX_LENGTH } from '@ghar/core/people'
 import { SYNC_ENTITIES, type SyncEntity } from '@ghar/core/sync'
 import { sql, type SQL } from 'drizzle-orm'
 import {
@@ -220,12 +220,15 @@ export const households = pgTable(
     timezone: text().notNull(),
     /** ISO 4217 code. */
     currency: char({ length: 3 }).notNull(),
+    /** ISO 3166-1 alpha-2, from COUNTRY_CODES. Null until someone sets it. Tells which trips go abroad. */
+    homeCountry: char({ length: 2 }),
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
   table => [
     check('households_name_length', sql`char_length(${table.name}) between 1 and 80`),
     check('households_currency_code', sql`${table.currency} ~ '^[A-Z]{3}$'`),
+    check('households_home_country_code', sql`${table.homeCountry} ~ '^[A-Z]{2}$'`),
   ]
 ).enableRLS()
 
@@ -276,6 +279,8 @@ export const householdPeople = pgTable(
     userId: uuid().references(() => profiles.id, { onDelete: 'cascade' }),
     /** Only for someone without an account. A member's name comes from their profile. */
     name: text(),
+    /** Optional. Ages on a trip's first day decide what gets suggested for it, like a car seat. */
+    birthDate: date({ mode: 'string' }),
     createdAt: timestamptz().notNull().defaultNow(),
     updatedAt: timestamptz().notNull().defaultNow(),
   },
@@ -285,6 +290,7 @@ export const householdPeople = pgTable(
     unique('household_people_user_id_unique').on(table.userId),
     check('household_people_account_or_name', sql`(${table.userId} is null) = (${table.name} is not null)`),
     check('household_people_name_length', sql`char_length(${table.name}) between 1 and ${sql.raw(String(PERSON_NAME_MAX_LENGTH))}`),
+    check('household_people_birth_date_floor', sql`${table.birthDate} >= ${sql.raw(`'${EARLIEST_BIRTH_DATE}'`)}`),
   ]
 ).enableRLS()
 

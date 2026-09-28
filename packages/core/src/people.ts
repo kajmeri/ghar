@@ -1,4 +1,5 @@
-import { addCalendarMonths, formatCalendarDate, type CalendarDate } from './dates'
+import { can, type HouseholdRole } from './auth'
+import { addCalendarMonths, formatCalendarDate, isCalendarDate, monthsBetween, type CalendarDate } from './dates'
 import { ValidationError } from './errors'
 import { memberLabel } from './household'
 import { tripPhase, type TripDates } from './trips'
@@ -17,6 +18,58 @@ export function normalizePersonName(value: string): string {
     throw new ValidationError('That name is too long.', { details: { fieldErrors: { name: ['That name is too long.'] } } })
   }
   return trimmed
+}
+
+// ---------------------------------------------------------------------------------------------
+// Birth dates
+
+/** Nobody in a household was born before this, so an earlier date is a typo. */
+export const EARLIEST_BIRTH_DATE: CalendarDate = '1900-01-01'
+
+function birthDateError(message: string): ValidationError {
+  return new ValidationError(message, { details: { fieldErrors: { birthDate: [message] } } })
+}
+
+/**
+ * A birth date somebody typed, or null to clear it. It's optional: without one, nothing that
+ * depends on age is suggested for them. It can't be in the future, since a baby who isn't born yet
+ * has nothing to pack.
+ */
+export function normalizeBirthDate(value: string | null, today: CalendarDate): CalendarDate | null {
+  if (value === null) return null
+  const date = value.trim()
+  if (date === '') return null
+  if (!isCalendarDate(date)) throw birthDateError('Enter a real date.')
+  if (date > today) throw birthDateError('A birth date can’t be in the future.')
+  if (date < EARLIEST_BIRTH_DATE) throw birthDateError('Check the year.')
+  return date
+}
+
+/** Owners and adults set anyone's birth date; a member sets their own. */
+export function canSetBirthDate(actor: { userId: string; role: HouseholdRole }, personUserId: string | null): boolean {
+  return can(actor.role, 'people.manage') || (personUserId !== null && personUserId === actor.userId)
+}
+
+/**
+ * Whole months old on a day. Someone born on the 31st is a month older on the last day of a shorter
+ * month, and someone born on Feb 29 a year older on Feb 28, the way addCalendarMonths steps.
+ */
+export function ageInMonthsOn(birthDate: CalendarDate, on: CalendarDate): number {
+  return Math.max(0, monthsBetween(birthDate, on))
+}
+
+/** Whole years old on a day. Pass the trip's first day to know how old a child will be on it. */
+export function ageOn(birthDate: CalendarDate, on: CalendarDate): number {
+  return Math.floor(ageInMonthsOn(birthDate, on) / 12)
+}
+
+/** "Under a month old", "18 months old", "4 years old". Months until two, the way people give a baby's age. */
+export function ageLabel(birthDate: CalendarDate, on: CalendarDate): string {
+  const months = ageInMonthsOn(birthDate, on)
+  if (months === 0) return 'Under a month old'
+  if (months < 24) return months === 1 ? '1 month old' : `${String(months)} months old`
+  const years = Math.floor(months / 12)
+  return `${String(years)} years old`
 }
 
 /** The fields naming a person needs. */
@@ -120,7 +173,8 @@ export function tripDocumentIssues(
     if (passport.expiresOn === null) issues.push({ ...issue, kind: 'no_expiry_date' })
     else if (trip.endsOn === null) continue
     else if (passport.expiresOn <= trip.endsOn) issues.push({ ...issue, kind: 'expires_before_return' })
-    else if (passport.expiresOn < addCalendarMonths(trip.endsOn, PASSPORT_VALIDITY_MONTHS)) issues.push({ ...issue, kind: 'under_six_months' })
+    else if (passport.expiresOn < addCalendarMonths(trip.endsOn, PASSPORT_VALIDITY_MONTHS))
+      issues.push({ ...issue, kind: 'under_six_months' })
   }
   return issues
 }

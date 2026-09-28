@@ -1,11 +1,12 @@
 import type { Invitation, Member } from '@ghar/contracts'
 import { can, HOUSEHOLD_ROLES, INVITABLE_ROLES } from '@ghar/core/auth'
-import { formatInstant } from '@ghar/core/dates'
+import { formatCalendarDate, formatInstant, todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
 import { invitationStatus } from '@ghar/core/invitations'
+import { ageLabel, canSetBirthDate } from '@ghar/core/people'
 import { TriangleAlert } from 'lucide-react'
 import type { Metadata } from 'next'
 import { getPageContext } from '@/lib/auth/context'
-import { currencyLabel, timeZoneOptions } from '@/lib/households/options'
+import { countryLabel, countryOptions, currencyLabel, timeZoneOptions } from '@/lib/households/options'
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/lib/households/roles'
 import * as households from '@/lib/households/service'
 import * as people from '@/lib/people/service'
@@ -15,8 +16,8 @@ import { SectionHeader } from '../../_components/ui/section-header'
 import { InvitationControls } from './_components/invitation-controls'
 import { InviteForm } from './_components/invite-form'
 import { MemberControls } from './_components/member-controls'
-import { AddPersonForm, PersonControls } from './_components/people-controls'
-import { TimeZoneForm } from './_components/time-zone-form'
+import { AddPersonForm, BirthDateControl, PersonControls } from './_components/people-controls'
+import { PlaceForm } from './_components/place-form'
 
 export const metadata: Metadata = { title: 'Household' }
 
@@ -38,6 +39,8 @@ export default async function HouseholdSettingsPage() {
   ])
   // Members are listed above. These are the others: children, and anyone who has left.
   const others = everyone.filter(person => person.userId === null)
+  const memberPeople = new Map(everyone.flatMap(person => (person.userId === null ? [] : [[person.userId, person] as const])))
+  const today = todayInTimeZone(household.timezone)
   // A zone saved under an older name the list no longer offers stays selectable, so saving the form
   // never swaps it for the first zone in the list.
   const zones = timeZoneOptions()
@@ -65,6 +68,7 @@ export default async function HouseholdSettingsPage() {
             {members.map(member => {
               const isYou = member.userId === ctx.userId
               const name = displayName(member)
+              const person = memberPeople.get(member.userId)
               return (
                 <li key={member.userId} className='rounded-card border border-line bg-surface p-4'>
                   <div className='flex items-start gap-3'>
@@ -76,9 +80,15 @@ export default async function HouseholdSettingsPage() {
                       </p>
                       {member.fullName && member.email ? <p className='text-sm break-all text-ink-muted'>{member.email}</p> : null}
                       <p className='text-sm text-ink-muted'>Joined {formatDay(member.joinedAt, household.timezone)}</p>
+                      {person?.birthDate ? <p className='text-sm text-ink-muted'>{bornLine(person.birthDate, today)}</p> : null}
                     </div>
                     <span className='shrink-0 rounded-pill border border-line px-2.5 py-0.5 text-sm'>{ROLE_LABELS[member.role]}</span>
                   </div>
+                  {person && canSetBirthDate(ctx, member.userId) ? (
+                    <div className='mt-4 flex border-t border-line pt-4'>
+                      <BirthDateControl personId={person.id} name={isYou ? 'you' : name} birthDate={person.birthDate} today={today} />
+                    </div>
+                  ) : null}
                   {!isYou && (canChangeRole || canRemove) ? (
                     <MemberControls
                       userId={member.userId}
@@ -120,15 +130,20 @@ export default async function HouseholdSettingsPage() {
                   <li key={person.id} className='rounded-card border border-line bg-surface p-4'>
                     <div className='flex items-center gap-3'>
                       <Avatar name={name} />
-                      <p className='min-w-0 flex-1 font-medium break-words'>{name}</p>
+                      <div className='min-w-0 flex-1'>
+                        <p className='font-medium break-words'>{name}</p>
+                        {person.birthDate ? <p className='text-sm text-ink-muted'>{bornLine(person.birthDate, today)}</p> : null}
+                      </div>
                     </div>
-                    {canManagePeople ? <PersonControls personId={person.id} name={name} /> : null}
+                    {canManagePeople ? (
+                      <PersonControls personId={person.id} name={name} birthDate={person.birthDate} today={today} />
+                    ) : null}
                   </li>
                 )
               })}
             </ul>
           )}
-          {canManagePeople ? <AddPersonForm /> : null}
+          {canManagePeople ? <AddPersonForm today={today} /> : null}
         </section>
 
         {canInvite ? (
@@ -179,15 +194,26 @@ export default async function HouseholdSettingsPage() {
         )}
 
         <section aria-labelledby='region-heading'>
-          <SectionHeader id='region-heading' title='Time zone and currency' />
+          <SectionHeader id='region-heading' title='Time zone, country and currency' />
           <div className='flex flex-col gap-3'>
             {canUpdateHousehold ? (
-              <TimeZoneForm timezone={household.timezone} timeZones={timeZones} />
+              <PlaceForm
+                timezone={household.timezone}
+                timeZones={timeZones}
+                homeCountry={household.homeCountry}
+                countries={countryOptions()}
+              />
             ) : (
-              <div className='rounded-card border border-line bg-surface p-4'>
-                <p className='text-sm font-medium'>Time zone</p>
-                <p className='break-words'>{household.timezone.replaceAll('_', ' ')}</p>
-                <p className='text-sm text-ink-muted'>Ask an owner or adult to change it.</p>
+              <div className='flex flex-col gap-3 rounded-card border border-line bg-surface p-4'>
+                <div>
+                  <p className='text-sm font-medium'>Time zone</p>
+                  <p className='break-words'>{household.timezone.replaceAll('_', ' ')}</p>
+                </div>
+                <div>
+                  <p className='text-sm font-medium'>Home country</p>
+                  <p>{household.homeCountry === null ? 'Not set' : countryLabel(household.homeCountry)}</p>
+                </div>
+                <p className='text-sm text-ink-muted'>Ask an owner or adult to change them.</p>
               </div>
             )}
             <div className='rounded-card border border-line bg-surface p-4'>
@@ -204,6 +230,11 @@ export default async function HouseholdSettingsPage() {
 
 function displayName(member: Member): string {
   return member.fullName ?? member.email ?? 'Unnamed member'
+}
+
+/** "Born Mar 3, 2022 · 4 years old". */
+function bornLine(birthDate: CalendarDate, today: CalendarDate): string {
+  return `Born ${formatCalendarDate(birthDate)} · ${ageLabel(birthDate, today)}`
 }
 
 function formatDay(iso: string, timeZone: string): string {

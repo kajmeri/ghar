@@ -7213,7 +7213,7 @@
         "tags": [
           "households"
         ],
-        "description": "Moves the household to another time zone. Owners and adults only (403 otherwise); 400 for a\nzone the server doesn't know, or a body that tries to change the currency.",
+        "description": "Moves the household to another time zone, or sets its home country. Owners and adults only (403\notherwise); 400 for a zone or country the server doesn't know, or a body that tries to change the\ncurrency.",
         "requestBody": {
           "required": true,
           "content": {
@@ -10642,7 +10642,7 @@
         "tags": [
           "people"
         ],
-        "description": "Owners and adults, and only for someone without an account.",
+        "description": "A name: owners and adults, and only for someone without an account. A birth date: owners and\nadults for anyone, and a member for themselves.",
         "parameters": [
           {
             "name": "personId",
@@ -10659,7 +10659,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PersonBody"
+                "$ref": "#/components/schemas/PersonChanges"
               }
             }
           }
@@ -25647,6 +25647,18 @@
             "minLength": 3,
             "maxLength": 3
           },
+          "homeCountry": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -25658,6 +25670,7 @@
           "name",
           "timezone",
           "currency",
+          "homeCountry",
           "createdAt"
         ]
       },
@@ -25712,11 +25725,32 @@
                 "label"
               ]
             }
+          },
+          "countries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 2
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "label"
+              ]
+            }
           }
         },
         "required": [
           "timeZones",
-          "currencies"
+          "currencies",
+          "countries"
         ]
       },
       "HouseholdRole": {
@@ -28634,6 +28668,16 @@
               "null"
             ]
           },
+          "birthDate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "$ref": "#/components/schemas/Instant"
           },
@@ -28645,6 +28689,7 @@
           "id",
           "userId",
           "name",
+          "birthDate",
           "createdAt",
           "updatedAt"
         ]
@@ -28656,11 +28701,57 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 100
+          },
+          "birthDate": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  },
+                  {
+                    "type": "string",
+                    "const": ""
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "name"
         ]
+      },
+      "PersonChanges": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "birthDate": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CalendarDate"
+                  },
+                  {
+                    "type": "string",
+                    "const": ""
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
       },
       "PlaceTripPersonBody": {
         "type": "object",
@@ -33937,11 +34028,27 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 64
+          },
+          "homeCountry": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$"
+                  },
+                  {
+                    "type": "string",
+                    "const": ""
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
-        "required": [
-          "timezone"
-        ],
         "additionalProperties": false
       },
       "UpdateManualAccountBody": {

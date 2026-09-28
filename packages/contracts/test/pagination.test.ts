@@ -153,9 +153,13 @@ describe('field gaps', () => {
     expect(contracts.listBookings.response.shape).toHaveProperty('draftCount')
   })
 
-  it('lists time zones and currencies for a new household', () => {
+  it('lists time zones, currencies and countries for a household', () => {
     expect(contracts.getHouseholdOptions.method).toBe('GET')
-    const options = { timeZones: ['UTC'], currencies: [{ code: 'USD', label: 'USD · US Dollar' }] }
+    const options = {
+      timeZones: ['UTC'],
+      currencies: [{ code: 'USD', label: 'USD · US Dollar' }],
+      countries: [{ code: 'IN', label: 'India' }],
+    }
     expect(contracts.getHouseholdOptions.response.parse(options)).toEqual(options)
     expect(contracts.getHouseholdOptions.response.safeParse({ ...options, currencies: [{ code: 'US', label: 'x' }] }).success).toBe(false)
   })

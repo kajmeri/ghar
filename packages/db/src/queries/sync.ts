@@ -281,6 +281,7 @@ const readPeople: SyncReader<PersonRow> = async (ctx, db, window) => {
       id: householdPeople.id,
       userId: householdPeople.userId,
       name: sql<string | null>`coalesce(${householdPeople.name}, ${profiles.fullName})`,
+      birthDate: householdPeople.birthDate,
       createdAt: householdPeople.createdAt,
       updatedAt: householdPeople.updatedAt,
       syncAt: syncStamp(householdPeople.updatedAt),

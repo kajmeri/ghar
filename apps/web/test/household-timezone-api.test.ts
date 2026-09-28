@@ -5,8 +5,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
 import { GET, PATCH } from '@/app/api/v1/households/me/route'
 
-// Moving a household to another time zone through PATCH /api/v1/households/me, against PGlite.
-// Only the zone can change: the currency is fixed once the household is made.
+// Moving a household to another time zone, and setting its home country, through
+// PATCH /api/v1/households/me, against PGlite. The currency is fixed once the household is made.
 
 const test = vi.hoisted(() => ({
   db: undefined as unknown,
@@ -111,5 +111,43 @@ describe('changing the household time zone', () => {
   it('needs someone signed in', async () => {
     test.account = null
     expect((await call(PATCH, 'PATCH', { timezone: 'Europe/London' })).status).toBe(401)
+  })
+})
+
+describe('setting the home country', () => {
+  it('starts unset, then takes a country in any case, and records who did it', async () => {
+    expect(await call(GET, 'GET')).toMatchObject({ body: { household: { homeCountry: null } } })
+    const before = (await getHousehold(owner, db)).timezone
+
+    const saved = await call(PATCH, 'PATCH', { homeCountry: 'in' })
+    expect(saved).toMatchObject({ status: 200, body: { household: { homeCountry: 'IN' } } })
+    // Leaving the zone out leaves it be.
+    expect((await getHousehold(owner, db)).timezone).toBe(before)
+
+    const audits = await client.query<{ metadata: unknown }>(
+      `select metadata from audit_log where action = 'household.home_country_changed' order by created_at`
+    )
+    expect(audits.rows).toEqual([{ metadata: { from: null, to: 'IN' } }])
+  })
+
+  it('changes the zone and the country together, and clears the country with null', async () => {
+    expect(await call(PATCH, 'PATCH', { timezone: 'Europe/London', homeCountry: 'GB' })).toMatchObject({
+      status: 200,
+      body: { household: { timezone: 'Europe/London', homeCountry: 'GB' } },
+    })
+    expect(await call(PATCH, 'PATCH', { homeCountry: null })).toMatchObject({ status: 200, body: { household: { homeCountry: null } } })
+    expect(await call(PATCH, 'PATCH', { homeCountry: '' })).toMatchObject({ status: 200, body: { household: { homeCountry: null } } })
+  })
+
+  it('refuses a code that is not a country, an empty body, and members', async () => {
+    for (const homeCountry of ['EU', 'ZZ', 'USA']) {
+      const refused = await call(PATCH, 'PATCH', { homeCountry })
+      expect(refused.status).toBe(400)
+    }
+    expect((await call(PATCH, 'PATCH', {})).status).toBe(400)
+
+    test.ctx = { ...owner, role: 'member' }
+    expect((await call(PATCH, 'PATCH', { homeCountry: 'US' })).status).toBe(403)
+    expect((await getHousehold(owner, db)).homeCountry).toBeNull()
   })
 })

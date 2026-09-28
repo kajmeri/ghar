@@ -15,6 +15,8 @@ export const personSchema = z.object({
   userId: z.uuid().nullable(),
   /** Their own name, or the one on their profile. Null for a member who hasn't set one. */
   name: z.string().nullable(),
+  /** Optional, for anyone. What's suggested for a trip depends on ages on its first day. */
+  birthDate: calendarDateSchema.nullable(),
   createdAt: instantSchema,
   updatedAt: instantSchema,
 })
@@ -22,7 +24,16 @@ export type Person = z.infer<typeof personSchema>
 
 export const personParamsSchema = z.object({ personId: z.uuid() })
 
-export const personBodySchema = z.object({ name: z.string().trim().min(1, 'Give them a name').max(PERSON_NAME_MAX) })
+const personNameSchema = z.string().trim().min(1, 'Give them a name').max(PERSON_NAME_MAX)
+/** Null or an empty string clears it. The server refuses a date in the future or before 1900. */
+const birthDateSchema = z.union([calendarDateSchema, z.literal('')]).nullable()
+
+export const personBodySchema = z.object({ name: personNameSchema, birthDate: birthDateSchema.optional() })
+
+/** Leave out whatever you aren't changing. */
+export const personChangesSchema = z
+  .object({ name: personNameSchema.optional(), birthDate: birthDateSchema.optional() })
+  .refine(body => body.name !== undefined || body.birthDate !== undefined, { message: 'Change the name or the birth date.' })
 
 /** Everyone: members first as they joined, then everyone added. A household is small, so it's one page. */
 export const listPeople = defineEndpoint({
@@ -39,12 +50,15 @@ export const createPerson = defineEndpoint({
   response: z.object({ person: personSchema }),
 })
 
-/** Owners and adults, and only for someone without an account. */
+/**
+ * A name: owners and adults, and only for someone without an account. A birth date: owners and
+ * adults for anyone, and a member for themselves.
+ */
 export const updatePerson = defineEndpoint({
   method: 'PATCH',
   path: '/api/v1/people/:personId',
   params: personParamsSchema,
-  body: personBodySchema,
+  body: personChangesSchema,
   response: z.object({ person: personSchema }),
 })
 

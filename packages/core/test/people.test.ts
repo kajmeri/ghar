@@ -1,12 +1,76 @@
 import { describe, expect, it } from 'vitest'
 import { ValidationError } from '../src/errors'
-import { comparePeople, normalizePersonName, personLabel, tripDocumentIssuePhrase, tripDocumentIssues, tripDocumentIssueTone } from '../src/people'
+import {
+  ageInMonthsOn,
+  ageLabel,
+  ageOn,
+  canSetBirthDate,
+  comparePeople,
+  normalizeBirthDate,
+  normalizePersonName,
+  personLabel,
+  tripDocumentIssuePhrase,
+  tripDocumentIssues,
+  tripDocumentIssueTone,
+} from '../src/people'
 
 describe('person names', () => {
   it('trims, and refuses blank or too long', () => {
     expect(normalizePersonName('  Maya ')).toBe('Maya')
     expect(() => normalizePersonName('   ')).toThrow(ValidationError)
     expect(() => normalizePersonName('x'.repeat(101))).toThrow(ValidationError)
+  })
+})
+
+describe('birth dates', () => {
+  const today = '2026-09-28'
+
+  it('takes a real date up to today, and clears on null or blank', () => {
+    expect(normalizeBirthDate(' 2024-02-29 ', today)).toBe('2024-02-29')
+    expect(normalizeBirthDate(today, today)).toBe(today)
+    expect(normalizeBirthDate(null, today)).toBeNull()
+    expect(normalizeBirthDate('', today)).toBeNull()
+  })
+
+  it('refuses a date that does not exist, is still to come, or is before 1900', () => {
+    expect(() => normalizeBirthDate('2023-02-29', today)).toThrow('Enter a real date.')
+    expect(() => normalizeBirthDate('29/02/2024', today)).toThrow('Enter a real date.')
+    expect(() => normalizeBirthDate('2026-09-29', today)).toThrow('A birth date can’t be in the future.')
+    expect(() => normalizeBirthDate('1899-12-31', today)).toThrow('Check the year.')
+    expect(() => normalizeBirthDate('2026-09-29', today)).toThrow(ValidationError)
+  })
+
+  it('counts whole years, turning a year older on the birthday', () => {
+    expect(ageOn('2022-03-15', '2026-03-14')).toBe(3)
+    expect(ageOn('2022-03-15', '2026-03-15')).toBe(4)
+    // A leap day birthday comes round on Feb 28 in other years.
+    expect(ageOn('2024-02-29', '2025-02-28')).toBe(1)
+    expect(ageOn('2024-02-29', '2025-02-27')).toBe(0)
+    // Not born yet on that day counts as nought, not less.
+    expect(ageOn('2026-09-01', '2026-08-01')).toBe(0)
+  })
+
+  it('counts whole months, the way addCalendarMonths steps', () => {
+    expect(ageInMonthsOn('2026-01-31', '2026-02-27')).toBe(0)
+    expect(ageInMonthsOn('2026-01-31', '2026-02-28')).toBe(1)
+    expect(ageInMonthsOn('2025-03-10', '2026-09-10')).toBe(18)
+  })
+
+  it('gives a baby’s age in months and anyone older in years', () => {
+    expect(ageLabel('2026-09-20', today)).toBe('Under a month old')
+    expect(ageLabel('2026-08-28', today)).toBe('1 month old')
+    expect(ageLabel('2025-03-28', today)).toBe('18 months old')
+    expect(ageLabel('2024-09-28', today)).toBe('2 years old')
+    expect(ageLabel('1990-01-01', today)).toBe('36 years old')
+  })
+
+  it('lets owners and adults set anyone’s, and a member only their own', () => {
+    expect(canSetBirthDate({ userId: 'u1', role: 'owner' }, null)).toBe(true)
+    expect(canSetBirthDate({ userId: 'u1', role: 'adult' }, 'u2')).toBe(true)
+    expect(canSetBirthDate({ userId: 'u1', role: 'member' }, 'u1')).toBe(true)
+    expect(canSetBirthDate({ userId: 'u1', role: 'member' }, 'u2')).toBe(false)
+    expect(canSetBirthDate({ userId: 'u1', role: 'member' }, null)).toBe(false)
+    expect(canSetBirthDate({ userId: 'u1', role: 'viewer' }, 'u1')).toBe(true)
   })
 })
 

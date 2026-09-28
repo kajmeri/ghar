@@ -156,7 +156,7 @@ beforeAll(async () => {
 
   ownerPerson = await requireOwnPerson(owner, db)
   memberPerson = await requireOwnPerson(member, db)
-  childPerson = (await createPerson(owner, db, { name: 'Anika' })).id
+  childPerson = (await createPerson(owner, db, { name: 'Anika' }, '2026-09-28')).id
   metforminId = (
     await createHealthMedicine(
       owner,
