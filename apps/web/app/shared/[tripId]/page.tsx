@@ -74,7 +74,7 @@ export default async function SharedTripPage({ params }: PageProps<'/shared/[tri
             submitLabel='Save answer'
           />
         </section>
-        <TripPolls tripId={trip.id} value={await polls.listTripPolls(session, trip.id)} offer={[]} />
+        <TripPolls tripId={trip.id} value={await polls.listTripPolls(session, trip.id)} offer={[]} today={today} />
         <TripPlan tripId={trip.id} days={trip.itinerary} timeZone={trip.timeZone} householdName={trip.householdName} />
         <TripArrivals tripId={trip.id} value={await arrivals.listTripArrivals(session, trip.id)} timeZone={trip.timeZone} />
         <TripRooms tripId={trip.id} value={await arrivals.listTripRooms(session, trip.id)} />
