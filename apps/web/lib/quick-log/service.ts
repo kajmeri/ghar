@@ -47,14 +47,17 @@ export function canQuickLog(session: Session): boolean {
 /** What a quick log box needs to show, or null for someone it can't help. */
 export async function quickLogSetup(
   session: Session
-): Promise<{ today: CalendarDate; currency: string; categories: { id: string; name: string }[] } | null> {
+): Promise<{ today: CalendarDate; currency: string; categories: { id: string; name: string }[]; example: string } | null> {
   if (!canQuickLog(session)) return null
+  const canLogSpending = can(session.context.role, 'finances.manage')
   // What cash from the quick log can be filed under.
-  const categories = can(session.context.role, 'finances.manage') ? await finances.listCategoryOptions(session) : []
+  const categories = canLogSpending ? await finances.listCategoryOptions(session) : []
   return {
     today: todayInTimeZone(session.household.timeZone),
     currency: session.household.currency,
     categories: categories.map(category => ({ id: category.id, name: category.name })),
+    // Something this person could actually log, so the hint never suggests a bill to someone who can't pay one.
+    example: canLogSpending ? 'Paid the water bill yesterday' : 'Cleaned the gutters yesterday',
   }
 }
 

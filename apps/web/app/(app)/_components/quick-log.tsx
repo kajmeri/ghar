@@ -300,12 +300,15 @@ export function QuickLog({
   today,
   currency,
   categories,
+  example,
   label = 'Log something',
 }: {
   today: CalendarDate
   currency: string
   /** The categories cash can be filed under. Empty for someone who can't log spending. */
   categories: readonly QuickLogCategoryOption[]
+  /** A sentence this person could log, shown as the placeholder. */
+  example: string
   label?: string
 }) {
   const id = useId()
@@ -684,7 +687,7 @@ export function QuickLog({
             id={`${id}-text`}
             value={text}
             maxLength={QUICK_LOG_TEXT_MAX}
-            placeholder='Paid the water bill yesterday'
+            placeholder={example}
             autoComplete='off'
             enterKeyHint='go'
             disabled={reading}

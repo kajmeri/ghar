@@ -1,3 +1,4 @@
+import { can } from '@ghar/core/auth'
 import { cookies } from 'next/headers'
 import type { ReactNode } from 'react'
 import { getPageSession } from '@/lib/api/authed'
@@ -11,6 +12,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const [session, cookieStore] = await Promise.all([getPageSession(), cookies()])
   const { household } = session
   const quickLog = await quickLogSetup(session)
+  const access = { canSeeMoney: can(session.context.role, 'finances.view') }
 
   return (
     <div className='flex min-h-dvh'>
@@ -25,17 +27,19 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         householdName={household.name}
         defaultCollapsed={cookieStore.get(SIDEBAR_COOKIE)?.value === 'collapsed'}
         quickLog={quickLog}
+        access={access}
       />
       <div className='min-w-0 flex-1'>
         {/* On phones the bottom padding clears the fixed tab bar and the home indicator. */}
         <main
           id='main'
           tabIndex={-1}
-          className='mx-auto w-full focus:outline-hidden max-w-content pt-[max(--spacing(6),env(safe-area-inset-top))] pr-[max(--spacing(4),env(safe-area-inset-right))] pb-[calc(--spacing(24)+env(safe-area-inset-bottom))] pl-[max(--spacing(4),env(safe-area-inset-left))] md:px-8 md:pt-10 md:pb-16'>
+          className='mx-auto w-full focus:outline-hidden max-w-content pt-[max(--spacing(6),env(safe-area-inset-top))] pr-[max(--spacing(4),env(safe-area-inset-right))] pb-[calc(--spacing(24)+env(safe-area-inset-bottom))] pl-[max(--spacing(4),env(safe-area-inset-left))] md:px-8 md:pt-10 md:pb-16'
+        >
           {children}
         </main>
       </div>
-      <TabBar canLog={quickLog !== null} />
+      <TabBar canLog={quickLog !== null} access={access} />
     </div>
   )
 }

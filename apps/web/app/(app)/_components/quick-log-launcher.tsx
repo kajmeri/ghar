@@ -24,7 +24,12 @@ function shortcutLabel(): string {
  * The quick log from anywhere on a wide screen: a button at the top of the sidebar, and ⌘K (Ctrl+K
  * off a Mac), open it over the page. Closing it before confirming writes nothing.
  */
-export function QuickLogLauncher(props: { today: CalendarDate; currency: string; categories: readonly QuickLogCategoryOption[] }) {
+export function QuickLogLauncher(props: {
+  today: CalendarDate
+  currency: string
+  categories: readonly QuickLogCategoryOption[]
+  example: string
+}) {
   const collapsed = useContext(SidebarCollapsedContext)
   const [open, setOpen] = useState(false)
   const content = useRef<HTMLDivElement>(null)

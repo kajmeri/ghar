@@ -39,16 +39,34 @@ const CONTACTS: NavItem = { label: 'Contacts', href: '/contacts', icon: BookUser
 export const LOG: NavItem = { label: 'Log something', href: '/log', icon: NotebookPen }
 export const SETTINGS: NavItem = { label: 'Settings', href: '/settings', icon: Settings }
 
-/** The phone's bottom bar. Four destinations plus More, which opens MORE_ITEMS. */
-export const TAB_ITEMS: NavItem[] = [HOME, MONEY, CALENDAR, TRAVEL]
-export const MORE_ITEMS: NavItem[] = [HOUSE, DOCUMENTS, RENEWALS, HEALTH, CONTACTS, BILLS, SETTINGS]
+/** What the navigation offers depends on who is looking: Money and Bills are for owners and adults. */
+export interface NavAccess {
+  canSeeMoney: boolean
+}
+
+/**
+ * The phone's bottom bar: four destinations plus More, which opens moreItems. Someone who can't see
+ * Money gets House in its place rather than a tab that only says no.
+ */
+export function tabItems({ canSeeMoney }: NavAccess): NavItem[] {
+  return [HOME, canSeeMoney ? MONEY : HOUSE, CALENDAR, TRAVEL]
+}
+
+export function moreItems({ canSeeMoney }: NavAccess): NavItem[] {
+  return canSeeMoney ? [HOUSE, DOCUMENTS, RENEWALS, HEALTH, CONTACTS, BILLS, SETTINGS] : [DOCUMENTS, RENEWALS, HEALTH, CONTACTS, SETTINGS]
+}
 
 /** The desktop sidebar. Settings sits apart at the bottom. */
-export const SIDEBAR_GROUPS: NavGroup[] = [
-  { items: [HOME] },
-  { label: 'Everyday', items: [MONEY, CALENDAR, TRAVEL] },
-  { label: 'Records', items: [HOUSE, DOCUMENTS, RENEWALS, HEALTH, CONTACTS, BILLS] },
-]
+export function sidebarGroups({ canSeeMoney }: NavAccess): NavGroup[] {
+  return [
+    { items: [HOME] },
+    { label: 'Everyday', items: canSeeMoney ? [MONEY, CALENDAR, TRAVEL] : [CALENDAR, TRAVEL] },
+    {
+      label: 'Records',
+      items: canSeeMoney ? [HOUSE, DOCUMENTS, RENEWALS, HEALTH, CONTACTS, BILLS] : [HOUSE, DOCUMENTS, RENEWALS, HEALTH, CONTACTS],
+    },
+  ]
+}
 
 export { SIDEBAR_COOKIE } from './nav-cookie'
 export { isActive } from './nav-match'
