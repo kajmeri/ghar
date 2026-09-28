@@ -52,8 +52,11 @@ export function ProgressBar({
   marker?: number
   className?: string
 }) {
-  const status = progressStatus(value, max, { approachingAt })
-  const percent = progressFraction(value, max) * 100
+  // A limit can go below zero, like a budget line whose overspend carried into this month. Nothing
+  // is left under it, so it reads as a limit of zero: over the moment anything is spent.
+  const limit = Math.max(max, 0)
+  const status = progressStatus(value, limit, { approachingAt })
+  const percent = progressFraction(value, limit) * 100
 
   return (
     <div className={cn('flex flex-col gap-2', className)}>
@@ -66,8 +69,8 @@ export function ProgressBar({
           role='progressbar'
           aria-label={label}
           aria-valuemin={0}
-          aria-valuemax={max}
-          aria-valuenow={Math.min(Math.max(value, 0), max)}
+          aria-valuemax={limit}
+          aria-valuenow={Math.min(Math.max(value, 0), limit)}
           aria-valuetext={[valueText, STATUS_LABEL[status]].filter(Boolean).join(', ')}
           className='h-2 overflow-hidden rounded-pill bg-line inset-ring inset-ring-line-strong'
         >
