@@ -142,6 +142,8 @@ describe('when works', () => {
     await expect(deleteTripPollOption(sam, db, { tripId, pollId, optionId: december.id })).rejects.toThrow(ForbiddenError)
     const value = await deleteTripPollOption(sam, db, { tripId, pollId, optionId: january.id })
     expect(value.polls[0]?.options).toHaveLength(1)
+    // A vote that arrives after the option has gone finds nothing, rather than a broken reference.
+    await expect(voteOnTripPollOption(owner, db, { tripId, pollId, optionId: january.id, vote: 'yes' })).rejects.toThrow(NotFoundError)
   })
 
   it('is readable in the database by people on the trip only', async () => {
