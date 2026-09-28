@@ -49,7 +49,7 @@ import {
 } from '../schema'
 import { recordAudit } from './audit'
 import { isUniqueViolation } from './pg-errors'
-import { requireTrip } from './scope'
+import { isUuid, requireTrip } from './scope'
 import { ensureProfile, findMembership } from './session'
 import type { Db, RequestContext, SessionContext } from './types'
 
@@ -727,6 +727,7 @@ export interface TripAccess {
  * the path, never from a request body. Someone waiting to be let in has no access yet.
  */
 export async function findTripAccess(ctx: SessionContext, db: Db, tripId: string): Promise<TripAccess | null> {
+  if (!isUuid(tripId)) return null
   const [trip] = await db.select({ householdId: trips.householdId }).from(trips).where(eq(trips.id, tripId)).limit(1)
   if (!trip) return null
   const membership = await findMembership(ctx, db)
