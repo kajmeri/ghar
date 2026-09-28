@@ -15,8 +15,10 @@ import { formText } from '@/lib/form'
 /**
  * A trip with a name and nothing else is a valid trip, so that is all this asks for.
  * Dates and a budget are here because they are usually known, not because they are needed.
+ * Who is going starts as everyone, since most trips here are family trips; whoever adds it
+ * is always on it, so their own box is ticked and can't be cleared.
  */
-export function NewTripForm() {
+export function NewTripForm({ people }: { people: { id: string; label: string; you: boolean }[] }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [budgetError, setBudgetError] = useState<string | null>(null)
@@ -54,6 +56,7 @@ export function NewTripForm() {
       endsOn: formText(data, 'endsOn') || startsOn || null,
       budgetCents,
       status: startsOn ? 'planned' : 'idea',
+      travellerIds: data.getAll('travellerIds').filter(id => typeof id === 'string'),
     }
     mutate(body)
   }
@@ -94,6 +97,27 @@ export function NewTripForm() {
             <Input name='budget' inputMode='decimal' placeholder='2,400' />
           </Field>
         </div>
+
+        {people.length > 1 ? (
+          <fieldset>
+            <legend className='text-sm font-medium'>Who is going</legend>
+            <div className='mt-2 flex flex-wrap gap-x-5 gap-y-2'>
+              {people.map(person => (
+                <label key={person.id} className='flex min-h-tap items-center gap-2'>
+                  <input
+                    type='checkbox'
+                    name='travellerIds'
+                    value={person.id}
+                    defaultChecked
+                    disabled={person.you}
+                    className='size-5 accent-ink'
+                  />
+                  {person.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
 
         <FormError>{budgetError ?? error}</FormError>
 

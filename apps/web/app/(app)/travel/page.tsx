@@ -1,3 +1,5 @@
+import { can } from '@ghar/core/auth'
+import { comparePeople, personLabel } from '@ghar/core/people'
 import { formatCountdown, nextTrip, settleTripStatus } from '@ghar/core/trips'
 import Link from 'next/link'
 import { GUEST_STATUS_LABELS, GUEST_STATUS_TONES, tripWhen } from '@/app/_components/shared-trip'
@@ -5,6 +7,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Pill } from '@/components/ui/pill'
 import { getPageSession } from '@/lib/api/authed'
 import { requireAccountSession } from '@/lib/auth/context'
+import { listPeople } from '@/lib/people/service'
 import { listSharedTrips } from '@/lib/travel/guests'
 import { loadTravelHub } from '@/lib/travel/trips'
 import { IdeaBoard } from './_components/idea-board'
@@ -21,7 +24,13 @@ export const metadata = { title: 'Travel' }
  */
 export default async function TravelPage() {
   const session = await getPageSession()
-  const [hub, shared] = await Promise.all([loadTravelHub(session), requireAccountSession().then(listSharedTrips)])
+  const { userId, role } = session.context
+  const canPlan = can(role, 'travel.manage')
+  const [hub, shared, people] = await Promise.all([
+    loadTravelHub(session),
+    requireAccountSession().then(listSharedTrips),
+    canPlan ? listPeople(session.context) : [],
+  ])
   const soonest = nextTrip(hub.trips, hub.today)
 
   return (
@@ -41,7 +50,13 @@ export default async function TravelPage() {
           <Link href='/travel/bookings' className='text-sm text-ink-muted underline underline-offset-4'>
             Bookings
           </Link>
-          <NewTripForm />
+          {canPlan ? (
+            <NewTripForm
+              people={people
+                .sort(comparePeople(userId))
+                .map(person => ({ id: person.id, label: personLabel(person, userId), you: person.userId === userId }))}
+            />
+          ) : null}
         </div>
       </header>
 
@@ -50,7 +65,9 @@ export default async function TravelPage() {
       <section className='flex flex-col gap-3'>
         <h2 className='text-lg font-semibold'>Upcoming</h2>
         {hub.trips.length === 0 ? (
-          <EmptyState title='No trips yet'>Use the button above, or vote up an idea below and make it one.</EmptyState>
+          <EmptyState title='No trips yet'>
+            {canPlan ? 'Use the button above, or vote up an idea below and make it one.' : 'Trips the household plans show up here.'}
+          </EmptyState>
         ) : (
           <ul className='grid gap-3 md:grid-cols-2'>
             {hub.trips.map(trip => (
@@ -100,7 +117,7 @@ export default async function TravelPage() {
 
       <UnfiledBookings bookings={hub.unlinkedBookings} trips={hub.trips} timeZone={hub.timeZone} />
 
-      <IdeaBoard ideas={hub.ideas} currentUserId={session.context.userId} />
+      <IdeaBoard ideas={hub.ideas} currentUserId={userId} />
     </div>
   )
 }
