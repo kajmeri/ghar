@@ -38,6 +38,7 @@ import {
   type MaintenanceInput,
 } from '../src/queries/home'
 import { createInvitation } from '../src/queries/invitations'
+import { requireOwnPerson } from '../src/queries/people'
 import { acceptInvitation, createHousehold } from '../src/queries/session'
 import { createManualTransaction } from '../src/queries/trip-transactions'
 import type { Db, RequestContext, SystemContext } from '../src/queries/types'
@@ -106,7 +107,11 @@ function documentInput(overrides: Partial<DocumentInput> = {}): DocumentInput {
 }
 
 function file(ctx: RequestContext) {
-  return { storagePath: documentStoragePath(ctx.householdId, randomUUID(), 'image/jpeg'), mimeType: 'image/jpeg' as const, sizeBytes: 48_213 }
+  return {
+    storagePath: documentStoragePath(ctx.householdId, randomUUID(), 'image/jpeg'),
+    mimeType: 'image/jpeg' as const,
+    sizeBytes: 48_213,
+  }
 }
 
 beforeAll(async () => {
@@ -178,7 +183,11 @@ describe('assets and maintenance', () => {
   it('lists a job with its vendor, soonest due first and unscheduled last', async () => {
     const [plumber] = await listContacts(owner, db)
     if (!plumber) throw new Error('expected the plumber')
-    await createMaintenanceTask(owner, db, task({ title: 'Check the anode rod', cadenceMonths: null, lastDoneOn: null, vendorContactId: plumber.id }))
+    await createMaintenanceTask(
+      owner,
+      db,
+      task({ title: 'Check the anode rod', cadenceMonths: null, lastDoneOn: null, vendorContactId: plumber.id })
+    )
     await createMaintenanceTask(owner, db, task({ title: 'Test the relief valve', lastDoneOn: null, nextDueOn: '2026-08-20' }))
 
     const tasks = await listMaintenanceTasks(viewer, db)
@@ -201,12 +210,24 @@ describe('assets and maintenance', () => {
       completeMaintenanceTask(other, db, flush.id, { completedOn: today, today, costCents: null, notes: null, documentId: null })
     ).rejects.toBeInstanceOf(NotFoundError)
 
-    const done = await completeMaintenanceTask(member, db, flush.id, { completedOn: today, today, costCents: 4500, notes: null, documentId: null })
+    const done = await completeMaintenanceTask(member, db, flush.id, {
+      completedOn: today,
+      today,
+      costCents: 4500,
+      notes: null,
+      documentId: null,
+    })
     expect(done.task).toMatchObject({ lastDoneOn: today, nextDueOn: '2026-12-14' })
     expect(done.entry).toMatchObject({ completedOn: today, completedBy: member.userId, costCents: 4500, taskTitle: 'Flush the tank' })
 
     // The phone retried the same tap.
-    const retry = await completeMaintenanceTask(member, db, flush.id, { completedOn: today, today, costCents: 4500, notes: null, documentId: null })
+    const retry = await completeMaintenanceTask(member, db, flush.id, {
+      completedOn: today,
+      today,
+      costCents: 4500,
+      notes: null,
+      documentId: null,
+    })
     expect(retry.entry.id).toBe(done.entry.id)
     expect(retry.task.nextDueOn).toBe('2026-12-14')
     expect(await listMaintenanceHistory(owner, db, { taskId: flush.id })).toHaveLength(1)
@@ -263,9 +284,9 @@ describe('documents', () => {
   it('only accepts an upload path made for the household, once', async () => {
     const theirs = file(other)
     await expect(createDocument(owner, db, { ...documentInput(), ...theirs })).rejects.toBeInstanceOf(ValidationError)
-    await expect(createDocument(owner, db, { ...documentInput(), ...file(owner), storagePath: `${owner.householdId}/passport.jpg` })).rejects.toBeInstanceOf(
-      ValidationError
-    )
+    await expect(
+      createDocument(owner, db, { ...documentInput(), ...file(owner), storagePath: `${owner.householdId}/passport.jpg` })
+    ).rejects.toBeInstanceOf(ValidationError)
 
     const upload = file(owner)
     await createDocument(owner, db, { ...documentInput({ title: 'Receipt', expiresOn: null }), ...upload })
@@ -283,7 +304,10 @@ describe('documents', () => {
 
   it('counts documents per asset and hands back the path of a deleted one', async () => {
     const heater = await waterHeater()
-    const manual = await createDocument(owner, db, { ...documentInput({ title: 'Manual', kind: 'warranty', expiresOn: null, assetId: heater.id }), ...file(owner) })
+    const manual = await createDocument(owner, db, {
+      ...documentInput({ title: 'Manual', kind: 'warranty', expiresOn: null, assetId: heater.id }),
+      ...file(owner),
+    })
     await createDocument(owner, db, {
       ...documentInput({ title: 'Private receipt', kind: 'warranty', expiresOn: null, assetId: heater.id, isSensitive: true }),
       ...file(owner),
@@ -305,7 +329,13 @@ describe('documents', () => {
     await expect(
       completeMaintenanceTask(member, db, job.id, { completedOn: today, today, costCents: null, notes: null, documentId: receipt.id })
     ).rejects.toBeInstanceOf(ValidationError)
-    await completeMaintenanceTask(owner, db, job.id, { completedOn: today, today, costCents: 21_000, notes: 'Lower element', documentId: receipt.id })
+    await completeMaintenanceTask(owner, db, job.id, {
+      completedOn: today,
+      today,
+      costCents: 21_000,
+      notes: 'Lower element',
+      documentId: receipt.id,
+    })
 
     const [ownerEntry] = await listMaintenanceHistory(owner, db, { assetId: heater.id })
     const [memberEntry] = await listMaintenanceHistory(member, db, { assetId: heater.id })
@@ -319,6 +349,42 @@ describe('documents', () => {
     if (!heater) throw new Error('expected the water heater')
     return heater
   }
+
+  it('lets a member keep their own document private, and only their own', async () => {
+    const memberPerson = await requireOwnPerson(member, db)
+    const viewerPerson = await requireOwnPerson(viewer, db)
+    const own = await createDocument(member, db, {
+      ...documentInput({ title: 'My passport', kind: 'passport', expiresOn: null, personId: memberPerson, isSensitive: true }),
+      ...file(member),
+    })
+    const theirs = await createDocument(owner, db, {
+      ...documentInput({ title: 'Viewer’s scan', kind: 'medical', expiresOn: null, personId: viewerPerson, isSensitive: true }),
+      ...file(owner),
+    })
+
+    expect((await getDocument(member, db, own.id)).isSensitive).toBe(true)
+    expect((await listDocuments(member, db)).map(d => d.title)).toContain('My passport')
+    await expect(getDocument(member, db, theirs.id)).rejects.toBeInstanceOf(NotFoundError)
+    await expect(getDocument(viewer, db, own.id)).rejects.toBeInstanceOf(NotFoundError)
+    expect((await listDocuments(viewer, db)).map(d => d.title)).toContain('Viewer’s scan')
+    expect((await getDocument(adult, db, own.id)).title).toBe('My passport')
+
+    // Handing their private document to someone else would hide it from them, so it's refused.
+    await expect(
+      updateDocument(member, db, own.id, documentInput({ title: 'My passport', personId: viewerPerson, isSensitive: true }))
+    ).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(
+      createDocument(member, db, { ...documentInput({ personId: viewerPerson, isSensitive: true }), ...file(member) })
+    ).rejects.toBeInstanceOf(ForbiddenError)
+
+    const titles = async (userId: string) =>
+      (await queryAs<{ title: string }>(client, userId, 'select title from documents where is_sensitive')).map(row => row.title)
+    expect(await titles(member.userId)).toEqual(['My passport'])
+    expect(await titles(viewer.userId)).toEqual(['Viewer’s scan'])
+
+    await deleteDocument(owner, db, own.id)
+    await deleteDocument(owner, db, theirs.id)
+  })
 })
 
 describe('bills', () => {
@@ -354,8 +420,20 @@ describe('bills', () => {
       amountCents: -6000,
       tripId: null,
     })
-    await createManualTransaction(owner, db, { date: '2026-09-09', name: 'Refund', merchantName: 'City Water', amountCents: 6000, tripId: null })
-    await createManualTransaction(other, db, { date: '2026-09-08', name: 'City Water', merchantName: 'City Water', amountCents: -6000, tripId: null })
+    await createManualTransaction(owner, db, {
+      date: '2026-09-09',
+      name: 'Refund',
+      merchantName: 'City Water',
+      amountCents: 6000,
+      tripId: null,
+    })
+    await createManualTransaction(other, db, {
+      date: '2026-09-08',
+      name: 'City Water',
+      merchantName: 'City Water',
+      amountCents: -6000,
+      tripId: null,
+    })
 
     const candidates = await listBillPaymentCandidates(owner, db, { from: '2026-08-01', to: today })
     expect(candidates.map(c => c.id)).toEqual([payment.id])
@@ -381,7 +459,9 @@ describe('expiry reminders', () => {
     expect(subjects.map(s => `${s.kind}:${s.title}`)).toEqual(['warranty:Water heater', 'document:Passport', 'document:Home insurance'])
     // An ID's reminders start six months out, everything else's two.
     expect(subjects.map(s => s.leadDays)).toEqual([60, 180, 60])
-    expect(await listExpiriesForReminders({ householdId: other.householdId, userId: null }, db, { from: today, to: '2026-09-30' })).toEqual([])
+    expect(await listExpiriesForReminders({ householdId: other.householdId, userId: null }, db, { from: today, to: '2026-09-30' })).toEqual(
+      []
+    )
 
     const [heater] = subjects
     if (!heater) throw new Error('expected the warranty')

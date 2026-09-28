@@ -1,4 +1,5 @@
 import { can, requirePermission, type HouseholdRole, type Permission } from '@ghar/core/auth'
+import { canSeeDocument } from '@ghar/core/documents'
 import { NotFoundError } from '@ghar/core/errors'
 import type { SyncEntity } from '@ghar/core/sync'
 import { and, asc, eq, getTableColumns, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
@@ -45,6 +46,7 @@ import type { AccountRow } from './banking'
 import type { BillWithAccountRow } from './bills'
 import type { CalendarLinkRow, EventDetail } from './calendar'
 import type { ContactRow } from './contacts'
+import { visibleDocumentSql } from './document-visibility'
 import { selectDocuments, type DocumentWithAssetRow } from './documents'
 import type { CategoryRow } from './finances'
 import type { AssetRow, MaintenanceLogEntryRow, MaintenanceTaskRow } from './home'
@@ -663,23 +665,23 @@ const readAssets: SyncReader<AssetRow> = async (ctx, db, window) => {
 }
 
 /**
- * Sensitive documents only reach owners and adults. Anyone else gets one as a delete when it changes,
- * so a document marked sensitive after they synced it leaves their phone.
+ * Sensitive documents only reach owners and adults, and the person each one belongs to. Anyone else
+ * gets one as a delete when it changes, so a document marked sensitive after they synced it leaves
+ * their phone.
  */
 const readDocuments: SyncReader<DocumentWithAssetRow> = async (ctx, db, window) => {
   requireSyncEntity(ctx, 'document')
-  const seesSensitive = can(ctx.role, 'documents.viewSensitive')
   const rows = await selectDocuments(db, { syncAt: syncStamp(documents.updatedAt) })
     .where(
       and(
         eq(documents.householdId, ctx.householdId),
-        seesSensitive || window.floor !== null ? undefined : eq(documents.isSensitive, false),
+        window.floor !== null ? undefined : visibleDocumentSql(ctx),
         inWindow(documents.updatedAt, documents.id, window)
       )
     )
     .orderBy(...syncOrder(documents.updatedAt, documents.id))
     .limit(window.limit)
-  return rows.map(({ syncAt, ...row }) => (row.isSensitive && !seesSensitive ? hidden(syncAt, row.id) : change(syncAt, row.id, row)))
+  return rows.map(({ syncAt, ...row }) => (canSeeDocument(ctx, row) ? change(syncAt, row.id, row) : hidden(syncAt, row.id)))
 }
 
 /** A linked sensitive document's title reads as null for anyone who can't see it, as it does online. */
@@ -711,7 +713,8 @@ const readMaintenance: SyncReader<MaintenanceTaskRow> = async (ctx, db, window) 
     .orderBy(...syncOrder(maintenance.updatedAt, maintenance.id))
     .limit(window.limit)
   return rows.map(({ syncAt, vendorId, vendorName, vendorRole, vendorPhone, ...task }) => {
-    const vendor = vendorId === null || vendorName === null ? null : { id: vendorId, name: vendorName, role: vendorRole, phone: vendorPhone }
+    const vendor =
+      vendorId === null || vendorName === null ? null : { id: vendorId, name: vendorName, role: vendorRole, phone: vendorPhone }
     return change(syncAt, task.id, { ...task, vendor })
   })
 }
@@ -719,23 +722,26 @@ const readMaintenance: SyncReader<MaintenanceTaskRow> = async (ctx, db, window) 
 /** A receipt the caller can't see is left off, as the service history does. */
 const readMaintenanceLog: SyncReader<MaintenanceLogEntryRow> = async (ctx, db, window) => {
   requireSyncEntity(ctx, 'maintenance_log')
-  const seesSensitive = can(ctx.role, 'documents.viewSensitive')
   const rows = await db
     .select({
       ...getTableColumns(maintenanceLog),
       taskTitle: maintenance.title,
       documentIsSensitive: documents.isSensitive,
+      documentPersonUserId: householdPeople.userId,
       syncAt: syncStamp(maintenanceLog.updatedAt),
     })
     .from(maintenanceLog)
     .innerJoin(maintenance, eq(maintenance.id, maintenanceLog.maintenanceId))
     .leftJoin(documents, eq(documents.id, maintenanceLog.documentId))
+    .leftJoin(householdPeople, eq(householdPeople.id, documents.personId))
     .where(and(eq(maintenance.householdId, ctx.householdId), inWindow(maintenanceLog.updatedAt, maintenanceLog.id, window)))
     .orderBy(...syncOrder(maintenanceLog.updatedAt, maintenanceLog.id))
     .limit(window.limit)
-  return rows.map(({ syncAt, documentIsSensitive, ...entry }) =>
-    change(syncAt, entry.id, { ...entry, documentId: documentIsSensitive === true && !seesSensitive ? null : entry.documentId })
-  )
+  return rows.map(({ syncAt, documentIsSensitive, documentPersonUserId, ...entry }) => {
+    const seen =
+      documentIsSensitive === null || canSeeDocument(ctx, { isSensitive: documentIsSensitive, personUserId: documentPersonUserId })
+    return change(syncAt, entry.id, { ...entry, documentId: seen ? entry.documentId : null })
+  })
 }
 
 /** The caller's own drafts waiting for review. A draft saved or dismissed is dropped. */

@@ -144,7 +144,8 @@ describe('logging a record', () => {
       issuer: null,
       referenceNumber: null,
       assetId: null,
-      personId: memberPerson,
+      // Someone else's, so the member can't open it. Their own they could.
+      personId: child,
       notes: null,
       isSensitive: true,
       storagePath: documentStoragePath(owner.householdId, crypto.randomUUID(), 'application/pdf'),
@@ -531,7 +532,8 @@ describe('health cards', () => {
       issuer: null,
       referenceNumber: null,
       assetId: null,
-      personId: memberPerson,
+      // Someone else's, so the member can't open it. Their own they could.
+      personId: child,
       notes: null,
       isSensitive: true,
       storagePath: documentStoragePath(owner.householdId, crypto.randomUUID(), 'application/pdf'),

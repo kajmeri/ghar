@@ -225,7 +225,7 @@ describe('saving a scan', () => {
     expect(storage.objects.has(storagePath)).toBe(true)
   })
 
-  it('keeps a member’s own file as an ordinary document, and nobody else’s', async () => {
+  it('keeps a member’s own file as a private document they can still open, and nobody else’s', async () => {
     test.session = member
     const refused = await save({ personId: child, storagePath: upload(member, CARD), events: [{ kind: 'eye', occurredOn: '2025-06-01' }] })
     expect(refused.status).toBe(404)
@@ -237,6 +237,6 @@ describe('saving a scan', () => {
       keepAs: { title: 'Eye test results' },
     })
     expect(status).toBe(200)
-    expect(await getDocument(member, db, body.documentId ?? '')).toMatchObject({ isSensitive: false, personId: memberPerson })
+    expect(await getDocument(member, db, body.documentId ?? '')).toMatchObject({ isSensitive: true, personId: memberPerson })
   })
 })

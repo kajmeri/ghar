@@ -70,15 +70,12 @@ export function HealthScanSheet({
   personId,
   personName,
   today,
-  keepsPrivate,
   trigger,
 }: {
   personId: string
   /** "You" or their name. */
   personName: string
   today: CalendarDate
-  /** Whether the caller can mark a document sensitive, so a kept scan is for owners and adults only. */
-  keepsPrivate: boolean
   trigger: ReactElement
 }) {
   const formId = useId()
@@ -263,11 +260,7 @@ export function HealthScanSheet({
           <div className='flex flex-col gap-3 border-t border-line pt-2'>
             <CheckboxField
               label='Keep the scan in Documents'
-              hint={
-                keepsPrivate
-                  ? 'As a medical document only owners and adults can open. Each record links to it.'
-                  : 'As a medical document. Each record links to it.'
-              }
+              hint={`As a private medical document that only owners, adults and ${personName === 'You' ? 'you' : personName} can open. Each record links to it.`}
               checked={keep}
               onChange={change => {
                 setKeep(change.target.checked)

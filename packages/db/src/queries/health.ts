@@ -34,6 +34,7 @@ import {
   profiles,
 } from '../schema'
 import { recordAudit } from './audit'
+import { visibleDocumentSql } from './document-visibility'
 import type { ReminderRecipient } from './expiry-reminders'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { personRefColumns } from './people'
@@ -84,9 +85,9 @@ function visibleHealth(ctx: RequestContext): SQL | undefined {
   return can(ctx.role, 'health.everyone') ? undefined : eq(householdPeople.userId, ctx.userId)
 }
 
-/** The documents the caller's role may see, as the documents queries decide it. */
+/** The documents the caller may see, as the documents queries decide it. */
 function visibleDocuments(ctx: RequestContext): SQL | undefined {
-  return can(ctx.role, 'documents.viewSensitive') ? undefined : eq(documents.isSensitive, false)
+  return visibleDocumentSql(ctx)
 }
 
 /** A record with the names of whose it is and what it links to, plus any extra columns the caller asks for. */

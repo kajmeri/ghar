@@ -80,7 +80,14 @@ export default async function DocumentPage({ params }: PageProps<'/documents/[do
         }
       : null,
     { label: 'File', value: `${fileTypeLabel(document.mimeType)} · ${formatFileSize(document.sizeBytes)}` },
-    { label: 'Who can see it', value: document.isSensitive ? 'Owners and adults' : 'Everyone in the household' },
+    {
+      label: 'Who can see it',
+      value: !document.isSensitive
+        ? 'Everyone in the household'
+        : document.personName
+          ? `Owners, adults and ${document.personName === 'You' ? 'you' : document.personName}`
+          : 'Owners and adults',
+    },
     { label: 'Added', value: formatInstant(new Date(document.createdAt), timeZone, { dateStyle: 'medium' }) },
   ].filter(row => row !== null)
 

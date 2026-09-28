@@ -1,10 +1,10 @@
 import type { CalendarDate } from '@ghar/core/dates'
-import { can } from '@ghar/core/auth'
 import { notRenewingKind, oneTapActionHasDate, ONE_TAP_PERMISSIONS, type OneTapAction } from '@ghar/core/digest'
 import { NotFoundError, ValidationError } from '@ghar/core/errors'
 import { and, eq, gt, isNull, lt } from 'drizzle-orm'
 import { actionTokens, assets, bills, documents, householdMembers, renewals, transactions } from '../schema'
 import { authorize } from './authorize'
+import { visibleDocumentSql } from './document-visibility'
 import type { Actor, Db, RequestContext } from './types'
 
 // One-tap links from emails. A link names a row here, and an HMAC over the row's id, action and
@@ -51,7 +51,7 @@ async function entityExists(actor: Actor, db: Db, action: OneTapAction, entityId
                 and(
                   eq(documents.id, entityId),
                   eq(documents.householdId, actor.householdId),
-                  actor.userId === null || can(actor.role, 'documents.viewSensitive') ? undefined : eq(documents.isSensitive, false)
+                  actor.userId === null ? undefined : visibleDocumentSql(actor)
                 )
               )
               .limit(1)

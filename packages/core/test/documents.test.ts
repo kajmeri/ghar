@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canMarkDocumentSensitive,
   canSeeDocument,
   documentStoragePath,
   expiryPhrase,
@@ -61,13 +62,30 @@ describe('storage paths', () => {
 })
 
 describe('canSeeDocument', () => {
+  const sensitive = { isSensitive: true, personUserId: 'someone-else' }
+
   it('keeps sensitive documents to owners and adults', () => {
-    const sensitive = { isSensitive: true }
-    expect(canSeeDocument('owner', sensitive)).toBe(true)
-    expect(canSeeDocument('adult', sensitive)).toBe(true)
-    expect(canSeeDocument('member', sensitive)).toBe(false)
-    expect(canSeeDocument('viewer', sensitive)).toBe(false)
-    expect(canSeeDocument('viewer', { isSensitive: false })).toBe(true)
+    expect(canSeeDocument({ role: 'owner', userId: 'me' }, sensitive)).toBe(true)
+    expect(canSeeDocument({ role: 'adult', userId: 'me' }, sensitive)).toBe(true)
+    expect(canSeeDocument({ role: 'member', userId: 'me' }, sensitive)).toBe(false)
+    expect(canSeeDocument({ role: 'viewer', userId: 'me' }, sensitive)).toBe(false)
+    expect(canSeeDocument({ role: 'viewer', userId: 'me' }, { isSensitive: false, personUserId: null })).toBe(true)
+  })
+
+  it('lets the person a sensitive document belongs to see it', () => {
+    expect(canSeeDocument({ role: 'member', userId: 'me' }, { isSensitive: true, personUserId: 'me' })).toBe(true)
+    expect(canSeeDocument({ role: 'viewer', userId: 'me' }, { isSensitive: true, personUserId: 'me' })).toBe(true)
+    // A job running with no account behind it is nobody's own.
+    expect(canSeeDocument({ role: 'member', userId: null }, { isSensitive: true, personUserId: null })).toBe(false)
+  })
+})
+
+describe('canMarkDocumentSensitive', () => {
+  it('lets owners and adults mark anything, and everyone else only their own', () => {
+    expect(canMarkDocumentSensitive({ role: 'adult', userId: 'me' }, { personUserId: null })).toBe(true)
+    expect(canMarkDocumentSensitive({ role: 'member', userId: 'me' }, { personUserId: 'me' })).toBe(true)
+    expect(canMarkDocumentSensitive({ role: 'member', userId: 'me' }, { personUserId: 'someone-else' })).toBe(false)
+    expect(canMarkDocumentSensitive({ role: 'member', userId: 'me' }, { personUserId: null })).toBe(false)
   })
 })
 

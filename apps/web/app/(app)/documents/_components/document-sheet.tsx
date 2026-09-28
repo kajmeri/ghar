@@ -70,7 +70,10 @@ export function DocumentSheet({
   assets: AssetOption[]
   /** Everyone a document can belong to, as the picker shows them. */
   people: PersonOption[]
-  /** Owners and adults. Anyone else can't see a private document, so can't make one. */
+  /**
+   * Owners and adults, who may make any document private. Anyone else may make only their own
+   * private, since a private document is hidden from everyone but owners, adults and its person.
+   */
   canMarkSensitive: boolean
   /** Links a new document to this asset to start with. */
   assetId?: string
@@ -85,6 +88,9 @@ export function DocumentSheet({
   const [fileError, setFileError] = useState<string | null>(null)
   // The default reminder lead time depends on the kind: an ID needs months to renew.
   const [kind, setKind] = useState<DocumentKind>(document?.kind ?? 'other')
+  // Whose it is decides whether a member may keep it private.
+  const [personId, setPersonId] = useState<string | null>(document?.personId ?? null)
+  const mayMarkPrivate = canMarkSensitive || people.some(person => person.you === true && person.id === personId)
   // A retry after the details failed to save, or a save after a scan, reuses the file that already uploaded.
   const uploaded = useRef<{ file: PreparedFile; storagePath: string } | null>(null)
   // What the last scan put in the form, which the next scan may replace.
@@ -133,6 +139,7 @@ export function DocumentSheet({
   function onOpenChange(next: boolean) {
     setOpen(next)
     setKind(document?.kind ?? 'other')
+    setPersonId(document?.personId ?? null)
     if (!next) {
       replacePicked(null)
       discardUploaded()
@@ -199,7 +206,9 @@ export function DocumentSheet({
         assetId: formText(data, 'assetId') || null,
         personId: formText(data, 'personId') || null,
         notes: formText(data, 'notes') || null,
-        isSensitive: canMarkSensitive ? data.get('isSensitive') === 'on' : (document?.isSensitive ?? false),
+        // Left as it was when the box isn't offered. Moving your own private document to someone
+        // else then fails with a reason, rather than quietly showing it to the whole household.
+        isSensitive: mayMarkPrivate ? data.get('isSensitive') === 'on' : (document?.isSensitive ?? false),
       },
       picked
     )
@@ -320,16 +329,16 @@ export function DocumentSheet({
           </NativeSelect>
         </Field>
 
-        <PersonField people={people} defaultValue={document?.personId ?? null} hint='A passport or licence belongs to someone.' />
+        <PersonField
+          people={people}
+          defaultValue={document?.personId ?? null}
+          hint='A passport or licence belongs to someone.'
+          onChange={setPersonId}
+        />
 
         <div className='grid grid-cols-2 gap-3'>
           <DateField id={`${formId}-issued`} name='issuedOn' label='Issued' defaultValue={document?.issuedOn ?? undefined} />
-          <DateField
-            id={`${formId}-expires`}
-            name='expiresOn'
-            label='Expires'
-            defaultValue={document?.expiresOn ?? undefined}
-          />
+          <DateField id={`${formId}-expires`} name='expiresOn' label='Expires' defaultValue={document?.expiresOn ?? undefined} />
         </div>
 
         <ReminderLeadField
@@ -363,11 +372,11 @@ export function DocumentSheet({
           <Textarea name='notes' rows={3} maxLength={4000} defaultValue={document?.notes ?? undefined} />
         </Field>
 
-        {canMarkSensitive ? (
+        {mayMarkPrivate ? (
           <CheckboxField
             name='isSensitive'
             label='Private'
-            hint='Only owners and adults can see it.'
+            hint={personId === null ? 'Only owners and adults can see it.' : 'Only owners, adults and the person it belongs to can see it.'}
             defaultChecked={document?.isSensitive ?? false}
           />
         ) : null}

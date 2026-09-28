@@ -55,9 +55,28 @@ export function storagePathHousehold(path: string): string | null {
   return STORAGE_PATH.exec(path)?.[1] ?? null
 }
 
-/** Sensitive documents are for owners and adults; everything else is for the whole household. */
-export function canSeeDocument(role: HouseholdRole, document: { isSensitive: boolean }): boolean {
-  return !document.isSensitive || can(role, 'documents.viewSensitive')
+/** Who is looking at a document: their role, and their account so their own papers can be told apart. */
+export interface DocumentViewer {
+  readonly role: HouseholdRole
+  readonly userId: string | null
+}
+
+/**
+ * Sensitive documents are for owners and adults, and for the person each one belongs to: a member
+ * keeps their own passport or scan to themselves, not away from themselves. Everything else is for
+ * the whole household. `personUserId` is the account of whoever the document is for, if they have one.
+ */
+export function canSeeDocument(viewer: DocumentViewer, document: { isSensitive: boolean; personUserId: string | null }): boolean {
+  return !document.isSensitive || can(viewer.role, 'documents.viewSensitive') || isOwnDocument(viewer, document)
+}
+
+/** Whether someone may mark a document belonging to this person sensitive: only if they could still see it. */
+export function canMarkDocumentSensitive(viewer: DocumentViewer, document: { personUserId: string | null }): boolean {
+  return can(viewer.role, 'documents.viewSensitive') || isOwnDocument(viewer, document)
+}
+
+function isOwnDocument(viewer: DocumentViewer, document: { personUserId: string | null }): boolean {
+  return viewer.userId !== null && document.personUserId === viewer.userId
 }
 
 export interface DocumentSearchFields {

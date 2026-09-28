@@ -1,10 +1,11 @@
 import { can, requirePermission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
-import { storagePathHousehold, type DocumentKind, type DocumentMimeType } from '@ghar/core/documents'
+import { canMarkDocumentSensitive, storagePathHousehold, type DocumentKind, type DocumentMimeType } from '@ghar/core/documents'
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@ghar/core/errors'
 import { and, count, desc, eq, getTableColumns, gte, inArray, isNotNull, lte, sql, type SQL } from 'drizzle-orm'
 import { assets, documents, householdPeople, profiles } from '../schema'
 import { recordAudit } from './audit'
+import { visibleDocumentSql } from './document-visibility'
 import { notRenewingSql } from './expiries'
 import { personRefColumns, requireHouseholdPeople } from './people'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
@@ -12,7 +13,8 @@ import { isUniqueViolation } from './pg-errors'
 import type { Db, RequestContext } from './types'
 
 // The household's paperwork. A sensitive document (a passport, a medical record) doesn't exist
-// for a member or a viewer: every read here filters it out, and asking for one by id is a 404.
+// for a member or a viewer unless it is their own: every read here filters the rest out, and
+// asking for one by id is a 404.
 // The file itself lives in a private bucket; only its path is stored, and it never leaves the server.
 
 export type DocumentRow = typeof documents.$inferSelect
@@ -49,15 +51,27 @@ export interface DocumentFile {
 
 const DOCUMENT_NOT_FOUND = 'That document no longer exists.'
 
-/** The documents the caller's role may see. */
+/** The documents the caller may see: all but sensitive ones, unless they are an owner, an adult, or its person. */
 function visibleTo(ctx: RequestContext) {
-  const inHousehold = eq(documents.householdId, ctx.householdId)
-  return can(ctx.role, 'documents.viewSensitive') ? inHousehold : and(inHousehold, eq(documents.isSensitive, false))
+  return and(eq(documents.householdId, ctx.householdId), visibleDocumentSql(ctx))
 }
 
-function assertCanMarkSensitive(ctx: RequestContext, isSensitive: boolean): void {
-  if (isSensitive && !can(ctx.role, 'documents.viewSensitive')) {
-    throw new ForbiddenError('Only owners and adults can mark a document sensitive.')
+/**
+ * Marking a document sensitive hides it from members and viewers, so only someone who would still see
+ * it may do it: an owner or adult, or the person it belongs to for their own.
+ */
+async function assertCanMarkSensitive(ctx: RequestContext, db: Db, input: Pick<DocumentInput, 'isSensitive' | 'personId'>): Promise<void> {
+  if (!input.isSensitive || can(ctx.role, 'documents.viewSensitive')) return
+  const [person] =
+    input.personId === null
+      ? []
+      : await db
+          .select({ userId: householdPeople.userId })
+          .from(householdPeople)
+          .where(and(eq(householdPeople.id, input.personId), eq(householdPeople.householdId, ctx.householdId)))
+          .limit(1)
+  if (!canMarkDocumentSensitive(ctx, { personUserId: person?.userId ?? null })) {
+    throw new ForbiddenError('Only owners and adults can make someone else’s document private.')
   }
 }
 
@@ -139,7 +153,7 @@ export async function getDocument(ctx: RequestContext, db: Db, documentId: strin
  */
 export async function createDocument(ctx: RequestContext, db: Db, input: DocumentInput & DocumentFile): Promise<DocumentWithAssetRow> {
   requirePermission(ctx, 'documents.manage')
-  assertCanMarkSensitive(ctx, input.isSensitive)
+  await assertCanMarkSensitive(ctx, db, input)
   if (storagePathHousehold(input.storagePath) !== ctx.householdId) {
     throw new ValidationError("That upload isn't one of this household's. Upload the file again.")
   }
@@ -162,14 +176,9 @@ export async function createDocument(ctx: RequestContext, db: Db, input: Documen
 }
 
 /** Replaces every field but the file. */
-export async function updateDocument(
-  ctx: RequestContext,
-  db: Db,
-  documentId: string,
-  input: DocumentInput
-): Promise<DocumentWithAssetRow> {
+export async function updateDocument(ctx: RequestContext, db: Db, documentId: string, input: DocumentInput): Promise<DocumentWithAssetRow> {
   requirePermission(ctx, 'documents.manage')
-  assertCanMarkSensitive(ctx, input.isSensitive)
+  await assertCanMarkSensitive(ctx, db, input)
   if (input.assetId !== null) await requireAssetInHousehold(ctx, db, input.assetId)
   if (input.personId !== null) await requireHouseholdPeople(ctx, db, [input.personId])
 

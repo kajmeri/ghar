@@ -55,7 +55,6 @@ export default async function HealthPage({ searchParams }: PageProps<'/health'>)
         personId={person.id}
         personName={person.name}
         today={today}
-        keepsPrivate={can(session.context.role, 'documents.viewSensitive')}
         trigger={
           <Button variant='outline'>
             <ScanText aria-hidden />

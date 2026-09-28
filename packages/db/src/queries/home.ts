@@ -1,10 +1,12 @@
-import { can, requirePermission } from '@ghar/core/auth'
+import { requirePermission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
+import { canSeeDocument } from '@ghar/core/documents'
 import { NotFoundError, ValidationError } from '@ghar/core/errors'
 import { initialNextDueOn, scheduleAfterCompletion, scheduleAfterRemoval, type AssetKind } from '@ghar/core/home'
 import { and, asc, desc, eq, getTableColumns, gte, lte, sql } from 'drizzle-orm'
-import { assets, contacts, documents, maintenance, maintenanceLog } from '../schema'
+import { assets, contacts, documents, householdPeople, maintenance, maintenanceLog } from '../schema'
 import { recordAudit } from './audit'
+import { visibleDocumentSql } from './document-visibility'
 import { notRenewingSql } from './expiries'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
 import { requireHouseholdMembers } from './scope'
@@ -134,13 +136,7 @@ export async function listWarrantyExpiries(
       notRenewing: notRenewingSql('warranty', assets.id, assets.warrantyExpiresOn),
     })
     .from(assets)
-    .where(
-      and(
-        eq(assets.householdId, ctx.householdId),
-        gte(assets.warrantyExpiresOn, range.from),
-        lte(assets.warrantyExpiresOn, range.to)
-      )
-    )
+    .where(and(eq(assets.householdId, ctx.householdId), gte(assets.warrantyExpiresOn, range.from), lte(assets.warrantyExpiresOn, range.to)))
     .orderBy(assets.warrantyExpiresOn, assets.name)
   return rows.flatMap(row => (row.warrantyExpiresOn === null ? [] : [{ ...row, warrantyExpiresOn: row.warrantyExpiresOn }]))
 }
@@ -373,11 +369,11 @@ export async function completeMaintenanceTask(
 
     if (input.documentId !== null) {
       const [document] = await tx
-        .select({ isSensitive: documents.isSensitive })
+        .select({ id: documents.id })
         .from(documents)
-        .where(and(eq(documents.id, input.documentId), eq(documents.householdId, ctx.householdId)))
+        .where(and(eq(documents.id, input.documentId), eq(documents.householdId, ctx.householdId), visibleDocumentSql(ctx)))
         .limit(1)
-      if (!document || (document.isSensitive && !can(ctx.role, 'documents.viewSensitive'))) {
+      if (!document) {
         throw new ValidationError('That document is not in the household.')
       }
     }
@@ -454,10 +450,16 @@ export async function listMaintenanceHistory(
 ): Promise<MaintenanceLogEntryRow[]> {
   requirePermission(ctx, 'home.view')
   const rows = await db
-    .select({ ...getTableColumns(maintenanceLog), taskTitle: maintenance.title, documentIsSensitive: documents.isSensitive })
+    .select({
+      ...getTableColumns(maintenanceLog),
+      taskTitle: maintenance.title,
+      documentIsSensitive: documents.isSensitive,
+      documentPersonUserId: householdPeople.userId,
+    })
     .from(maintenanceLog)
     .innerJoin(maintenance, eq(maintenance.id, maintenanceLog.maintenanceId))
     .leftJoin(documents, eq(documents.id, maintenanceLog.documentId))
+    .leftJoin(householdPeople, eq(householdPeople.id, documents.personId))
     .where(
       and(
         eq(maintenance.householdId, ctx.householdId),
@@ -466,9 +468,11 @@ export async function listMaintenanceHistory(
     )
     .orderBy(desc(maintenanceLog.completedOn), desc(maintenanceLog.createdAt))
 
-  const seesSensitive = can(ctx.role, 'documents.viewSensitive')
-  return rows.map(({ documentIsSensitive, ...entry }) => ({
+  return rows.map(({ documentIsSensitive, documentPersonUserId, ...entry }) => ({
     ...entry,
-    documentId: documentIsSensitive === true && !seesSensitive ? null : entry.documentId,
+    documentId:
+      documentIsSensitive === null || canSeeDocument(ctx, { isSensitive: documentIsSensitive, personUserId: documentPersonUserId })
+        ? entry.documentId
+        : null,
   }))
 }

@@ -1,6 +1,6 @@
 import 'server-only'
 import type { HealthEvent, HealthScanSaveBody, HealthScanSuggestion } from '@ghar/contracts'
-import { can, requirePermission } from '@ghar/core/auth'
+import { requirePermission } from '@ghar/core/auth'
 import { todayInTimeZone } from '@ghar/core/dates'
 import { ForbiddenError, NotFoundError } from '@ghar/core/errors'
 import { suggestionFromHealthScan } from '@ghar/core/health-scan'
@@ -75,8 +75,9 @@ export async function saveHealthScan(
             assetId: null,
             personId: body.personId,
             notes: null,
-            // Health paperwork is for owners and adults to open, when the one saving it may say so.
-            isSensitive: can(context.role, 'documents.viewSensitive'),
+            // Health paperwork is private: owners and adults can open it, and so can the person it's
+            // about. A member only scans their own records, so they may always mark it.
+            isSensitive: true,
             ...file,
           })
     const events = await queries.createHealthEvents(

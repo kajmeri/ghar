@@ -7,6 +7,7 @@ import { and, eq, getTableColumns, gte, isNotNull, lt, lte, not, sql, type SQL }
 import { assets, contacts, documents, householdPeople, profiles, renewals } from '../schema'
 import { recordAudit } from './audit'
 import { authorize } from './authorize'
+import { visibleDocumentSql } from './document-visibility'
 import { notRenewingSql } from './expiries'
 import { personRefColumns, requireHouseholdPeople } from './people'
 import { keysetAfter, keysetOrder, pageKeys, toPage, type Keyset, type Page, type PageRequest } from './pagination'
@@ -56,9 +57,9 @@ function renewalKey(ctx: RequestContext, renewalId: string) {
   return and(eq(renewals.id, renewalId), eq(renewals.householdId, ctx.householdId))
 }
 
-/** The documents the caller's role may see, as the documents queries decide it. */
+/** The documents the caller may see, as the documents queries decide it. */
 function visibleDocuments(ctx: RequestContext): SQL | undefined {
-  return can(ctx.role, 'documents.viewSensitive') ? undefined : eq(documents.isSensitive, false)
+  return visibleDocumentSql(ctx)
 }
 
 /** A renewal with the names of what it links to, plus any extra columns the caller asks for. */

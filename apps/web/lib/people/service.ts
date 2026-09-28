@@ -44,7 +44,9 @@ export interface PersonOption {
 export async function listPersonOptions(ctx: RequestContext): Promise<PersonOption[]> {
   const people = await listPeople(ctx)
   const userId = ctx.userId
-  return people.sort(comparePeople(userId)).map(person => ({ id: person.id, label: personLabel(person, userId) }))
+  return people
+    .sort(comparePeople(userId))
+    .map(person => ({ id: person.id, label: personLabel(person, userId), you: person.userId === userId }))
 }
 
 /** The label for whoever a document or renewal belongs to, for the caller. */

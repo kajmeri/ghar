@@ -1,10 +1,11 @@
-import { can, requirePermission, type Permission } from '@ghar/core/auth'
+import { requirePermission, type Permission } from '@ghar/core/auth'
 import type { CalendarDate } from '@ghar/core/dates'
 import type { DocumentMimeType } from '@ghar/core/documents'
 import { ConflictError, NotFoundError, ValidationError } from '@ghar/core/errors'
 import { renewalDateProblem, type ExpirySubjectKind } from '@ghar/core/expiries'
 import { and, eq, sql, type AnyColumn, type SQL } from 'drizzle-orm'
 import { assets, documents, expiryDismissals, renewals } from '../schema'
+import { visibleDocumentSql } from './document-visibility'
 import type { ExpiryRow } from './renewals'
 import type { Db, RequestContext } from './types'
 
@@ -44,7 +45,7 @@ export function notRenewingSql(kind: ExpirySubjectKind, id: AnyColumn, expiresOn
 }
 
 function visibleDocument(ctx: RequestContext): SQL | undefined {
-  return can(ctx.role, 'documents.viewSensitive') ? undefined : eq(documents.isSensitive, false)
+  return visibleDocumentSql(ctx)
 }
 
 /** One thing that runs out, as the list shows it. Not found when it's gone, hidden from the caller, or has no date. */
@@ -106,7 +107,11 @@ export async function getExpiry(ctx: RequestContext, db: Db, subject: ExpirySubj
 }
 
 /** The date it runs out now, locked until the transaction ends so a renewal and a dismissal can't cross. */
-async function lockExpiresOn(ctx: RequestContext, tx: Db, subject: ExpirySubjectRef): Promise<{ expiresOn: CalendarDate; storagePath: string | null }> {
+async function lockExpiresOn(
+  ctx: RequestContext,
+  tx: Db,
+  subject: ExpirySubjectRef
+): Promise<{ expiresOn: CalendarDate; storagePath: string | null }> {
   switch (subject.kind) {
     case 'document': {
       const [row] = await tx
