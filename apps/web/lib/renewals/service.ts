@@ -215,6 +215,16 @@ export async function listAllExpiries(session: Session, from?: CalendarDate): Pr
   return rows.map(row => toExpiry(row, today)).toSorted((a, b) => (a.expiresOn < b.expiresOn ? -1 : a.expiresOn > b.expiresOn ? 1 : 0))
 }
 
+/**
+ * Whether anything ran out before `before`: what the renewals page's "Show older ones" would add.
+ * The list is soonest first, so its first row is the oldest.
+ */
+export async function hasExpiriesBefore(session: Session, before: CalendarDate): Promise<boolean> {
+  const page = await queries.listExpiriesPage(session.context, getDb(), {}, { after: null, limit: 1 })
+  const oldest = page.rows[0]
+  return oldest !== undefined && oldest.expiresOn < before
+}
+
 export interface RenewalFormOptions {
   assets: { id: string; name: string }[]
   contacts: { id: string; name: string }[]
