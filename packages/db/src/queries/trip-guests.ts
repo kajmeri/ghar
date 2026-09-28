@@ -36,10 +36,12 @@ import {
   tripCostShares,
   tripGuestCalendarFeeds,
   tripGuests,
+  tripArrivals,
   tripPayments,
   tripPollOptions,
   tripPolls,
   tripPollVotes,
+  tripRoomAssignments,
   trips,
   tripShareLinks,
   tripTravellers,
@@ -298,6 +300,36 @@ async function clearGuestTraces(tx: Db, tripId: string, userId: string, househol
   await tx.delete(optionVotes).where(and(eq(optionVotes.userId, userId), inArray(optionVotes.optionId, planOptions)))
   await tx.delete(tripPollVotes).where(and(eq(tripPollVotes.userId, userId), inArray(tripPollVotes.optionId, pollOptions)))
   await tx.delete(tripUpdateMutes).where(and(eq(tripUpdateMutes.tripId, tripId), eq(tripUpdateMutes.userId, userId)))
+}
+
+/**
+ * Someone who says they can't go drops off the arrivals board and gives their bed back. Their
+ * travel and room go with the answer rather than lingering out of sight, where nobody can take
+ * them off, only to come back stale if the answer changes again. A ride they offered someone is
+ * open again too, unless they're in the household, whose members give rides whether or not
+ * they're travelling.
+ */
+async function clearPlansOfNotGoing(tx: Db, guestId: string): Promise<void> {
+  const [guest] = await tx
+    .select({ tripId: tripGuests.tripId, userId: tripGuests.userId, householdId: trips.householdId })
+    .from(tripGuests)
+    .innerJoin(trips, eq(trips.id, tripGuests.tripId))
+    .where(eq(tripGuests.id, guestId))
+    .limit(1)
+  if (!guest) return
+  await tx.delete(tripArrivals).where(and(eq(tripArrivals.tripId, guest.tripId), eq(tripArrivals.guestId, guestId)))
+  await tx.delete(tripRoomAssignments).where(and(eq(tripRoomAssignments.tripId, guest.tripId), eq(tripRoomAssignments.guestId, guestId)))
+  if (!guest.userId) return
+  const [member] = await tx
+    .select({ userId: householdMembers.userId })
+    .from(householdMembers)
+    .where(and(eq(householdMembers.householdId, guest.householdId), eq(householdMembers.userId, guest.userId)))
+    .limit(1)
+  if (member) return
+  await tx
+    .update(tripArrivals)
+    .set({ rideUserId: null, updatedAt: sql`now()` })
+    .where(and(eq(tripArrivals.tripId, guest.tripId), eq(tripArrivals.rideUserId, guest.userId)))
 }
 
 async function hasSharedCosts(db: Db, tripId: string, guestId: string): Promise<boolean> {
@@ -614,6 +646,7 @@ export async function respondToTripInvite(
         guestId = await answerThroughLink(ctx, tx, invite, answer, input.now)
       }
 
+      if (input.response === 'not_going') await clearPlansOfNotGoing(tx, guestId)
       await recordAudit({ userId: ctx.userId, householdId: invite.householdId }, tx, {
         action: 'trip_guest.responded',
         entity: 'trip_guest',
@@ -1090,6 +1123,7 @@ export async function updateMyTripAnswer(
         householdId: sql<string>`(select ${trips.householdId} from ${trips} where ${trips.id} = ${tripGuests.tripId})`,
       })
     if (!row) throw new NotFoundError(NOT_ON_TRIP)
+    if (input.response === 'not_going') await clearPlansOfNotGoing(tx, row.id)
     await recordAudit({ userId: ctx.userId, householdId: row.householdId }, tx, {
       action: 'trip_guest.responded',
       entity: 'trip_guest',
