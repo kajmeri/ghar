@@ -13,6 +13,14 @@ export function usesFakePrices(): boolean {
   return !env().TRAVELPAYOUTS_TOKEN
 }
 
+/**
+ * Whether the daily fare watch has somewhere to get prices. Production without a token has
+ * nowhere, so the job skips itself until one is set instead of failing every day.
+ */
+export function canWatchPrices(): boolean {
+  return Boolean(env().TRAVELPAYOUTS_TOKEN) || process.env.NODE_ENV !== 'production'
+}
+
 export function getPriceProviders(): PriceProviders {
   const { TRAVELPAYOUTS_TOKEN } = env()
   if (!TRAVELPAYOUTS_TOKEN) {

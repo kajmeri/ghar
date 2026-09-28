@@ -16,7 +16,7 @@ import { getEmailProvider } from '@/lib/providers/email'
 import { getGmailClient } from '@/lib/providers/gmail'
 import { getGoogleCalendarClient } from '@/lib/providers/google-calendar'
 import { getPlaidClient } from '@/lib/providers/plaid'
-import { getPriceProviders } from '@/lib/providers/prices'
+import { canWatchPrices, getPriceProviders } from '@/lib/providers/prices'
 import { runDecisionNudges } from '@/lib/travel/decision-nudges'
 import { runPriceWatch } from '@/lib/travel/price-watch'
 import { runTripRecaps } from '@/lib/travel/trip-recaps'
@@ -58,14 +58,16 @@ export async function GET(request: Request): Promise<Response> {
       await runJob(
         db,
         'travel.price_watch',
-        () =>
-          runPriceWatch({
-            db,
-            providers: getPriceProviders(),
-            email: getEmailProvider(),
-            appUrl: env().APP_URL,
-            now: new Date(),
-          }),
+        async () =>
+          canWatchPrices()
+            ? runPriceWatch({
+                db,
+                providers: getPriceProviders(),
+                email: getEmailProvider(),
+                appUrl: env().APP_URL,
+                now: new Date(),
+              })
+            : { skipped: 'TRAVELPAYOUTS_TOKEN is not set' },
         deps
       ),
       await runJob(
