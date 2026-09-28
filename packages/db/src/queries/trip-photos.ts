@@ -93,6 +93,17 @@ export async function authorizeTripPhotoUpload(ctx: SessionContext, db: Db, trip
   if ((row?.n ?? 0) >= MAX_TRIP_PHOTOS) throw new ConflictError(ALBUM_FULL)
 }
 
+/**
+ * Whether a path from the phone may still be saved: throws unless the caller may add photos to
+ * the trip, and answers false when a photo already has that file. apps/web checks this before it
+ * does anything to the file, so a failed add never removes a file someone else's photo uses.
+ */
+export async function isUnsavedTripPhotoPath(ctx: SessionContext, db: Db, tripId: string, storagePath: string): Promise<boolean> {
+  requireCanAdd(await requireParticipant(ctx, db, tripId))
+  const [saved] = await db.select({ id: tripPhotos.id }).from(tripPhotos).where(eq(tripPhotos.storagePath, storagePath)).limit(1)
+  return saved === undefined
+}
+
 export interface TripPhotoInput {
   tripId: string
   storagePath: string
@@ -117,6 +128,9 @@ export async function addTripPhoto(ctx: SessionContext, db: Db, input: TripPhoto
   await db.transaction(async tx => {
     // One at a time per trip, so two adds can't both slip under the limit.
     await tx.select({ id: trips.id }).from(trips).where(eq(trips.id, input.tripId)).for('update')
+    // Already saved: the same request, sent again. Before the count, so a full album still answers it.
+    const [saved] = await tx.select({ id: tripPhotos.id }).from(tripPhotos).where(eq(tripPhotos.storagePath, input.storagePath)).limit(1)
+    if (saved) return
     const [existing] = await tx.select({ n: count() }).from(tripPhotos).where(eq(tripPhotos.tripId, input.tripId))
     if ((existing?.n ?? 0) >= MAX_TRIP_PHOTOS) throw new ConflictError(ALBUM_FULL)
     const [row] = await tx

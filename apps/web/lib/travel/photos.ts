@@ -62,6 +62,11 @@ export async function addTripPhoto(session: SessionContext, tripId: string, body
   if (tripPhotoPathTrip(body.storagePath) !== tripId.toLowerCase()) {
     throw new ValidationError('That upload is not one Ghar made for this trip.')
   }
+  // Before anything can remove the file: only someone who may add photos gets this far, and a
+  // path that's already a photo in the album is answered as saved, never touched.
+  if (!(await queries.isUnsavedTripPhotoPath(session, getDb(), tripId, body.storagePath))) {
+    return listTripPhotos(session, tripId)
+  }
   const file = await getStorageProvider().stat(body.storagePath)
   if (file === null) throw new ValidationError('The photo did not finish uploading. Try adding it again.')
   if (!isTripPhotoMimeType(file.mimeType)) {

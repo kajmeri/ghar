@@ -183,6 +183,28 @@ describe('the trip album', () => {
     expect((await call(addPhoto, 'POST', { tripId }, { storagePath: elsewhere })).status).toBe(400)
   })
 
+  it('never removes a saved photo’s file when someone sends its path again', async () => {
+    signInAs(guest)
+    const storagePath = await uploadPhoto()
+    expect((await call(addPhoto, 'POST', { tripId }, { storagePath })).status).toBe(201)
+    const before = photosOf(await call(listPhotos, 'GET', { tripId })).photos.length
+
+    // Someone who can't add photos, or isn't on the trip, is turned away before the file is touched.
+    signInAs(stranger)
+    expect((await call(addPhoto, 'POST', { tripId }, { storagePath })).status).toBe(404)
+    expect(storage.objects.has(storagePath)).toBe(true)
+
+    // Sent again by someone who may add: answered as saved, still one photo.
+    signInAs(guest)
+    const again = photosOf(await call(addPhoto, 'POST', { tripId }, { storagePath })).photos
+    expect(again).toHaveLength(before)
+    expect(storage.objects.has(storagePath)).toBe(true)
+
+    const newest = again[0]
+    if (!newest) throw new Error('Expected a photo')
+    expect((await call(deletePhoto, 'DELETE', { tripId, photoId: newest.id })).status).toBe(200)
+  })
+
   it('lets whoever added a photo take it down, and removes the file', async () => {
     signInAs(guest)
     const storagePath = await uploadPhoto('image/webp')
