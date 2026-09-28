@@ -3,6 +3,7 @@ import type { Expiry, PageQuery, Renewal, RenewalBody, RenewExpiryBody } from '@
 import { todayInTimeZone, type CalendarDate } from '@ghar/core/dates'
 import { expiryState } from '@ghar/core/documents'
 import { reminderLeadDays, suggestedRenewalDate, type ExpirySubjectKind } from '@ghar/core/expiries'
+import { shownTermEnd } from '@ghar/core/renewals'
 import * as queries from '@ghar/db/queries'
 import type { ExpiryRow, PageRequest, RenewalWithLinksRow } from '@ghar/db/queries'
 import { can } from '@ghar/core/auth'
@@ -20,12 +21,13 @@ import { listPersonOptions, personNameFor } from '@/lib/people/service'
 
 export function toRenewal(row: RenewalWithLinksRow, today: CalendarDate, currentUserId: string): Renewal {
   const leadDays = reminderLeadDays({ kind: 'renewal', renewalKind: row.kind }, row.remindFromDays)
+  const expiresOn = shownTermEnd(row, today)
   return {
     id: row.id,
     title: row.title,
     kind: row.kind,
-    expiresOn: row.expiresOn,
-    expiryState: expiryState(row.expiresOn, today, leadDays),
+    expiresOn,
+    expiryState: expiryState(expiresOn, today, leadDays),
     remindFromDays: row.remindFromDays,
     reminderLeadDays: leadDays,
     cadenceMonths: row.cadenceMonths,
@@ -63,10 +65,11 @@ function leadDaysOf(row: ExpiryRow): number {
 
 export function toExpiry(row: ExpiryRow, today: CalendarDate): Expiry {
   const leadDays = leadDaysOf(row)
+  const expiresOn = row.kind === 'renewal' ? shownTermEnd(row, today) : row.expiresOn
   const common = {
     title: row.title,
-    expiresOn: row.expiresOn,
-    state: expiryState(row.expiresOn, today, leadDays),
+    expiresOn,
+    state: expiryState(expiresOn, today, leadDays),
     reminderLeadDays: leadDays,
     notRenewing: row.notRenewing,
   }
@@ -86,7 +89,7 @@ export function toExpiry(row: ExpiryRow, today: CalendarDate): Expiry {
         kind: 'renewal',
         renewalId: row.id,
         ...common,
-        suggestedRenewalOn: suggestedRenewalDate({ expiresOn: row.expiresOn, cadenceMonths: row.cadenceMonths }),
+        suggestedRenewalOn: suggestedRenewalDate({ expiresOn, cadenceMonths: row.cadenceMonths }),
         renewalKind: row.renewalKind,
         autoRenews: row.autoRenews,
         costCents: row.costCents,
@@ -207,7 +210,9 @@ export async function listAllExpiries(session: Session, from?: CalendarDate): Pr
     rows.push(...page.rows)
     after = page.next
   } while (after !== null)
-  return rows.map(row => toExpiry(row, today))
+  // Sorted again by the date shown: an automatic renewal the daily run hasn't moved on yet is
+  // listed by its stored date but shows its current term.
+  return rows.map(row => toExpiry(row, today)).toSorted((a, b) => (a.expiresOn < b.expiresOn ? -1 : a.expiresOn > b.expiresOn ? 1 : 0))
 }
 
 export interface RenewalFormOptions {

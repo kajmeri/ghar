@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currentTermEnd, isRenewalKind, nextTermEnd, renewalCadenceLabel, renewsPhrase } from '../src/renewals'
+import { currentTermEnd, isRenewalKind, nextTermEnd, renewalCadenceLabel, renewsPhrase, shownTermEnd } from '../src/renewals'
 
 describe('currentTermEnd', () => {
   const annual = { expiresOn: '2026-03-31', cadenceMonths: 12, autoRenews: true }
@@ -23,6 +23,20 @@ describe('currentTermEnd', () => {
   it('leaves a passed date alone when it does not renew on its own', () => {
     expect(currentTermEnd({ ...annual, autoRenews: false }, '2026-06-01')).toBe('2026-03-31')
     expect(currentTermEnd({ ...annual, cadenceMonths: null }, '2026-06-01')).toBe('2026-03-31')
+  })
+})
+
+describe('shownTermEnd', () => {
+  const annual = { expiresOn: '2026-03-31', cadenceMonths: 12, autoRenews: true, notRenewing: false }
+
+  it('shows the current term of an automatic renewal the daily run has not moved yet', () => {
+    expect(shownTermEnd(annual, '2026-04-01')).toBe('2027-03-31')
+    expect(shownTermEnd(annual, '2026-03-01')).toBe('2026-03-31')
+  })
+
+  it('keeps the date of one marked not renewing, or one renewed by hand', () => {
+    expect(shownTermEnd({ ...annual, notRenewing: true }, '2026-04-01')).toBe('2026-03-31')
+    expect(shownTermEnd({ ...annual, autoRenews: false }, '2026-04-01')).toBe('2026-03-31')
   })
 })
 
