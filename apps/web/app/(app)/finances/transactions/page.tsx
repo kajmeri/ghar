@@ -2,7 +2,7 @@ import { can } from '@ghar/core/auth'
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { getPageSession } from '@/lib/api/authed'
-import { rangeLabel, transactionFilters, transactionsHref } from '@/lib/finances/display'
+import { rangeLabel, transactionFilters, transactionsHref, transactionsQuery } from '@/lib/finances/display'
 import { listAccountOptions, listCategoryOptions } from '@/lib/finances/service'
 import { loadTransactionSummary, loadTransactionsPage } from '@/lib/finances/transactions'
 import { BackLink } from '../../_components/ui/back-link'
@@ -37,14 +37,7 @@ export default async function TransactionsPage({ searchParams }: PageProps<'/fin
   const filters = transactionFilters(params)
   const range = rangeLabel(filters)
   const filtered = filters.q !== '' || filters.account !== '' || filters.category !== '' || filters.review || range !== null
-  const query = {
-    q: filters.q === '' ? undefined : filters.q,
-    accountId: filters.account === '' ? undefined : filters.account,
-    categoryId: filters.category === '' ? undefined : filters.category,
-    review: filters.review ? true : undefined,
-    from: filters.from === '' ? undefined : filters.from,
-    to: filters.to === '' ? undefined : filters.to,
-  }
+  const query = transactionsQuery(filters)
   const [page, accounts, categories] = await Promise.all([
     loadTransactionsPage(session, { limit: PAGE_SIZE, ...query }),
     listAccountOptions(session),

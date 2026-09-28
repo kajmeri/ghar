@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/ui/form-error'
 import { Pill } from '@/components/ui/pill'
 import { api, errorMessage } from '@/lib/api/client'
+import { transactionsQuery, type TransactionFilterParams } from '@/lib/finances/display'
 import { cn } from '@/lib/utils'
 import { TransactionSheet } from './transaction-sheet'
 
@@ -35,7 +36,7 @@ export function TransactionList({
   canManage,
 }: {
   page: TransactionPage
-  filters: { q: string; account: string; category: string; review: boolean }
+  filters: TransactionFilterParams
   categories: Category[]
   currency: string
   canManage: boolean
@@ -54,14 +55,8 @@ export function TransactionList({
     setLoadError(null)
     try {
       const next = await api.request(listTransactions, {
-        query: {
-          cursor,
-          limit: PAGE_SIZE,
-          q: filters.q === '' ? undefined : filters.q,
-          accountId: filters.account === '' ? undefined : filters.account,
-          categoryId: filters.category === '' ? undefined : filters.category,
-          review: filters.review ? true : undefined,
-        },
+        // Every filter the first page had, dates included, or the cursor is refused as another question's.
+        query: { cursor, limit: PAGE_SIZE, ...transactionsQuery(filters) },
       })
       setItems(current => [...current, ...next.items])
       setCursor(next.nextCursor)

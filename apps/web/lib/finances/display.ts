@@ -70,6 +70,28 @@ export interface TransactionFilterParams {
   to: string
 }
 
+/**
+ * The filters as the list endpoint's query, leaving out the ones that aren't set. The first page and
+ * every "Show more" after it use this, so a later page asks the same question its cursor was made for.
+ */
+export function transactionsQuery(filters: TransactionFilterParams): {
+  q?: string
+  accountId?: string
+  categoryId?: string
+  review?: true
+  from?: string
+  to?: string
+} {
+  return {
+    q: filters.q === '' ? undefined : filters.q,
+    accountId: filters.account === '' ? undefined : filters.account,
+    categoryId: filters.category === '' ? undefined : filters.category,
+    review: filters.review ? true : undefined,
+    from: filters.from === '' ? undefined : filters.from,
+    to: filters.to === '' ? undefined : filters.to,
+  }
+}
+
 function first(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value) ?? ''
 }
