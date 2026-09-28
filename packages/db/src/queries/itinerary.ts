@@ -1,5 +1,5 @@
 import { requirePermission } from '@ghar/core/auth'
-import type { CalendarDate } from '@ghar/core/dates'
+import { assertTimeZone, type CalendarDate } from '@ghar/core/dates'
 import { NotFoundError, ValidationError } from '@ghar/core/errors'
 import {
   planChoice,
@@ -8,6 +8,7 @@ import {
   planRestore,
   planSkip,
   planSlotMove,
+  retimeMovedSlot,
   skeletonDrafts,
   SORT_ORDER_STEP,
   sortOrderForInsert,
@@ -20,7 +21,7 @@ import {
   type SlotMove,
 } from '@ghar/core/itinerary'
 import { and, asc, eq, inArray, max, sql } from 'drizzle-orm'
-import { itineraryOptions, itineraryScaffoldDismissals, itinerarySlots, optionVotes } from '../schema'
+import { households, itineraryOptions, itineraryScaffoldDismissals, itinerarySlots, optionVotes } from '../schema'
 import { requireTripIdea } from './ideas'
 import { requireTrip, type TripRow } from './scope'
 import { forgetSlotUpdates, recordSlotChoice } from './trip-update-records'
@@ -141,7 +142,11 @@ async function lockSlot(tx: Db, tripId: string, slotId: string): Promise<Itinera
 }
 
 /** The slot an option belongs to, locked, with every option in it. */
-async function lockSlotOfOption(tx: Db, tripId: string, optionId: string): Promise<{ slot: ItinerarySlotRow; options: ItineraryOptionRow[] }> {
+async function lockSlotOfOption(
+  tx: Db,
+  tripId: string,
+  optionId: string
+): Promise<{ slot: ItinerarySlotRow; options: ItineraryOptionRow[] }> {
   const [owner] = await tx
     .select({ slotId: itineraryOptions.slotId })
     .from(itineraryOptions)
@@ -248,8 +253,12 @@ export async function moveSlot(ctx: RequestContext, db: Db, tripId: string, slot
   requirePermission(ctx, 'travel.manage')
   await requireTrip(ctx, db, tripId)
 
+  const [household] = await db.select({ timeZone: households.timezone }).from(households).where(eq(households.id, ctx.householdId)).limit(1)
+  if (!household) throw new NotFoundError('That household no longer exists.')
+  const timeZone = assertTimeZone(household.timeZone)
+
   await db.transaction(async tx => {
-    await lockSlot(tx, tripId, slotId)
+    const current = await lockSlot(tx, tripId, slotId)
     const all = await tx
       .select({
         id: itinerarySlots.id,
@@ -261,11 +270,13 @@ export async function moveSlot(ctx: RequestContext, db: Db, tripId: string, slot
       .from(itinerarySlots)
       .where(eq(itinerarySlots.tripId, tripId))
 
+    // A slot that changes day or band takes its clock times with it, or loses them.
+    const times = retimeMovedSlot(current, move, timeZone)
     for (const change of planSlotMove(all, slotId, move)) {
       const isMoved = change.id === slotId
       await tx
         .update(itinerarySlots)
-        .set({ sortOrder: change.sortOrder, ...(isMoved ? { day: move.day, band: move.band } : {}), updatedAt: sql`now()` })
+        .set({ sortOrder: change.sortOrder, ...(isMoved ? { day: move.day, band: move.band, ...times } : {}), updatedAt: sql`now()` })
         .where(and(eq(itinerarySlots.id, change.id), eq(itinerarySlots.tripId, tripId)))
     }
   })

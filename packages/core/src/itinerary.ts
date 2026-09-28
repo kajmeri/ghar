@@ -1,4 +1,13 @@
-import { addCalendarDays, startOfDayInTimeZone, toCalendarDate, wallClockTimeInTimeZone, type CalendarDate, type TimeZone } from './dates'
+import {
+  addCalendarDays,
+  daysBetween,
+  instantInTimeZone,
+  startOfDayInTimeZone,
+  toCalendarDate,
+  wallClockTimeInTimeZone,
+  type CalendarDate,
+  type TimeZone,
+} from './dates'
 import { ValidationError } from './errors'
 import type { Cents } from './money'
 import { bookingTitle, carrierName } from './travel/bookings'
@@ -225,6 +234,33 @@ export function planSlotMove(slots: readonly SlotPosition[], slotId: string, mov
     changes.push({ id: slotId, sortOrder: (index + 1) * SORT_ORDER_STEP })
   }
   return changes.sort((a, b) => a.sortOrder - b.sortOrder)
+}
+
+/**
+ * The clock times a moved slot keeps. Moved to another day in the same band, it keeps its local
+ * time and its length: dinner at 7:30 on Tuesday is dinner at 7:30 on Wednesday. Moved to another
+ * part of the day, its old time would contradict where it now sits, so it loses its times and
+ * someone sets them again if they matter.
+ */
+export function retimeMovedSlot(
+  slot: { readonly day: CalendarDate; readonly band: SlotBand; readonly startsAt: Date | null; readonly endsAt: Date | null },
+  move: { readonly day: CalendarDate; readonly band: SlotBand },
+  timeZone: TimeZone
+): { startsAt: Date | null; endsAt: Date | null } {
+  if (slot.startsAt === null && slot.endsAt === null) return { startsAt: null, endsAt: null }
+  if (move.band !== slot.band) return { startsAt: null, endsAt: null }
+  if (move.day === slot.day) return { startsAt: slot.startsAt, endsAt: slot.endsAt }
+
+  const shift = (instant: Date): Date =>
+    instantInTimeZone(
+      addCalendarDays(toCalendarDate(instant, timeZone), daysBetween(slot.day, move.day)),
+      wallClockTimeInTimeZone(instant, timeZone),
+      timeZone
+    )
+  if (slot.startsAt === null) return { startsAt: null, endsAt: slot.endsAt === null ? null : shift(slot.endsAt) }
+  const startsAt = shift(slot.startsAt)
+  const endsAt = slot.endsAt === null ? null : new Date(startsAt.getTime() + (slot.endsAt.getTime() - slot.startsAt.getTime()))
+  return { startsAt, endsAt }
 }
 
 // Options and choosing
@@ -517,7 +553,11 @@ export function skeletonDrafts(day: CalendarDate, existing: readonly (SlotPositi
 }
 
 /** Trip days that have nothing planned and whose skeleton offer nobody has dismissed. */
-export function daysOfferingSkeleton(dates: TripDates, slots: readonly { readonly day: CalendarDate }[], dismissed: readonly CalendarDate[]): CalendarDate[] {
+export function daysOfferingSkeleton(
+  dates: TripDates,
+  slots: readonly { readonly day: CalendarDate }[],
+  dismissed: readonly CalendarDate[]
+): CalendarDate[] {
   const planned = new Set(slots.map(slot => slot.day))
   const skipped = new Set(dismissed)
   return tripDays(dates).filter(day => !planned.has(day) && !skipped.has(day))
@@ -528,7 +568,16 @@ export function daysOfferingSkeleton(dates: TripDates, slots: readonly { readonl
 /** What a booking looks like to this module. A subset of a booking from @ghar/core/travel. */
 export type BookingLike = Pick<
   BookingFields,
-  'kind' | 'confirmationCode' | 'providerName' | 'carrier' | 'origin' | 'destination' | 'propertyName' | 'checkIn' | 'departAt' | 'paidCents'
+  | 'kind'
+  | 'confirmationCode'
+  | 'providerName'
+  | 'carrier'
+  | 'origin'
+  | 'destination'
+  | 'propertyName'
+  | 'checkIn'
+  | 'departAt'
+  | 'paidCents'
 > & { readonly id: string }
 
 /** A slot with its one chosen option, generated from a booking and not yet written. */
@@ -608,11 +657,17 @@ export interface DayPlan<T> {
   readonly next: T | null
 }
 
-export function dayPlan<T extends SlotPosition & { readonly endsAt: Date | null }>(slots: readonly T[], day: CalendarDate, now: Date): DayPlan<T> {
+export function dayPlan<T extends SlotPosition & { readonly endsAt: Date | null }>(
+  slots: readonly T[],
+  day: CalendarDate,
+  now: Date
+): DayPlan<T> {
   const today = slots.filter(slot => slot.day === day).sort(compareSlots)
   const time = now.getTime()
 
-  const current = today.filter(slot => slot.startsAt !== null && slot.startsAt.getTime() <= time && slot.endsAt !== null && slot.endsAt.getTime() >= time)
+  const current = today.filter(
+    slot => slot.startsAt !== null && slot.startsAt.getTime() <= time && slot.endsAt !== null && slot.endsAt.getTime() >= time
+  )
   const next = today.find(slot => slot.startsAt !== null && slot.startsAt.getTime() > time) ?? null
 
   return { day, slots: today, current, next }

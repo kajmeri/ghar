@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { assertCalendarDate, assertTimeZone, instantInTimeZone } from '../src/dates'
 import { ValidationError } from '../src/errors'
 import {
   SORT_ORDER_STEP,
@@ -22,6 +23,7 @@ import {
   planSkip,
   planSlotMove,
   plannedCents,
+  retimeMovedSlot,
   skeletonDrafts,
   slotDraftFromBooking,
   slotShape,
@@ -85,7 +87,11 @@ describe('groupSlotsByDay', () => {
   })
 
   it('orders a day by band first, then by position', () => {
-    const slots = [slot('dinner', 1000, { band: 'evening' }), slot('lunch-2', 2000, { band: 'midday' }), slot('lunch-1', 1000, { band: 'midday' })]
+    const slots = [
+      slot('dinner', 1000, { band: 'evening' }),
+      slot('lunch-2', 2000, { band: 'midday' }),
+      slot('lunch-1', 1000, { band: 'midday' }),
+    ]
     expect(groupSlotsByDay(slots, DATES)[0]?.slots.map(each => each.id)).toEqual(['lunch-1', 'lunch-2', 'dinner'])
   })
 
@@ -102,7 +108,10 @@ describe('sortOrderForInsert', () => {
   })
 
   it('puts a timed slot between the timed slots it belongs between', () => {
-    const cell = [slot('early', 1000, { startsAt: at('2026-03-03T09:00:00Z') }), slot('late', 2000, { startsAt: at('2026-03-03T10:30:00Z') })]
+    const cell = [
+      slot('early', 1000, { startsAt: at('2026-03-03T09:00:00Z') }),
+      slot('late', 2000, { startsAt: at('2026-03-03T10:30:00Z') }),
+    ]
     const order = sortOrderForInsert(cell, at('2026-03-03T10:00:00Z'))
     expect(order).toBeGreaterThan(1000)
     expect(order).toBeLessThan(2000)
@@ -147,7 +156,12 @@ describe('planSlotMove', () => {
 })
 
 describe('choosing', () => {
-  const options = [option('bistro', 'chosen'), option('sushi'), option('pizza', 'rejected'), option('hotel-bar', 'candidate', { bookingId: 'b-1' })]
+  const options = [
+    option('bistro', 'chosen'),
+    option('sushi'),
+    option('pizza', 'rejected'),
+    option('hotel-bar', 'candidate', { bookingId: 'b-1' }),
+  ]
 
   it('decides the slot and returns the previous choice to the running', () => {
     expect(planChoice(options, 'sushi')).toEqual({
@@ -189,7 +203,10 @@ describe('choosing', () => {
   })
 
   it('reopens and skips without losing the options', () => {
-    expect(planReopen(options)).toEqual({ slot: { status: 'open', chosenOptionId: null }, options: [{ id: 'bistro', status: 'candidate' }] })
+    expect(planReopen(options)).toEqual({
+      slot: { status: 'open', chosenOptionId: null },
+      options: [{ id: 'bistro', status: 'candidate' }],
+    })
     expect(planSkip(options).slot).toEqual({ status: 'skipped', chosenOptionId: null })
   })
 
@@ -286,7 +303,13 @@ describe('deadlines and the queue', () => {
 
   const candidate = (
     id: string,
-    { day = '2026-03-03', band = 'evening' as SlotBand, decideBy = null as string | null, deadline = null as string | null, status = 'open' as SlotStatus } = {}
+    {
+      day = '2026-03-03',
+      band = 'evening' as SlotBand,
+      decideBy = null as string | null,
+      deadline = null as string | null,
+      status = 'open' as SlotStatus,
+    } = {}
   ) => ({
     ...slot(id, 1000, { day, band }),
     status,
@@ -398,7 +421,11 @@ describe('slotDraftFromBooking', () => {
 
   it('makes a car rental a pick-up at its location', () => {
     const car = { ...hotel, kind: 'car' as const, providerName: 'Hertz', origin: 'LHR' }
-    expect(slotDraftFromBooking(car, { timeZone: 'UTC' })).toMatchObject({ kind: 'transport', label: 'Car pick-up', option: { title: 'Hertz, LHR', subtitle: 'LHR' } })
+    expect(slotDraftFromBooking(car, { timeZone: 'UTC' })).toMatchObject({
+      kind: 'transport',
+      label: 'Car pick-up',
+      option: { title: 'Hertz, LHR', subtitle: 'LHR' },
+    })
   })
 
   it('falls back to the trip start, or gives up when there is no day', () => {
@@ -426,5 +453,49 @@ describe('dayPlan', () => {
     const plan = dayPlan(slots, '2026-03-03', at('2026-03-03T20:00:00Z'))
     expect(plan.current).toEqual([])
     expect(plan.next).toBeNull()
+  })
+})
+
+describe('retimeMovedSlot', () => {
+  const zone = assertTimeZone('America/New_York')
+  const at = (date: string, time: string) => instantInTimeZone(assertCalendarDate(date), time, zone)
+  const dinner = {
+    day: assertCalendarDate('2026-03-03'),
+    band: 'evening' as const,
+    startsAt: at('2026-03-03', '19:30'),
+    endsAt: at('2026-03-03', '21:00'),
+  }
+
+  it('keeps the local time and length on another day in the same band', () => {
+    expect(retimeMovedSlot(dinner, { day: assertCalendarDate('2026-03-04'), band: 'evening' }, zone)).toEqual({
+      startsAt: at('2026-03-04', '19:30'),
+      endsAt: at('2026-03-04', '21:00'),
+    })
+  })
+
+  it('keeps the local time across a change of clocks', () => {
+    // US clocks go forward on Mar 8, 2026.
+    const moved = retimeMovedSlot(dinner, { day: assertCalendarDate('2026-03-09'), band: 'evening' }, zone)
+    expect(moved.startsAt).toEqual(at('2026-03-09', '19:30'))
+  })
+
+  it('drops the times when the slot moves to another part of the day', () => {
+    expect(retimeMovedSlot(dinner, { day: assertCalendarDate('2026-03-04'), band: 'morning' }, zone)).toEqual({
+      startsAt: null,
+      endsAt: null,
+    })
+  })
+
+  it('leaves a reorder within its cell, and a slot without times, alone', () => {
+    expect(retimeMovedSlot(dinner, { day: dinner.day, band: 'evening' }, zone)).toEqual({
+      startsAt: dinner.startsAt,
+      endsAt: dinner.endsAt,
+    })
+    expect(
+      retimeMovedSlot({ ...dinner, startsAt: null, endsAt: null }, { day: assertCalendarDate('2026-03-04'), band: 'night' }, zone)
+    ).toEqual({
+      startsAt: null,
+      endsAt: null,
+    })
   })
 })
