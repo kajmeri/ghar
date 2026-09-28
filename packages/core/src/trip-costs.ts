@@ -95,6 +95,34 @@ export function splitCents(amount: Cents, shares: readonly number[]): Cents[] {
   return parts
 }
 
+/**
+ * The one order a split hands out its pennies in: guests by id, then the household. Every place
+ * that splits a cost goes through splitCost, so the form's preview and the ledger never put a
+ * stray cent on different people.
+ */
+export function compareParties(a: TripParty, b: TripParty): number {
+  if (a.kind === 'household') return b.kind === 'household' ? 0 : 1
+  if (b.kind === 'household') return -1
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+}
+
+/**
+ * Splits a cost between its parties to the cent, the same way whatever order the shares come in.
+ * The parts line up with the shares as given.
+ */
+export function splitCost(amount: Cents, shares: readonly CostShare[]): Cents[] {
+  const ordered = shares.map((share, index) => ({ share, index })).sort((x, y) => compareParties(x.share.party, y.share.party))
+  const parts = splitCents(
+    amount,
+    ordered.map(entry => entry.share.shares)
+  )
+  const aligned: Cents[] = shares.map(() => 0)
+  ordered.forEach((entry, position) => {
+    aligned[entry.index] = parts[position] ?? 0
+  })
+  return aligned
+}
+
 export interface LedgerCost {
   readonly amountCents: Cents
   readonly paidBy: TripParty
@@ -119,10 +147,7 @@ export function tripBalances(costs: readonly LedgerCost[], payments: readonly Le
   }
   for (const cost of costs) {
     add(cost.paidBy, cost.amountCents)
-    const parts = splitCents(
-      cost.amountCents,
-      cost.shares.map(share => share.shares)
-    )
+    const parts = splitCost(cost.amountCents, cost.shares)
     cost.shares.forEach((share, index) => {
       add(share.party, -(parts[index] ?? 0))
     })

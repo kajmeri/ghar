@@ -11,7 +11,7 @@ import {
   partyKey,
   sameParty,
   settleUp,
-  splitCents,
+  splitCost,
   tripBalances,
   type CostShare,
   type TripParty,
@@ -189,7 +189,7 @@ async function loadLedger(db: Db, participant: Participant): Promise<TripCostsVi
       .select({ costId: tripCostShares.costId, guestId: tripCostShares.guestId, shares: tripCostShares.shares })
       .from(tripCostShares)
       .where(eq(tripCostShares.tripId, tripId))
-      // In a steady order (guests, then the household), so a split's pennies land the same way.
+      // Guests, then the household, the order splitCost hands out pennies in anyway.
       .orderBy(asc(tripCostShares.costId), asc(tripCostShares.guestId)),
     db
       .select({
@@ -264,10 +264,7 @@ async function loadLedger(db: Db, participant: Participant): Promise<TripCostsVi
     you,
     parties,
     costs: ledgerCosts.map(cost => {
-      const parts = splitCents(
-        cost.amountCents,
-        cost.shares.map(share => share.shares)
-      )
+      const parts = splitCost(cost.amountCents, cost.shares)
       const split = cost.shares.map((share, index) => ({ party: share.party, shares: share.shares, cents: parts[index] ?? 0 }))
       return {
         id: cost.id,

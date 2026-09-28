@@ -17,7 +17,7 @@ import {
 } from '@ghar/contracts'
 import { formatCalendarDate, type CalendarDate } from '@ghar/core/dates'
 import { formatCents, type Cents } from '@ghar/core/money'
-import { partyKey, splitCents } from '@ghar/core/trip-costs'
+import { partyKey, splitCost } from '@ghar/core/trip-costs'
 import { useState, type SyntheticEvent } from 'react'
 import { MoneyInput } from '@/app/(app)/_components/ui/money-input'
 import { Button } from '@/components/ui/button'
@@ -361,10 +361,8 @@ function CostForm({
   const valid = chosen.every(share => Number.isInteger(share.shares) && share.shares >= 1 && share.shares <= COST_SHARES_LIMIT)
   const preview =
     amount !== null && amount > 0 && valid && chosen.length > 0
-      ? splitCents(
-          amount,
-          chosen.map(share => share.shares)
-        )
+      ? // However the form lists people, the pennies land where the ledger will put them.
+        splitCost(amount, chosen)
       : null
   const payerOptions = value.parties.filter(entry => entry.active || (cost && partyKey(cost.paidBy) === partyKey(entry.party)))
 
