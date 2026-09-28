@@ -23,6 +23,12 @@ export function TripPhotos({ tripId, value }: { tripId: string; value: TripPhoto
   const [refreshing, startRefresh] = useTransition()
   const [open, setOpen] = useState<number | null>(null)
   const retried = useRef(false)
+  // The viewer stays open until the photo is really gone, so a failure shows beside it. Closed
+  // meanwhile, the failure shows above the album instead.
+  const remove = useMutation(async (photoId: string) => {
+    await api.request(deleteTripPhoto, { params: { tripId, photoId } })
+    setOpen(null)
+  })
 
   const add = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = [...(event.target.files ?? [])].slice(0, Math.min(TRIP_PHOTO_BATCH_MAX, value.room))
@@ -95,6 +101,7 @@ export function TripPhotos({ tripId, value }: { tripId: string; value: TripPhoto
         </p>
       ) : null}
       <FormError>{error}</FormError>
+      <FormError>{open === null ? remove.error : null}</FormError>
 
       {value.photos.length === 0 ? (
         <div className='flex flex-col items-start gap-2 rounded-card border border-dashed border-line px-4 py-6'>
@@ -132,7 +139,6 @@ export function TripPhotos({ tripId, value }: { tripId: string; value: TripPhoto
       )}
 
       <PhotoViewer
-        tripId={tripId}
         photo={current}
         position={open}
         count={value.photos.length}
@@ -140,27 +146,33 @@ export function TripPhotos({ tripId, value }: { tripId: string; value: TripPhoto
         onClose={() => {
           setOpen(null)
         }}
+        onRemove={remove.mutate}
+        removing={remove.pending}
+        removeError={remove.error}
       />
     </section>
   )
 }
 
 function PhotoViewer({
-  tripId,
   photo,
   position,
   count,
   onMove,
   onClose,
+  onRemove,
+  removing,
+  removeError,
 }: {
-  tripId: string
   photo: TripPhoto | null
   position: number | null
   count: number
   onMove: (index: number) => void
   onClose: () => void
+  onRemove: (photoId: string) => void
+  removing: boolean
+  removeError: string | null
 }) {
-  const remove = useMutation((photoId: string) => api.request(deleteTripPhoto, { params: { tripId, photoId } }))
   const at = position ?? 0
   const byline = photo ? (photo.mine ? 'Added by you' : photo.addedBy ? `Added by ${photo.addedBy}` : null) : null
 
@@ -229,8 +241,8 @@ function PhotoViewer({
                 <div className='ml-auto'>
                   <ConfirmDialog
                     trigger={
-                      <Button type='button' variant='outline' disabled={remove.pending}>
-                        {remove.pending ? 'Taking down…' : 'Take down'}
+                      <Button type='button' variant='outline' disabled={removing}>
+                        {removing ? 'Taking down…' : 'Take down'}
                       </Button>
                     }
                     title='Take this photo down?'
@@ -238,14 +250,13 @@ function PhotoViewer({
                     confirmLabel='Take down'
                     tone='destructive'
                     onConfirm={() => {
-                      remove.mutate(photo.id)
-                      onClose()
+                      onRemove(photo.id)
                     }}
                   />
                 </div>
               ) : null}
             </div>
-            <FormError>{remove.error}</FormError>
+            <FormError>{removeError}</FormError>
           </div>
         </Dialog.Content>
       </Dialog.Portal>
