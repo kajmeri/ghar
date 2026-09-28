@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useRef } from 'react'
+import { YourNameField } from '@/app/_components/your-name-field'
 import { Button } from '@/components/ui/button'
 import { describedBy, Field, FormMessage } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -10,12 +11,22 @@ import { fieldError, IDLE, submittedValue } from '@/lib/actions/state'
 import type { CurrencyOption } from '@/lib/households/options'
 import { createHouseholdAction } from '../actions'
 
-export function OnboardingForm({ timeZones, currencies }: { timeZones: string[]; currencies: CurrencyOption[] }) {
+export function OnboardingForm({
+  timeZones,
+  currencies,
+  fullName,
+}: {
+  timeZones: string[]
+  currencies: CurrencyOption[]
+  /** Their name if they already gave one, say on a shared trip. */
+  fullName: string | null
+}) {
   const [state, formAction, pending] = useActionState(createHouseholdAction, IDLE)
   const formRef = useRef<HTMLFormElement>(null)
   useFocusFirstInvalid(formRef, state)
   const timeZoneRef = useRef<HTMLSelectElement>(null)
   const errors = {
+    fullName: fieldError(state, 'fullName'),
     name: fieldError(state, 'name'),
     timezone: fieldError(state, 'timezone'),
     currency: fieldError(state, 'currency'),
@@ -30,6 +41,7 @@ export function OnboardingForm({ timeZones, currencies }: { timeZones: string[];
 
   return (
     <form ref={formRef} action={formAction} noValidate className='flex flex-col gap-5'>
+      <YourNameField defaultValue={submittedValue(state, 'fullName') ?? fullName ?? undefined} error={errors.fullName} />
       <Field id='name' label='Household name' hint='Everyone you invite will see this.' error={errors.name}>
         <Input
           id='name'

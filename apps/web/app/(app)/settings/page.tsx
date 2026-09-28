@@ -6,14 +6,16 @@ import { signOut } from '@/lib/auth/actions'
 import { getPageContext } from '@/lib/auth/context'
 import { ROLE_LABELS } from '@/lib/households/roles'
 import * as households from '@/lib/households/service'
+import { getMyProfile } from '@/lib/profile/service'
 import { PageHeader } from '../_components/ui/page-header'
 import { SectionHeader } from '../_components/ui/section-header'
+import { NameForm } from './_components/name-form'
 
 export const metadata: Metadata = { title: 'Settings' }
 
 export default async function SettingsPage() {
   const { ctx, session } = await getPageContext()
-  const { household } = await households.getMyHousehold(ctx, session)
+  const [{ household }, { fullName }] = await Promise.all([households.getMyHousehold(ctx, session), getMyProfile(session)])
 
   return (
     <>
@@ -36,6 +38,9 @@ export default async function SettingsPage() {
 
         <section aria-labelledby='account-heading'>
           <SectionHeader id='account-heading' title='Account' />
+          <div className='mb-3'>
+            <NameForm fullName={fullName} />
+          </div>
           <Link
             href='/settings/digest'
             className='mb-3 flex min-h-tap items-center gap-3 rounded-card border border-line bg-surface p-4 hover:bg-paper focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden'

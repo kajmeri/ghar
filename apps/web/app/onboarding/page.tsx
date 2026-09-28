@@ -7,6 +7,7 @@ import { getMembership, getSessionContext } from '@/lib/auth/context'
 import { householdOptions } from '@/lib/households/options'
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/lib/households/roles'
 import * as households from '@/lib/households/service'
+import { getMyProfile } from '@/lib/profile/service'
 import { countSharedTrips } from '@/lib/travel/guests'
 import { JoinHouseholdForm } from './_components/join-household-form'
 import { OnboardingForm } from './_components/onboarding-form'
@@ -18,7 +19,11 @@ export default async function OnboardingPage() {
   if (!session) redirect('/login?next=/onboarding')
   if (await getMembership(session)) redirect('/')
   const { timeZones, currencies } = householdOptions()
-  const [shared, invitations] = await Promise.all([countSharedTrips(session), households.listMyInvitations(session)])
+  const [shared, invitations, { fullName }] = await Promise.all([
+    countSharedTrips(session),
+    households.listMyInvitations(session),
+    getMyProfile(session),
+  ])
 
   const sharedLink =
     shared > 0 ? (
@@ -47,7 +52,7 @@ export default async function OnboardingPage() {
         <div className='flex flex-col gap-8'>
           <ul className='flex flex-col gap-4'>
             {invitations.map(invitation => (
-              <InvitationCard key={invitation.id} invitation={invitation} />
+              <InvitationCard key={invitation.id} invitation={invitation} askName={fullName === null} />
             ))}
           </ul>
           <details className='border-t border-line pt-4'>
@@ -59,7 +64,7 @@ export default async function OnboardingPage() {
                 You’ll be its owner. Ghar allows one household per person, so you won’t be able to join{' '}
                 {only ? only.householdName : 'these'} afterwards.
               </p>
-              <OnboardingForm timeZones={timeZones} currencies={currencies} />
+              <OnboardingForm timeZones={timeZones} currencies={currencies} fullName={fullName} />
             </div>
           </details>
           {sharedLink}
@@ -73,13 +78,13 @@ export default async function OnboardingPage() {
       title='Set up your household'
       description={<p>You’ll be its owner. If someone already set one up, ask them for an invitation instead.</p>}
     >
-      <OnboardingForm timeZones={timeZones} currencies={currencies} />
+      <OnboardingForm timeZones={timeZones} currencies={currencies} fullName={fullName} />
       {sharedLink}
     </AuthScreen>
   )
 }
 
-function InvitationCard({ invitation }: { invitation: MyInvitation }) {
+function InvitationCard({ invitation, askName }: { invitation: MyInvitation; askName: boolean }) {
   return (
     <li className='flex flex-col gap-4 rounded-card border border-line bg-surface p-4'>
       <div className='flex flex-col gap-1'>
@@ -89,7 +94,7 @@ function InvitationCard({ invitation }: { invitation: MyInvitation }) {
           {ROLE_DESCRIPTIONS[invitation.role]}
         </p>
       </div>
-      <JoinHouseholdForm invitationId={invitation.id} householdName={invitation.householdName} />
+      <JoinHouseholdForm invitationId={invitation.id} householdName={invitation.householdName} askName={askName} />
     </li>
   )
 }

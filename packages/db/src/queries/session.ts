@@ -2,8 +2,8 @@ import type { HouseholdRole } from '@ghar/core/auth'
 import { ConflictError, NotFoundError } from '@ghar/core/errors'
 import { validateHouseholdSettings, type HouseholdSettings } from '@ghar/core/households'
 import { assertInvitationAcceptable, normalizeEmail } from '@ghar/core/invitations'
-import { and, desc, eq, gt, isNull, type SQL } from 'drizzle-orm'
-import { householdMembers, households, invitations, profiles } from '../schema'
+import { and, desc, eq, gt, isNull, sql, type SQL } from 'drizzle-orm'
+import { householdMembers, householdPeople, households, invitations, profiles } from '../schema'
 import { addMemberPerson } from './people'
 import { recordAudit } from './audit'
 import { ensureDefaultCategories } from './finances'
@@ -183,11 +183,28 @@ export async function acceptInvitation(ctx: SessionContext, db: Db, input: Invit
 }
 
 /** Sets the signed-in person's display name, creating their profile if it doesn't exist. */
+export async function getProfile(ctx: SessionContext, db: Db): Promise<{ fullName: string | null }> {
+  const [profile] = await db.select({ fullName: profiles.fullName }).from(profiles).where(eq(profiles.id, ctx.userId)).limit(1)
+  return { fullName: profile?.fullName ?? null }
+}
+
 export async function updateProfile(ctx: SessionContext, db: Db, input: { fullName: string | null }): Promise<void> {
-  await db
-    .insert(profiles)
-    .values({ id: ctx.userId, fullName: input.fullName })
-    .onConflictDoUpdate({ target: profiles.id, set: { fullName: input.fullName } })
+  await db.transaction(async tx => {
+    await tx
+      .insert(profiles)
+      .values({ id: ctx.userId, fullName: input.fullName })
+      .onConflictDoUpdate({ target: profiles.id, set: { fullName: input.fullName } })
+    // Their name shows on their membership and their person, which phones sync by those rows'
+    // updated_at, so touch them for the new name to reach every phone in the household.
+    await tx
+      .update(householdMembers)
+      .set({ updatedAt: sql`now()` })
+      .where(eq(householdMembers.userId, ctx.userId))
+    await tx
+      .update(householdPeople)
+      .set({ updatedAt: sql`now()` })
+      .where(eq(householdPeople.userId, ctx.userId))
+  })
 }
 
 export async function ensureProfile(ctx: SessionContext, db: Db): Promise<void> {

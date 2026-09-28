@@ -9,6 +9,7 @@ import { signOut } from '@/lib/auth/actions'
 import { getMembership, getSessionContext, type SessionContext } from '@/lib/auth/context'
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/lib/households/roles'
 import * as households from '@/lib/households/service'
+import { getMyProfile } from '@/lib/profile/service'
 import { AcceptInvitationForm } from './_components/accept-invitation-form'
 
 // The token is a bearer secret in the URL, so never leak it to another origin through Referer.
@@ -26,7 +27,11 @@ export default async function InvitePage({ searchParams }: PageProps<'/invite'>)
   const session = await getSessionContext()
   if (!session) redirect(`/login?next=${encodeURIComponent(invitePath)}`)
 
-  const [preview, membership] = await Promise.all([loadPreview(session, token), getMembership(session)])
+  const [preview, membership, { fullName }] = await Promise.all([
+    loadPreview(session, token),
+    getMembership(session),
+    getMyProfile(session),
+  ])
   if (!preview) return <InvalidInvitation />
 
   if (preview.status === 'accepted') {
@@ -43,7 +48,8 @@ export default async function InvitePage({ searchParams }: PageProps<'/invite'>)
         title='This invitation has expired'
         description={<p>Ask {preview.invitedByName ?? 'whoever invited you'} to resend it from household settings.</p>}
       >
-        {membership ? <ContinueLink /> : null}
+        {/* Without a household, Ghar takes them to set one up or join another they were invited to. */}
+        <ContinueLink />
       </AuthScreen>
     )
   }
@@ -88,7 +94,7 @@ export default async function InvitePage({ searchParams }: PageProps<'/invite'>)
         </p>
       }
     >
-      <AcceptInvitationForm token={token} />
+      <AcceptInvitationForm token={token} askName={fullName === null} />
     </AuthScreen>
   )
 }
