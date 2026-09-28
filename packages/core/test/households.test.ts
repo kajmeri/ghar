@@ -32,6 +32,14 @@ describe('validateHouseholdSettings', () => {
     }
   })
 
+  it('refuses a currency without two decimal places', () => {
+    // Amounts are stored as hundredths whatever the currency, so yen and dinars would be off.
+    for (const currency of ['JPY', 'KRW', 'KWD', 'BHD']) {
+      expect(() => validateHouseholdSettings({ name: 'Home', timezone: 'UTC', currency })).toThrow(ValidationError)
+    }
+    expect(validateHouseholdSettings({ name: 'Home', timezone: 'UTC', currency: 'inr' }).currency).toBe('INR')
+  })
+
   it('refuses a name over 80 characters', () => {
     expect(() => validateHouseholdSettings({ name: 'a'.repeat(81), timezone: 'UTC', currency: 'USD' })).toThrow(ValidationError)
   })

@@ -138,6 +138,20 @@ export function formatCents(cents: Cents, options: FormatCentsOptions = {}): str
   return numberFormatter(locale, minorUnitDigits, signDisplay).format(amount)
 }
 
+/**
+ * Whether a currency's amounts have exactly two decimal places, like USD or EUR. Ghar stores money
+ * as integer hundredths: parseMoneyInput always reads "12.34" as 1234. formatCents divides by the
+ * currency's own minor unit, so yen (none) or dinars (three) would show 100 times or a tenth what was
+ * typed. A household can only choose one of these until amounts carry their own minor unit.
+ */
+export function hasTwoDecimalMinorUnit(currency: string): boolean {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits === 2
+  } catch {
+    return false
+  }
+}
+
 const AMOUNT_TEXT = /^(?<before>[-+]?)\s*\$?\s*(?<after>[-+]?)(?<number>[\d.,]*)$/
 const AMOUNT_NUMBER = /^(?<whole>\d{1,3}(?:,\d{3})+|\d*)(?:\.(?<fraction>\d*))?$/
 

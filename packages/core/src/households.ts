@@ -1,15 +1,17 @@
 import { assertTimeZone } from './dates'
 import { ValidationError } from './errors'
+import { hasTwoDecimalMinorUnit } from './money'
 
 export const HOUSEHOLD_NAME_MAX_LENGTH = 80
 
 const CURRENCY_CODE = /^[A-Z]{3}$/
+const CURRENCY_WITHOUT_CENTS_MESSAGE = 'Choose a currency with two decimal places, like USD or EUR.'
 
 export interface HouseholdSettings {
   name: string
   /** IANA zone. Every date in the household renders in it. */
   timezone: string
-  /** ISO 4217 code, such as USD. */
+  /** ISO 4217 code, such as USD. Only currencies with two decimal places: see hasTwoDecimalMinorUnit. */
   currency: string
 }
 
@@ -53,6 +55,8 @@ export function validateHouseholdSettings(input: HouseholdSettings): HouseholdSe
   }
   if (!isCurrencyCode(settings.currency)) {
     issues.push({ path: ['currency'], message: 'Use a three-letter currency code, like USD.' })
+  } else if (!hasTwoDecimalMinorUnit(settings.currency)) {
+    issues.push({ path: ['currency'], message: CURRENCY_WITHOUT_CENTS_MESSAGE })
   }
 
   if (issues.length > 0) {

@@ -33,14 +33,29 @@ export const getMyHousehold = defineEndpoint({
   response: myHouseholdResponseSchema,
 })
 
+/**
+ * Whether a currency's amounts have exactly two decimal places. Money is stored as integer
+ * hundredths whatever the currency, so yen or dinars would be stored wrong. Mirrors
+ * hasTwoDecimalMinorUnit in @ghar/core/money. A test keeps them equal.
+ */
+function hasTwoDecimals(currency: string): boolean {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits === 2
+  } catch {
+    return false
+  }
+}
+
 export const createHouseholdBodySchema = z.object({
   name: z.string().trim().min(1, 'Give your household a name.').max(80, 'Keep the name to 80 characters or fewer.'),
   timezone: z.string().trim().min(1, 'Choose a time zone.').max(64),
+  /** ISO 4217, with two decimal places: USD or EUR, not JPY or KWD. */
   currency: z
     .string()
     .trim()
     .toUpperCase()
-    .regex(/^[A-Z]{3}$/, 'Use a three-letter currency code, like USD.'),
+    .regex(/^[A-Z]{3}$/, 'Use a three-letter currency code, like USD.')
+    .refine(hasTwoDecimals, 'Choose a currency with two decimal places, like USD or EUR.'),
 })
 export type CreateHouseholdBody = z.infer<typeof createHouseholdBodySchema>
 
