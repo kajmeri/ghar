@@ -20,7 +20,7 @@ import { densityCookieName, parseDensity } from '@/lib/travel/itinerary-display'
 import { listTripArrivals, listTripRooms } from '@/lib/travel/arrivals'
 import { listTripCosts } from '@/lib/travel/costs'
 import { listTripGuests } from '@/lib/travel/guests'
-import { getTripRecap, listTripPhotos } from '@/lib/travel/photos'
+import { getTripRecap, loadTripAlbum } from '@/lib/travel/photos'
 import { listTripPolls } from '@/lib/travel/polls'
 import { listTripUpdates } from '@/lib/travel/updates'
 import { loadTripBudget, loadTripDetail, loadTripIdeas } from '@/lib/travel/trips'
@@ -98,7 +98,7 @@ export default async function TripPage({
         throw error
       }),
     account
-      .then(signedIn => listTripPhotos(signedIn, tripId))
+      .then(signedIn => loadTripAlbum(signedIn, tripId))
       .catch((error: unknown) => {
         if (error instanceof NotFoundError) notFound()
         throw error
@@ -148,7 +148,7 @@ export default async function TripPage({
 
       <GuestsSummary tripId={trip.id} guests={guests} />
 
-      {phase === 'past' && recap ? <TripRecap recap={recap} canAddPhotos={photos.canAdd} /> : null}
+      {phase === 'past' && recap ? <TripRecap recap={recap} canAddPhotos={photos?.canAdd ?? false} /> : null}
 
       {phase === 'past' ? null : (
         <TripPolls
@@ -203,7 +203,9 @@ export default async function TripPage({
 
       <TripArrivals tripId={trip.id} value={arrivals} timeZone={detail.timeZone} />
       <TripRooms tripId={trip.id} value={rooms} />
-      {phase === 'current' || phase === 'past' || photos.photos.length > 0 ? <TripPhotos tripId={trip.id} value={photos} /> : null}
+      {photos && (phase === 'current' || phase === 'past' || photos.photos.length > 0) ? (
+        <TripPhotos tripId={trip.id} value={photos} />
+      ) : null}
       <TripCosts tripId={trip.id} value={costs} today={today} />
       <TripUpdates tripId={trip.id} value={updates} timeZone={detail.timeZone} />
     </div>

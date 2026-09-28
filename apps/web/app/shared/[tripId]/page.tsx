@@ -45,7 +45,7 @@ export default async function SharedTripPage({ params }: PageProps<'/shared/[tri
   }
   const today = todayInTimeZone(assertTimeZone(trip.timeZone))
   const phase = tripPhase(trip, today)
-  const [photos, recap] = await Promise.all([album.listTripPhotos(session, trip.id), album.getTripRecap(session, trip.id)])
+  const [photos, recap] = await Promise.all([album.loadTripAlbum(session, trip.id), album.getTripRecap(session, trip.id)])
 
   return (
     <SharedTripFrame home={membership ? '/' : '/shared'}>
@@ -54,7 +54,7 @@ export default async function SharedTripPage({ params }: PageProps<'/shared/[tri
           ← Shared with you
         </Link>
         <SharedTripHero trip={trip} eyebrow={`With ${trip.householdName}`} />
-        {phase === 'past' && recap ? <TripRecap recap={recap} canAddPhotos={photos.canAdd} /> : null}
+        {phase === 'past' && recap ? <TripRecap recap={recap} canAddPhotos={photos?.canAdd ?? false} /> : null}
         <TripPeople people={trip.people} householdName={trip.householdName} />
         <section aria-labelledby='answer-heading' className='flex flex-col gap-4 rounded-card border border-line bg-surface p-4'>
           <div className='flex items-center justify-between gap-3'>
@@ -78,7 +78,9 @@ export default async function SharedTripPage({ params }: PageProps<'/shared/[tri
         <TripPlan tripId={trip.id} days={trip.itinerary} timeZone={trip.timeZone} householdName={trip.householdName} />
         <TripArrivals tripId={trip.id} value={await arrivals.listTripArrivals(session, trip.id)} timeZone={trip.timeZone} />
         <TripRooms tripId={trip.id} value={await arrivals.listTripRooms(session, trip.id)} />
-        {phase === 'current' || phase === 'past' || photos.photos.length > 0 ? <TripPhotos tripId={trip.id} value={photos} /> : null}
+        {photos && (phase === 'current' || phase === 'past' || photos.photos.length > 0) ? (
+          <TripPhotos tripId={trip.id} value={photos} />
+        ) : null}
         <TripCosts tripId={trip.id} value={await costs.listTripCosts(session, trip.id)} today={today} />
         <TripUpdates tripId={trip.id} value={await updates.listTripUpdates(session, trip.id)} timeZone={trip.timeZone} />
         <section aria-labelledby='calendar-heading' className='flex flex-col gap-3 rounded-card border border-line bg-surface p-4'>

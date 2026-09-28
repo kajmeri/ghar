@@ -1,6 +1,7 @@
 import type { PGlite } from '@electric-sql/pglite'
 import type { RequestContext } from '@ghar/contracts'
 import { createHousehold, createTrip, updateProfile, type Db } from '@ghar/db/queries'
+import { NotFoundError } from '@ghar/core/errors'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAuthUser, createTestDatabase } from '../../../packages/db/test/support/database'
 import { POST as respond } from '@/app/api/v1/trip-invites/respond/route'
@@ -13,6 +14,7 @@ import { GET as getRecap } from '@/app/api/v1/trips/[tripId]/recap/route'
 import { DELETE as deleteTrip } from '@/app/api/v1/trips/[tripId]/route'
 import type { EmailMessage } from '@/lib/providers/email'
 import { createFakeStorageState, type FakeStorageState } from '@/lib/providers/storage/fake'
+import { loadTripAlbum } from '@/lib/travel/photos'
 import { runTripRecaps } from '@/lib/travel/trip-recaps'
 
 // The trip album, the recap and the recap email through /api/v1, against PGlite and fake storage.
@@ -33,6 +35,7 @@ const test = vi.hoisted(() => ({
   ctx: null as RequestContext | null,
   outbox: [] as EmailMessage[],
   storage: undefined as FakeStorageState | undefined,
+  storageDown: false,
 }))
 
 vi.mock('@/lib/db', () => ({ getDb: () => test.db }))
@@ -48,7 +51,14 @@ vi.mock('@/lib/providers/email', async importOriginal => ({
 vi.mock('@/lib/providers/storage', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/providers/storage')>()
   const { createFakeStorageProvider } = await import('@/lib/providers/storage/fake')
-  return { ...actual, getStorageProvider: () => createFakeStorageProvider(test.storage) }
+  return {
+    ...actual,
+    getStorageProvider: () => {
+      // What production does with no storage configured.
+      if (test.storageDown) throw new Error('STORAGE_PROVIDER is fake, and production cannot keep files in memory.')
+      return createFakeStorageProvider(test.storage)
+    },
+  }
 })
 vi.mock('@/lib/auth/context', async () => {
   const { NotFoundError, UnauthorizedError } = await import('@ghar/core/errors')
@@ -154,6 +164,16 @@ describe('the trip album', () => {
     expect((await call(listPhotos, 'GET', { tripId })).status).toBe(401)
     signInAs(guest)
     expect(photosOf(await call(listPhotos, 'GET', { tripId }))).toMatchObject({ photos: [], canAdd: true, room: 500 })
+  })
+
+  it('is left off a trip page when storage is down, rather than breaking the page', async () => {
+    test.storageDown = true
+    try {
+      expect(await loadTripAlbum(ownerAccount, tripId)).toBeNull()
+      await expect(loadTripAlbum(stranger, tripId)).rejects.toThrow(NotFoundError)
+    } finally {
+      test.storageDown = false
+    }
   })
 
   it('takes a photo in three steps, and shows it through a signed link', async () => {

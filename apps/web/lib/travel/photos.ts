@@ -24,6 +24,21 @@ export async function listTripPhotos(session: SessionContext, tripId: string): P
   return withUrls(await queries.listTripPhotos(session, getDb(), tripId))
 }
 
+/**
+ * The album for a trip page, or null when storage can't be reached. The album is one part of the
+ * page, so a storage outage or a misconfigured bucket hides it rather than taking the trip down.
+ * Not being on the trip still throws, so the page can say not found.
+ */
+export async function loadTripAlbum(session: SessionContext, tripId: string): Promise<TripPhotosValue | null> {
+  const view = await queries.listTripPhotos(session, getDb(), tripId)
+  try {
+    return await withUrls(view)
+  } catch (error) {
+    console.error('Could not load the trip album', error)
+    return null
+  }
+}
+
 async function withUrls(view: TripPhotosView): Promise<TripPhotosValue> {
   const { urls, expiresAt } = await getStorageProvider().createFileUrls(
     view.photos.map(photo => photo.storagePath),
