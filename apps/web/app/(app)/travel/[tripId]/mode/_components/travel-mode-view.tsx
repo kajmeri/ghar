@@ -26,13 +26,23 @@ import { cachedTravelMode, cacheTravelMode } from '../cache'
  * back to it when a refresh fails, saying plainly how old it is instead of showing stale
  * times as though they were live.
  */
+/** Today while the trip is on. Before it, the first day; after it, the last, rather than a day with nothing in it. */
+function openingDay({ trip, today }: TravelMode): string {
+  const days = tripDays(trip)
+  const first = days[0]
+  const last = days.at(-1)
+  if (first !== undefined && today < first) return first
+  if (last !== undefined && today > last) return last
+  return today
+}
+
 export function TravelModeView({ initial }: { initial: TravelMode }) {
   // What the server rendered is the truth until someone asks for a newer copy, so it stays
   // props. `refreshed` only holds what a manual refresh produced: a fresh payload, or the
   // saved one we fell back to when the refresh could not reach anything.
   const [refreshed, setRefreshed] = useState<TravelMode | null>(null)
   const [staleSince, setStaleSince] = useState<string | null>(null)
-  const [day, setDay] = useState(initial.today)
+  const [day, setDay] = useState(() => openingDay(initial))
   const [now, setNow] = useState(() => new Date())
   const mode = refreshed ?? initial
 

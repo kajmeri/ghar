@@ -1,7 +1,7 @@
 'use client'
 
 import { createSlot, updateSlot, type ItinerarySlot } from '@ghar/contracts'
-import { formatCalendarDate, instantInTimeZone, wallClockTimeInTimeZone } from '@ghar/core/dates'
+import { addCalendarDays, formatCalendarDate, instantInTimeZone, wallClockTimeInTimeZone } from '@ghar/core/dates'
 import { SLOT_BANDS, SLOT_BAND_LABELS, SLOT_KINDS, SLOT_KIND_LABELS, bandForTime, type SlotBand, type SlotKind } from '@ghar/core/itinerary'
 import { useState, type SyntheticEvent } from 'react'
 import { Sheet, SheetClose } from '@/app/(app)/_components/ui/sheet'
@@ -37,7 +37,8 @@ export function SlotFormSheet({ slot, day, band }: { slot?: ItinerarySlot; day?:
       kind: isKind(kind) ? kind : 'activity',
       label: formText(form, 'label'),
       startsAt: starts === '' ? null : instantInTimeZone(slotDay, starts, timeZone).toISOString(),
-      endsAt: ends === '' ? null : instantInTimeZone(slotDay, ends, timeZone).toISOString(),
+      // An end earlier than the start is after midnight: dinner at 10 that runs to 1.
+      endsAt: ends === '' ? null : instantInTimeZone(ends < starts ? addCalendarDays(slotDay, 1) : slotDay, ends, timeZone).toISOString(),
       decideBy: formText(form, 'decideBy') || null,
       notes: formText(form, 'notes') || null,
     }
@@ -58,6 +59,10 @@ export function SlotFormSheet({ slot, day, band }: { slot?: ItinerarySlot; day?:
     const ends = formText(form, 'endsAt')
     if (starts === '' && ends !== '') {
       setFormError('Give it a start time before an end time')
+      return
+    }
+    if (ends !== '' && ends === starts) {
+      setFormError('End it after it starts, or leave the end empty')
       return
     }
     save.mutate(form)

@@ -1,6 +1,7 @@
 'use client'
 
 import { travelModeSchema, type TravelMode } from '@ghar/contracts'
+import { TRAVEL_MODE_PREFIX } from '@/lib/pwa/purge'
 
 /**
  * Travel mode's offline copy.
@@ -12,8 +13,11 @@ import { travelModeSchema, type TravelMode } from '@ghar/contracts'
  * Everything read back is parsed against the contract. A copy written by an older build
  * is thrown away rather than rendered, because a shape that half-matches is worse than no
  * cache at all.
+ *
+ * Signing out clears every copy, through purgeOfflineData, so the next person on the device
+ * can't read the last one's trip.
  */
-const KEY = (tripId: string) => `ghar:travel-mode:${tripId}`
+const KEY = (tripId: string) => `${TRAVEL_MODE_PREFIX}${tripId}`
 
 export function cacheTravelMode(mode: TravelMode): void {
   try {
@@ -32,7 +36,13 @@ export function cachedTravelMode(tripId: string): TravelMode | null {
   }
   if (raw === null) return null
 
-  const parsed = travelModeSchema.safeParse(JSON.parse(raw) as unknown)
+  let json: unknown = null
+  try {
+    json = JSON.parse(raw)
+  } catch {
+    // Unreadable is the same as a shape we don't recognize: thrown away below.
+  }
+  const parsed = travelModeSchema.safeParse(json)
   if (!parsed.success) {
     try {
       localStorage.removeItem(KEY(tripId))

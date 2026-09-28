@@ -9,6 +9,7 @@ import {
   formatTripDates,
   nextTrip,
   settleTripStatus,
+  statusAfterDateChange,
   tripActualCents,
   tripBudget,
   tripCommittedCents,
@@ -232,5 +233,21 @@ describe('tripBudget', () => {
 
   it('treats a zero budget as no budget rather than dividing by it', () => {
     expect(tripBudget({ plannedCents: 0, actualCents: 1, committedCents: 0 }).ratioUsed).toBeNull()
+  })
+})
+
+describe('statusAfterDateChange', () => {
+  it('makes an idea a plan once it has dates', () => {
+    expect(statusAfterDateChange('idea', 'idea', '2026-10-01')).toBe('planned')
+  })
+
+  it('makes a plan an idea again when its dates go', () => {
+    expect(statusAfterDateChange('planned', 'planned', null)).toBe('idea')
+  })
+
+  it('keeps a status the person picked in the same edit', () => {
+    expect(statusAfterDateChange('idea', 'booked', '2026-10-01')).toBe('booked')
+    expect(statusAfterDateChange('planned', 'planned', '2026-10-01')).toBe('planned')
+    expect(statusAfterDateChange('booked', 'booked', null)).toBe('booked')
   })
 })

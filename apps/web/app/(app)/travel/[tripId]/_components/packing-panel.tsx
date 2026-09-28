@@ -34,6 +34,7 @@ export function PackingPanel({
   members,
   travellingUserIds,
   currentUserId,
+  canEdit,
 }: {
   tripId: string
   items: PackingItem[]
@@ -42,6 +43,8 @@ export function PackingPanel({
   /** Who is going. Only these are offered, because only they can carry anything. */
   travellingUserIds: string[]
   currentUserId: string
+  /** A viewer sees the list and who is packing what, and changes nothing. */
+  canEdit: boolean
 }) {
   const [grouping, setGrouping] = useState<'person' | 'category'>('person')
   const roster = members.filter(member => travellingUserIds.includes(member.userId)).sort(compareMembers(currentUserId))
@@ -85,13 +88,21 @@ export function PackingPanel({
         />
       </Card>
 
-      <AddItemForm tripId={tripId} members={roster} currentUserId={currentUserId} />
-      <TemplateBar tripId={tripId} hasItems={items.length > 0} />
+      {canEdit ? (
+        <>
+          <AddItemForm tripId={tripId} members={roster} currentUserId={currentUserId} />
+          <TemplateBar tripId={tripId} hasItems={items.length > 0} />
+        </>
+      ) : null}
 
       <FormError>{toggle.error ?? assign.error ?? remove.error}</FormError>
 
       {items.length === 0 ? (
-        <EmptyState title='The list is empty'>Add what you need, or start from a template you saved on an earlier trip.</EmptyState>
+        <EmptyState title='The list is empty'>
+          {canEdit
+            ? 'Add what you need, or start from a template you saved on an earlier trip.'
+            : 'Whoever is planning the trip adds what to pack, and it shows up here.'}
+        </EmptyState>
       ) : (
         <>
           <div className='flex items-center gap-2 text-sm'>
@@ -139,7 +150,7 @@ export function PackingPanel({
                           <input
                             type='checkbox'
                             checked={item.isPacked}
-                            disabled={toggle.pending}
+                            disabled={!canEdit || toggle.pending}
                             onChange={event => {
                               toggle.mutate({
                                 itemId: item.id,
@@ -151,37 +162,49 @@ export function PackingPanel({
                           <span className={item.isPacked ? 'text-ink-muted line-through' : ''}>{item.label}</span>
                         </label>
 
-                        <Select
-                          aria-label={`Who is packing ${item.label}`}
-                          value={item.assignedUserId ?? ''}
-                          disabled={assign.pending}
-                          onChange={event => {
-                            assign.mutate({
-                              itemId: item.id,
-                              assignedUserId: event.target.value || null,
-                            })
-                          }}
-                          className='w-32 shrink-0 text-sm'
-                        >
-                          <option value=''>Nobody</option>
-                          {roster.map(member => (
-                            <option key={member.userId} value={member.userId}>
-                              {memberLabel(member, currentUserId)}
-                            </option>
-                          ))}
-                        </Select>
+                        {canEdit ? (
+                          <Select
+                            aria-label={`Who is packing ${item.label}`}
+                            value={item.assignedUserId ?? ''}
+                            disabled={assign.pending}
+                            onChange={event => {
+                              assign.mutate({
+                                itemId: item.id,
+                                assignedUserId: event.target.value || null,
+                              })
+                            }}
+                            className='w-32 shrink-0 text-sm'
+                          >
+                            <option value=''>Nobody</option>
+                            {roster.map(member => (
+                              <option key={member.userId} value={member.userId}>
+                                {memberLabel(member, currentUserId)}
+                              </option>
+                            ))}
+                            {/* Someone taken off the trip keeps what they were given until it's handed on. */}
+                            {item.assignedUserId !== null && !roster.some(member => member.userId === item.assignedUserId) ? (
+                              <option value={item.assignedUserId}>{memberLabelFor(item.assignedUserId, members, currentUserId)}</option>
+                            ) : null}
+                          </Select>
+                        ) : grouping === 'category' && item.assignedUserId !== null ? (
+                          <span className='shrink-0 text-sm text-ink-muted'>
+                            {memberLabelFor(item.assignedUserId, members, currentUserId)}
+                          </span>
+                        ) : null}
 
-                        <button
-                          type='button'
-                          aria-label={`Remove ${item.label}`}
-                          className='inline-flex min-h-tap shrink-0 items-center px-2 text-sm text-ink-muted underline underline-offset-4 hover:text-ink disabled:opacity-40'
-                          disabled={remove.pending}
-                          onClick={() => {
-                            remove.mutate(item.id)
-                          }}
-                        >
-                          Remove
-                        </button>
+                        {canEdit ? (
+                          <button
+                            type='button'
+                            aria-label={`Remove ${item.label}`}
+                            className='inline-flex min-h-tap shrink-0 items-center px-2 text-sm text-ink-muted underline underline-offset-4 hover:text-ink disabled:opacity-40'
+                            disabled={remove.pending}
+                            onClick={() => {
+                              remove.mutate(item.id)
+                            }}
+                          >
+                            Remove
+                          </button>
+                        ) : null}
                       </div>
                     </li>
                   ))}

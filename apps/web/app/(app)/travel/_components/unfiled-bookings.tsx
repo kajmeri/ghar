@@ -14,21 +14,34 @@ import { FormError } from '@/components/ui/form-error'
 import { Pill } from '@/components/ui/pill'
 import { useMutation } from '@/hooks/use-mutation'
 import { api } from '@/lib/api/client'
-import { bookingWhen } from '@/lib/travel/display'
+import { bookingWhen, KIND_LABELS } from '@/lib/travel/display'
 
 /**
  * The hub's one piece of unfinished business: confirmations that arrived before anyone
  * decided which trip they belong to. Filing one also puts it on that trip's timeline,
  * which is almost always why you are filing it.
  */
-export function UnfiledBookings({ bookings, trips, timeZone }: { bookings: Booking[]; trips: TripSummary[]; timeZone: string }) {
+export function UnfiledBookings({
+  bookings,
+  trips,
+  timeZone,
+  canEdit,
+}: {
+  bookings: Booking[]
+  trips: TripSummary[]
+  timeZone: string
+  /** A viewer sees what is waiting and can't add or file anything. */
+  canEdit: boolean
+}) {
   return (
     <section className='flex flex-col gap-3'>
       <div className='flex flex-wrap items-center justify-between gap-2'>
         <h2 className='text-lg font-semibold'>Bookings to file</h2>
-        <Button asChild variant='outline'>
-          <Link href='/travel/bookings/new'>Add booking</Link>
-        </Button>
+        {canEdit ? (
+          <Button asChild variant='outline'>
+            <Link href='/travel/bookings/new'>Add booking</Link>
+          </Button>
+        ) : null}
       </div>
 
       {bookings.length === 0 ? (
@@ -37,7 +50,7 @@ export function UnfiledBookings({ bookings, trips, timeZone }: { bookings: Booki
         <ul className='flex flex-col gap-3'>
           {bookings.map(booking => (
             <li key={booking.id}>
-              <UnfiledBooking booking={booking} trips={trips} timeZone={timeZone} />
+              <UnfiledBooking booking={booking} trips={trips} timeZone={timeZone} canEdit={canEdit} />
             </li>
           ))}
         </ul>
@@ -46,7 +59,17 @@ export function UnfiledBookings({ bookings, trips, timeZone }: { bookings: Booki
   )
 }
 
-function UnfiledBooking({ booking, trips, timeZone }: { booking: Booking; trips: TripSummary[]; timeZone: string }) {
+function UnfiledBooking({
+  booking,
+  trips,
+  timeZone,
+  canEdit,
+}: {
+  booking: Booking
+  trips: TripSummary[]
+  timeZone: string
+  canEdit: boolean
+}) {
   const [tripId, setTripId] = useState(trips[0]?.id ?? '')
   const { mutate, pending, error } = useMutation((selected: string) =>
     api.request(linkBookingToTrip, {
@@ -65,16 +88,16 @@ function UnfiledBooking({ booking, trips, timeZone }: { booking: Booking; trips:
           <Link href={`/travel/bookings/${booking.id}`} className='font-medium'>
             {title}
           </Link>
-          <Pill>{booking.kind}</Pill>
+          <Pill>{KIND_LABELS[booking.kind]}</Pill>
         </div>
         <p className='mt-0.5 text-sm text-ink-muted'>
           {when}
           {booking.confirmationCode ? ` · ${booking.confirmationCode}` : ''}
-          {` · ${formatCents(booking.paidCents)}`}
+          {` · ${formatCents(booking.paidCents, { currency: booking.currency })}`}
         </p>
       </div>
 
-      {trips.length === 0 ? (
+      {!canEdit ? null : trips.length === 0 ? (
         <p className='text-sm text-ink-muted'>Add a trip first, then file this under it.</p>
       ) : (
         <div className='flex flex-col items-stretch gap-2 md:flex-row md:items-center'>

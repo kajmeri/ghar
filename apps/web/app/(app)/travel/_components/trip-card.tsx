@@ -5,13 +5,7 @@ import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { Meter } from '@/components/ui/meter'
 import { Pill } from '@/components/ui/pill'
-
-const STATUS_LABEL: Record<TripStatus, string> = {
-  idea: 'Idea',
-  planned: 'Planned',
-  booked: 'Booked',
-  past: 'Past',
-}
+import { TRIP_STATUS_LABELS } from '@/lib/travel/display'
 
 export function TripCard({ trip, countdown, status }: { trip: TripSummary; countdown: string; status: TripStatus }) {
   const dates = formatTripDates(trip)
@@ -31,7 +25,7 @@ export function TripCard({ trip, countdown, status }: { trip: TripSummary; count
             </h3>
             {trip.destination ? <p className='truncate text-sm text-ink-muted'>{trip.destination}</p> : null}
           </div>
-          <Pill tone={status === 'booked' ? 'positive' : 'neutral'}>{STATUS_LABEL[status]}</Pill>
+          <Pill tone={status === 'booked' ? 'positive' : 'neutral'}>{TRIP_STATUS_LABELS[status]}</Pill>
         </div>
 
         <p className='text-sm text-ink-muted'>{dates ? `${dates} · ${countdown}` : countdown}</p>

@@ -9,7 +9,7 @@ import { getPageSession } from '@/lib/api/authed'
 import { requireAccountSession } from '@/lib/auth/context'
 import { listPeople } from '@/lib/people/service'
 import { listSharedTrips } from '@/lib/travel/guests'
-import { loadTravelHub } from '@/lib/travel/trips'
+import { loadPastTrips, loadTravelHub } from '@/lib/travel/trips'
 import { IdeaBoard } from './_components/idea-board'
 import { NextTripCountdown } from './_components/next-trip-countdown'
 import { NewTripForm } from './_components/new-trip-form'
@@ -26,10 +26,11 @@ export default async function TravelPage() {
   const session = await getPageSession()
   const { userId, role } = session.context
   const canPlan = can(role, 'travel.manage')
-  const [hub, shared, people] = await Promise.all([
+  const [hub, shared, people, past] = await Promise.all([
     loadTravelHub(session),
     requireAccountSession().then(listSharedTrips),
     canPlan ? listPeople(session.context) : [],
+    loadPastTrips(session),
   ])
   const soonest = nextTrip(hub.trips, hub.today)
 
@@ -115,9 +116,32 @@ export default async function TravelPage() {
         </section>
       ) : null}
 
-      <UnfiledBookings bookings={hub.unlinkedBookings} trips={hub.trips} timeZone={hub.timeZone} />
+      {past.length > 0 ? (
+        <section aria-labelledby='past-heading' className='flex flex-col gap-3'>
+          <details className='group'>
+            <summary className='flex min-h-tap cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden'>
+              <h2 id='past-heading' className='text-lg font-semibold'>
+                Past trips
+              </h2>
+              <span className='text-sm text-ink-muted underline underline-offset-4'>
+                <span className='group-open:hidden'>Show {past.length}</span>
+                <span className='hidden group-open:inline'>Hide</span>
+              </span>
+            </summary>
+            <ul className='mt-3 grid gap-3 md:grid-cols-2'>
+              {past.map(trip => (
+                <li key={trip.id}>
+                  <TripCard trip={trip} countdown={formatCountdown(trip, hub.today)} status='past' />
+                </li>
+              ))}
+            </ul>
+          </details>
+        </section>
+      ) : null}
 
-      <IdeaBoard ideas={hub.ideas} currentUserId={userId} />
+      <UnfiledBookings bookings={hub.unlinkedBookings} trips={hub.trips} timeZone={hub.timeZone} canEdit={canPlan} />
+
+      <IdeaBoard ideas={hub.ideas} currentUserId={userId} canEdit={canPlan} />
     </div>
   )
 }

@@ -239,9 +239,7 @@ function DecisionRow({
           <span className='truncate font-medium'>
             {slot.label} · {options.length} {options.length === 1 ? 'option' : 'options'}
           </span>
-          <span className='truncate text-sm text-ink-muted'>
-            {formatCalendarDate(slot.day, 'EEE, MMM d')} · {slotWhenLabel(slot, timeZone)}
-          </span>
+          <span className='truncate text-sm text-ink-muted'>{slotWhenLabel(slot, timeZone)}</span>
         </span>
         {deadline ? (
           <span className={cn('shrink-0 text-right text-sm tabular-nums', DEADLINE_TEXT[deadline.state])}>

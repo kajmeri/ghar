@@ -15,6 +15,7 @@ import { TripUpdates } from '@/app/_components/trip-updates'
 import { Pill } from '@/components/ui/pill'
 import { getPageSession } from '@/lib/api/authed'
 import { requireAccountSession } from '@/lib/auth/context'
+import { TRIP_STATUS_LABELS } from '@/lib/travel/display'
 import { densityCookieName, parseDensity } from '@/lib/travel/itinerary-display'
 import { listTripArrivals, listTripRooms } from '@/lib/travel/arrivals'
 import { listTripCosts } from '@/lib/travel/costs'
@@ -127,7 +128,7 @@ export default async function TripPage({
           <div>
             <div className='flex flex-wrap items-center gap-2'>
               <h1 className='text-2xl font-semibold'>{trip.name}</h1>
-              <Pill tone={status === 'booked' ? 'positive' : 'neutral'}>{status}</Pill>
+              <Pill tone={status === 'booked' ? 'positive' : 'neutral'}>{TRIP_STATUS_LABELS[status]}</Pill>
             </div>
             <p className='mt-1 text-sm text-ink-muted'>
               {[trip.destination, dates, formatCountdown(trip, today)].filter(Boolean).join(' · ')}
@@ -135,7 +136,7 @@ export default async function TripPage({
           </div>
 
           <div className='flex flex-wrap items-center gap-2'>
-            <TripSettings trip={trip} people={detail.people} currentUserId={userId} />
+            {can(role, 'travel.manage') ? <TripSettings trip={trip} people={detail.people} currentUserId={userId} /> : null}
             {phase === 'current' || phase === 'upcoming' ? (
               <Button asChild variant={phase === 'current' ? 'default' : 'outline'}>
                 <Link href={`/travel/${trip.id}/mode`}>Travel mode</Link>
@@ -189,6 +190,7 @@ export default async function TripPage({
             person.userId !== null && trip.travellerIds.includes(person.id) ? [person.userId] : []
           )}
           currentUserId={userId}
+          canEdit={can(role, 'travel.manage')}
         />
       ) : (
         <BudgetPanel

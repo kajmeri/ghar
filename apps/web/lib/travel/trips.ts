@@ -72,6 +72,13 @@ export async function loadTravelHub(session: Session): Promise<TravelHub> {
   }
 }
 
+/** Trips that have finished, the latest first: where a recap and the photos live on. */
+export async function loadPastTrips(session: Session) {
+  const today = todayInTimeZone(session.household.timeZone)
+  const trips = await listTrips(session.context, getDb(), { phase: 'past', today })
+  return trips.reverse().map(toTripSummary)
+}
+
 /** The household's idea board, for promoting an idea into a slot's options. */
 export async function loadTripIdeas(session: Session) {
   const ideas = await listTripIdeas(session.context, getDb())

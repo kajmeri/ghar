@@ -1,5 +1,6 @@
 import type { Booking, BookingDetail } from '@ghar/contracts'
 import { formatCalendarDate, formatInstant, type TimeZone } from '@ghar/core/dates'
+import type { TripStatus } from '@ghar/core/trips'
 
 // Words and dates for bookings, shared by the travel pages and the booking form. Safe for client
 // components: nothing here touches the server.
@@ -11,6 +12,13 @@ export const KIND_LABELS: Record<Kind, string> = {
   flight: 'Flight',
   hotel: 'Hotel',
   car: 'Car rental',
+}
+
+export const TRIP_STATUS_LABELS: Record<TripStatus, string> = {
+  idea: 'Idea',
+  planned: 'Planned',
+  booked: 'Booked',
+  past: 'Past',
 }
 
 export const STATUS_LABELS: Record<Booking['status'], string> = {

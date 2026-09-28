@@ -69,7 +69,7 @@ export function ItineraryPanel({
           ) : (
             <Timeline />
           )}
-          <LinkedBookings tripId={trip.id} bookings={bookings} timeZone={timeZone} />
+          <LinkedBookings tripId={trip.id} bookings={bookings} timeZone={timeZone} canEdit={canEdit} />
         </div>
 
         {layout === 'week' ? null : <StopMap stops={stops} className='hidden lg:block lg:w-80 lg:shrink-0' />}

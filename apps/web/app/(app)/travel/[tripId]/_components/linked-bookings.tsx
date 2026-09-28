@@ -10,14 +10,24 @@ import { FormError } from '@/components/ui/form-error'
 import { Pill } from '@/components/ui/pill'
 import { useMutation } from '@/hooks/use-mutation'
 import { api } from '@/lib/api/client'
-import { bookingWhen } from '@/lib/travel/display'
+import { bookingWhen, KIND_LABELS } from '@/lib/travel/display'
 
 /**
  * What this trip holds. A booking stays a booking after it is on the timeline: the item is
  * how it shows up on a day, this is the reservation itself, with the number you would read
  * out at a desk.
  */
-export function LinkedBookings({ tripId, bookings, timeZone }: { tripId: string; bookings: Booking[]; timeZone: string }) {
+export function LinkedBookings({
+  tripId,
+  bookings,
+  timeZone,
+  canEdit,
+}: {
+  tripId: string
+  bookings: Booking[]
+  timeZone: string
+  canEdit: boolean
+}) {
   const unlink = useMutation((bookingId: string) => api.request(unlinkBookingFromTrip, { params: { tripId, bookingId } }))
 
   return (
@@ -26,7 +36,11 @@ export function LinkedBookings({ tripId, bookings, timeZone }: { tripId: string;
       <FormError>{unlink.error}</FormError>
 
       {bookings.length === 0 ? (
-        <EmptyState title='No bookings yet'>File one from the travel page and it lands here, and on the day it happens.</EmptyState>
+        <EmptyState title='No bookings yet'>
+          {canEdit
+            ? 'File one from the travel page and it lands here, and on the day it happens.'
+            : 'Bookings for this trip land here once someone files them.'}
+        </EmptyState>
       ) : (
         <ul className='flex flex-col gap-2'>
           {bookings.map(booking => (
@@ -37,30 +51,32 @@ export function LinkedBookings({ tripId, bookings, timeZone }: { tripId: string;
                     <Link href={`/travel/bookings/${booking.id}`} className='font-medium'>
                       {bookingTitle(booking)}
                     </Link>
-                    <Pill>{booking.kind}</Pill>
+                    <Pill>{KIND_LABELS[booking.kind]}</Pill>
                   </div>
                   <p className='text-sm text-ink-muted'>
                     {[
                       booking.providerName,
                       bookingWhen(booking, timeZone, { withTime: true }),
                       booking.confirmationCode,
-                      formatCents(booking.paidCents),
+                      formatCents(booking.paidCents, { currency: booking.currency }),
                     ]
                       .filter(Boolean)
                       .join(' · ')}
                   </p>
                 </div>
 
-                <button
-                  type='button'
-                  className='inline-flex min-h-tap shrink-0 items-center text-sm text-ink-muted underline underline-offset-4 hover:text-ink disabled:opacity-40'
-                  disabled={unlink.pending}
-                  onClick={() => {
-                    unlink.mutate(booking.id)
-                  }}
-                >
-                  Take it off this trip
-                </button>
+                {canEdit ? (
+                  <button
+                    type='button'
+                    className='inline-flex min-h-tap shrink-0 items-center text-sm text-ink-muted underline underline-offset-4 hover:text-ink disabled:opacity-40'
+                    disabled={unlink.pending}
+                    onClick={() => {
+                      unlink.mutate(booking.id)
+                    }}
+                  >
+                    Take it off this trip
+                  </button>
+                ) : null}
               </Card>
             </li>
           ))}

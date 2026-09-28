@@ -3,7 +3,7 @@
 import { deleteTrip, updateTrip, type Person, type Trip } from '@ghar/contracts'
 import { comparePeople, personLabel } from '@ghar/core/people'
 import { parseMoneyInput } from '@ghar/core/money'
-import { TRIP_STATUSES, type TripStatus } from '@ghar/core/trips'
+import { statusAfterDateChange, TRIP_STATUSES, type TripStatus } from '@ghar/core/trips'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useId, useRef, useState, type SyntheticEvent } from 'react'
@@ -15,13 +15,7 @@ import { FormError } from '@/components/ui/form-error'
 import { useMutation } from '@/hooks/use-mutation'
 import { api } from '@/lib/api/client'
 import { formText } from '@/lib/form'
-
-const STATUS_LABEL: Record<TripStatus, string> = {
-  idea: 'Idea',
-  planned: 'Planned',
-  booked: 'Booked',
-  past: 'Past',
-}
+import { TRIP_STATUS_LABELS } from '@/lib/travel/display'
 
 /**
  * Editing the trip itself. Mostly this is where an idea gets its dates, which is the
@@ -46,7 +40,7 @@ export function TripSettings({ trip, people, currentUserId }: { trip: Trip; peop
         international: form.get('international') === 'on',
         name: formText(form, 'name'),
         destination: formText(form, 'destination') || null,
-        status: formText(form, 'status') as TripStatus,
+        status: statusAfterDateChange(trip.status, formText(form, 'status') as TripStatus, startsOn || null),
         notes: formText(form, 'notes') || null,
         budgetCents: budget === '' ? null : parseMoneyInput(budget),
         // Dates move together, as they do on the table.
@@ -139,7 +133,7 @@ export function TripSettings({ trip, people, currentUserId }: { trip: Trip; peop
             <Select name='status' defaultValue={trip.status}>
               {TRIP_STATUSES.map(status => (
                 <option key={status} value={status}>
-                  {STATUS_LABEL[status]}
+                  {TRIP_STATUS_LABELS[status]}
                 </option>
               ))}
             </Select>

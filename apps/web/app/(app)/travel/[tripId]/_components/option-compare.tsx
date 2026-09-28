@@ -189,7 +189,7 @@ function CellValue({ cell, muted = false, emphasised = false }: { cell: Cell; mu
   )
 }
 
-/** Tapping your own vote again takes it back. Everyone on the household can vote. */
+/** Tapping your own vote again takes it back. Anyone who can plan the trip can vote; a viewer only sees the count. */
 function VoteButtons({
   slotId,
   option,
@@ -203,8 +203,9 @@ function VoteButtons({
   onVote: (action: { type: 'vote'; slotId: string; optionId: string; vote: OptionVote | null }) => void
   className?: string
 }) {
-  const { currentUserId } = useItinerary()
+  const { currentUserId, canEdit } = useItinerary()
   const mine = optionVoteOf(option.votes, currentUserId)
+  if (!canEdit) return null
 
   return (
     <div role='group' aria-label={`Your vote on ${option.title}`} className={cn('flex gap-1.5', className)}>

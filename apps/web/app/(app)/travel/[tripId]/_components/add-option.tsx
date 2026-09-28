@@ -2,7 +2,7 @@
 
 import { createOption, createOptionFromIdea, createOptionFromLink, updateOption, type ItinerarySlot } from '@ghar/contracts'
 import { ChevronDown } from 'lucide-react'
-import { useState, type SyntheticEvent } from 'react'
+import { useRef, useState, type SyntheticEvent } from 'react'
 import { Sheet, SheetClose } from '@/app/(app)/_components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/field'
@@ -29,19 +29,26 @@ export function AddOptionSheet({ slot }: { slot: ItinerarySlot }) {
   const [text, setText] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
   const formId = `add-option-${slot.id}`
+  /** The option a link already made, so trying again after its details fail doesn't add it twice. */
+  const fromLink = useRef<{ url: string; optionId: string } | null>(null)
 
   const add = useMutation(async ({ text: entered, choose, details }: NewOption) => {
     const extra = filledDetails(details)
     if (isLikelyUrl(entered)) {
       // The page names itself; what was typed in the other fields is laid on top of that.
-      const before = new Set(slot.options.map(option => option.id))
-      const { slot: after } = await api.request(createOptionFromLink, {
-        params: { tripId, slotId: slot.id },
-        body: { url: entered.trim(), choose },
-      })
-      const created = after.options.find(option => !before.has(option.id))
-      if (created && Object.keys(extra).length > 0) {
-        await api.request(updateOption, { params: { tripId, optionId: created.id }, body: extra })
+      const url = entered.trim()
+      let createdId = fromLink.current?.url === url ? fromLink.current.optionId : null
+      if (createdId === null) {
+        const before = new Set(slot.options.map(option => option.id))
+        const { slot: after } = await api.request(createOptionFromLink, {
+          params: { tripId, slotId: slot.id },
+          body: { url, choose },
+        })
+        createdId = after.options.find(option => !before.has(option.id))?.id ?? null
+        if (createdId !== null) fromLink.current = { url, optionId: createdId }
+      }
+      if (createdId !== null && Object.keys(extra).length > 0) {
+        await api.request(updateOption, { params: { tripId, optionId: createdId }, body: extra })
       }
     } else {
       await api.request(createOption, {

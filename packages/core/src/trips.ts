@@ -84,6 +84,18 @@ export function settleTripStatus(status: TripStatus, dates: TripDates, today: Ca
   return tripPhase(dates, today) === 'past' ? 'past' : status
 }
 
+/**
+ * The status an edit should save. Giving an idea its dates is the moment it becomes a plan, and
+ * taking a plan's dates away makes it an idea again, so the status follows the dates unless the
+ * person picked a different one in the same edit.
+ */
+export function statusAfterDateChange(before: TripStatus, picked: TripStatus, startsOn: CalendarDate | null): TripStatus {
+  if (picked !== before) return picked
+  if (before === 'idea' && startsOn !== null) return 'planned'
+  if (before === 'planned' && startsOn === null) return 'idea'
+  return picked
+}
+
 /** Soonest first, undated trips last. Ties break on name so the order is stable. */
 export function compareTripsByStart(a: TripDates & { name: string }, b: TripDates & { name: string }): number {
   if (a.startsOn === null || b.startsOn === null) {

@@ -25,7 +25,7 @@ import { api, errorMessage } from '@/lib/api/client'
  * OpenGraph tags for a title and a picture; vote on what the household actually wants;
  * promote the winner and it becomes a trip.
  */
-export function IdeaBoard({ ideas, currentUserId }: { ideas: TripIdea[]; currentUserId: string }) {
+export function IdeaBoard({ ideas, currentUserId, canEdit }: { ideas: TripIdea[]; currentUserId: string; canEdit: boolean }) {
   const ranked = [...ideas].sort(compareIdeasByVotes)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const [announcement, setAnnouncement] = useState('')
@@ -38,11 +38,13 @@ export function IdeaBoard({ ideas, currentUserId }: { ideas: TripIdea[]; current
       <p role='status' className='sr-only'>
         {announcement}
       </p>
-      <IdeaForm />
+      {canEdit ? <IdeaForm /> : null}
 
       {ranked.length === 0 ? (
         <EmptyState title='Nothing on the board'>
-          Paste a link to somewhere you would go and it lands here for everyone to vote on.
+          {canEdit
+            ? 'Paste a link to somewhere you would go and it lands here for everyone to vote on.'
+            : 'Places the household might go land here for everyone to vote on.'}
         </EmptyState>
       ) : (
         <ul className='grid gap-3 md:grid-cols-2'>
@@ -51,6 +53,7 @@ export function IdeaBoard({ ideas, currentUserId }: { ideas: TripIdea[]; current
               <IdeaCard
                 idea={idea}
                 currentUserId={currentUserId}
+                canEdit={canEdit}
                 onRemoved={() => {
                   // The card and its Remove button are about to go, so focus lands somewhere that stays.
                   setAnnouncement(`Removed ${idea.title}`)
@@ -187,7 +190,17 @@ function IdeaForm() {
   )
 }
 
-function IdeaCard({ idea, currentUserId, onRemoved }: { idea: TripIdea; currentUserId: string; onRemoved: () => void }) {
+function IdeaCard({
+  idea,
+  currentUserId,
+  canEdit,
+  onRemoved,
+}: {
+  idea: TripIdea
+  currentUserId: string
+  canEdit: boolean
+  onRemoved: () => void
+}) {
   const router = useRouter()
   const tally = tallyVotes(idea.votes)
   const mine = voteOf(idea.votes, currentUserId)
@@ -228,54 +241,60 @@ function IdeaCard({ idea, currentUserId, onRemoved }: { idea: TripIdea; currentU
           ) : null}
         </div>
 
-        <div className='mt-auto flex flex-wrap items-center gap-2'>
-          <div className='flex items-center gap-1'>
+        {canEdit ? (
+          <div className='mt-auto flex flex-wrap items-center gap-2'>
+            <div className='flex items-center gap-1'>
+              <Button
+                variant={mine === 'up' ? 'default' : 'outline'}
+                size='icon'
+                aria-label={mine === 'up' ? 'Take back your vote' : `Vote for ${idea.title}`}
+                aria-pressed={mine === 'up'}
+                disabled={vote.pending}
+                onClick={() => {
+                  vote.mutate('up')
+                }}
+              >
+                <span aria-hidden>+</span>
+              </Button>
+              <span className='min-w-8 text-center text-sm tabular-nums'>{tally.score}</span>
+              <Button
+                variant={mine === 'down' ? 'default' : 'outline'}
+                size='icon'
+                aria-label={mine === 'down' ? 'Take back your vote' : `Vote against ${idea.title}`}
+                aria-pressed={mine === 'down'}
+                disabled={vote.pending}
+                onClick={() => {
+                  vote.mutate('down')
+                }}
+              >
+                <span aria-hidden>−</span>
+              </Button>
+            </div>
+
             <Button
-              variant={mine === 'up' ? 'default' : 'outline'}
-              size='icon'
-              aria-label={mine === 'up' ? 'Take back your vote' : `Vote for ${idea.title}`}
-              aria-pressed={mine === 'up'}
-              disabled={vote.pending}
+              variant='outline'
+              disabled={promote.pending}
               onClick={() => {
-                vote.mutate('up')
+                promote.mutate()
               }}
             >
-              <span aria-hidden>+</span>
+              {promote.pending ? 'Making a trip…' : 'Make it a trip'}
             </Button>
-            <span className='min-w-8 text-center text-sm tabular-nums'>{tally.score}</span>
             <Button
-              variant={mine === 'down' ? 'default' : 'outline'}
-              size='icon'
-              aria-label={mine === 'down' ? 'Take back your vote' : `Vote against ${idea.title}`}
-              aria-pressed={mine === 'down'}
-              disabled={vote.pending}
+              variant='ghost'
+              disabled={remove.pending}
               onClick={() => {
-                vote.mutate('down')
+                remove.mutate()
               }}
             >
-              <span aria-hidden>−</span>
+              Remove
             </Button>
           </div>
-
-          <Button
-            variant='outline'
-            disabled={promote.pending}
-            onClick={() => {
-              promote.mutate()
-            }}
-          >
-            {promote.pending ? 'Making a trip…' : 'Make it a trip'}
-          </Button>
-          <Button
-            variant='ghost'
-            disabled={remove.pending}
-            onClick={() => {
-              remove.mutate()
-            }}
-          >
-            Remove
-          </Button>
-        </div>
+        ) : (
+          <p className='mt-auto text-sm text-ink-muted tabular-nums'>
+            {tally.score === 1 || tally.score === -1 ? `${tally.score} vote` : `${tally.score} votes`}
+          </p>
+        )}
 
         <FormError>{vote.error ?? promote.error ?? remove.error}</FormError>
       </div>
