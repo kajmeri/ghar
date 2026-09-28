@@ -18,6 +18,7 @@ import { OPTION_VOTES, nextOptionVote, type OptionVote } from '@ghar/core/itiner
 import { POLL_TITLES, POLL_VOTE_LABELS } from '@ghar/core/trip-polls'
 import { formatTripDates } from '@ghar/core/trips'
 import { useState, type SyntheticEvent } from 'react'
+import { ConfirmDialog } from '@/app/(app)/_components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/field'
 import { FormError } from '@/components/ui/form-error'
@@ -264,16 +265,28 @@ function PollCard({
       ) : null}
 
       {canManage ? (
-        <button
-          type='button'
-          disabled={pending}
-          onClick={() => {
+        <ConfirmDialog
+          trigger={
+            <button
+              type='button'
+              disabled={pending}
+              className='min-h-tap w-fit text-sm text-ink-muted underline underline-offset-2 disabled:opacity-40'
+            >
+              Close without deciding
+            </button>
+          }
+          title='Close without deciding?'
+          description={
+            poll.options.length === 0
+              ? 'The poll comes off the trip, and the trip stays as it is.'
+              : 'Its options and everyone’s votes go with it, and the trip stays as it is.'
+          }
+          confirmLabel='Close poll'
+          tone='destructive'
+          onConfirm={() => {
             action.mutate({ type: 'close' })
           }}
-          className='min-h-tap w-fit text-sm text-ink-muted underline underline-offset-2 disabled:opacity-40'
-        >
-          Close without deciding
-        </button>
+        />
       ) : null}
     </article>
   )

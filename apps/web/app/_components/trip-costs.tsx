@@ -19,6 +19,7 @@ import { formatCalendarDate, type CalendarDate } from '@ghar/core/dates'
 import { formatCents, type Cents } from '@ghar/core/money'
 import { partyKey, splitCost } from '@ghar/core/trip-costs'
 import { useState, type SyntheticEvent } from 'react'
+import { ConfirmDialog } from '@/app/(app)/_components/ui/confirm-dialog'
 import { MoneyInput } from '@/app/(app)/_components/ui/money-input'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
@@ -258,16 +259,24 @@ function CostCard({
           >
             Change
           </button>
-          <button
-            type='button'
-            disabled={remove.pending}
-            onClick={() => {
+          <ConfirmDialog
+            trigger={
+              <button
+                type='button'
+                disabled={remove.pending}
+                className='min-h-tap text-sm text-ink-muted underline underline-offset-2 disabled:opacity-40'
+              >
+                {remove.pending ? 'Removing…' : 'Remove'}
+              </button>
+            }
+            title={`Remove ${cost.description}?`}
+            description='It comes off the trip’s costs for everyone, and who owes whom is worked out again without it.'
+            confirmLabel='Remove cost'
+            tone='destructive'
+            onConfirm={() => {
               remove.mutate()
             }}
-            className='min-h-tap text-sm text-ink-muted underline underline-offset-2 disabled:opacity-40'
-          >
-            {remove.pending ? 'Removing…' : 'Remove'}
-          </button>
+          />
         </div>
       ) : null}
       <FormError>{remove.error}</FormError>
