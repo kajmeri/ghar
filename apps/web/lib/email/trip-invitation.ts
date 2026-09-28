@@ -7,7 +7,8 @@ import { escapeHtml } from './html'
 
 export interface TripInvitationEmailInput {
   to: string
-  inviterName: string
+  /** The inviter's first name, or null to name only the household. Never an address. */
+  inviterName: string | null
   householdName: string
   trip: { name: string; destination: string | null; startsOn: CalendarDate | null; endsOn: CalendarDate | null }
   url: string
@@ -15,7 +16,10 @@ export interface TripInvitationEmailInput {
 
 /** One person asked onto a trip. The button opens the invitation, where they answer in a tap. */
 export function tripInvitationEmail(input: TripInvitationEmailInput): EmailMessage {
-  const intro = `${input.inviterName} from ${input.householdName} invited you on a trip.`
+  const who = input.inviterName ?? input.householdName
+  const intro = input.inviterName
+    ? `${input.inviterName} from ${input.householdName} invited you on a trip.`
+    : `${input.householdName} invited you on a trip.`
   const when = input.trip.startsOn ? formatTripDates(input.trip) : 'Dates to be decided'
   const where = [input.trip.destination, when].filter(Boolean).join(' · ')
   const footer = `Sign in with ${input.to} to answer. You don't need a household on Ghar to come along. If you weren't expecting this, you can ignore this email.`
@@ -32,5 +36,5 @@ export function tripInvitationEmail(input: TripInvitationEmailInput): EmailMessa
   </div>
 </div>`
 
-  return { to: input.to, subject: `${input.inviterName} invited you to ${input.trip.name}`, text, html }
+  return { to: input.to, subject: `${who} invited you to ${input.trip.name}`, text, html }
 }

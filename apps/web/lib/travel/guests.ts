@@ -15,7 +15,7 @@ import type {
 import { can } from '@ghar/core/auth'
 import { buildIcs } from '@ghar/core/calendar'
 import type { OptionVote } from '@ghar/core/itinerary'
-import { tripCalendarEvents, type GuestResponse } from '@ghar/core/trip-guests'
+import { firstName, tripCalendarEvents, type GuestResponse } from '@ghar/core/trip-guests'
 import * as queries from '@ghar/db/queries'
 import type { SessionContext } from '@ghar/db/queries'
 import { openSecret, sealSecret } from '@/lib/crypto'
@@ -56,7 +56,6 @@ export async function loadTripGuestsPage(ctx: RequestContext, tripId: string): P
 /** Adds the new addresses, then emails each its own link. Only the tokens' hashes are stored. */
 export async function inviteTripGuests(
   ctx: RequestContext,
-  session: SessionContext,
   tripId: string,
   body: InviteTripGuestsBody
 ): Promise<{ invited: TripGuest[]; skipped: queries.TripInviteResult['skipped'] }> {
@@ -70,7 +69,9 @@ export async function inviteTripGuests(
   if (result.invited.length === 0) return { invited: [], skipped: result.skipped }
 
   const [trip, household] = await Promise.all([queries.getTripWithCounts(ctx, db, tripId), queries.getHousehold(ctx, db)])
-  const inviterName = result.invited[0]?.invitedByName ?? session.email ?? 'Someone'
+  // A first name, like the invitation page shows. The inviter's address stays out of it, since
+  // whoever gets this can forward it on; without a name the email is from the household.
+  const inviterName = firstName(result.invited[0]?.invitedByName)
   const provider = getEmailProvider()
   // One address bouncing shouldn't undo the rest. They're on the list either way, and can be
   // taken off and asked again.
