@@ -105,7 +105,7 @@ export async function inviteMember(
   url.searchParams.set('token', token)
   const link = url.toString()
   try {
-    await getEmailProvider().send(
+    const sent = await getEmailProvider().send(
       invitationEmail({
         to: invitation.email,
         householdName: household.name,
@@ -114,6 +114,8 @@ export async function inviteMember(
         url: link,
       })
     )
+    // Emails are off, so the link is the only way in. Same as a failed send, minus the warning.
+    if (sent.skipped) return { invitation: toInvitation(invitation), emailed: false, link }
   } catch (error) {
     // Email is down or misconfigured. Worth knowing about, but not worth losing the invitation.
     getMonitoring().captureException(error, { level: 'warning', tags: { stage: 'invitation_email' } })

@@ -40,14 +40,14 @@ export function createAlerts({ to, email, monitoring }: { to: string | undefined
 }
 
 /**
- * Alerts go out only with both ALERT_EMAIL and RESEND_API_KEY. Without Resend the email adapter would
- * only print the alert to a log nobody is watching, so that counts as no alerts at all.
+ * Alerts go out only with ALERT_EMAIL, RESEND_API_KEY and EMAIL_DELIVERY=on. Without Resend the email
+ * adapter would only print the alert to a log nobody is watching, so that counts as no alerts at all.
  */
 export function alertsFromEnv(
-  vars: { ALERT_EMAIL?: string | undefined; RESEND_API_KEY?: string | undefined },
+  vars: { ALERT_EMAIL?: string | undefined; RESEND_API_KEY?: string | undefined; EMAIL_DELIVERY?: 'on' | 'off' | undefined },
   { monitoring, createEmail }: { monitoring: Monitoring; createEmail: (apiKey: string) => EmailProvider }
 ): Alerts {
-  const email = vars.ALERT_EMAIL && vars.RESEND_API_KEY ? createEmail(vars.RESEND_API_KEY) : undefined
+  const email = vars.EMAIL_DELIVERY === 'on' && vars.ALERT_EMAIL && vars.RESEND_API_KEY ? createEmail(vars.RESEND_API_KEY) : undefined
   return createAlerts({ to: vars.ALERT_EMAIL, email, monitoring })
 }
 

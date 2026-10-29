@@ -23,7 +23,13 @@ const envSchema = z.object({
   SUPABASE_SECRET_KEY: z.preprocess(unset, z.string().min(1).optional()),
   /** Origin used in emailed links and the Google callback. No trailing slash. Vercel fills it in when unset. */
   APP_URL: z.preprocess(unset, z.url().default('http://localhost:3000')).transform(url => url.replace(/\/+$/, '')),
-  /** Without it, emails print to the server console. Required in production. */
+  /**
+   * `off` stops every email Ghar sends itself: digests, reminders, invitations and cron alerts. Each one
+   * is dropped as if it went out, so turning it back on sends nothing that was skipped. Sign-in emails
+   * come from Supabase Auth and are not affected. Off unless set to `on`.
+   */
+  EMAIL_DELIVERY: z.preprocess(unset, z.enum(['on', 'off']).default('off')),
+  /** Without it, emails print to the server console. Required in production while EMAIL_DELIVERY is on. */
   RESEND_API_KEY: z.preprocess(unset, z.string().min(1).optional()),
   /** Vercel Cron sends it as a bearer token. Cron routes refuse every request while it's unset. */
   CRON_SECRET: z.preprocess(unset, z.string().min(16).optional()),
@@ -90,7 +96,7 @@ const envSchema = z.object({
 
 export type Env = z.output<typeof envSchema>
 
-const monitoringSchema = envSchema.pick({ SENTRY_DSN: true, SENTRY_ENVIRONMENT: true, ALERT_EMAIL: true, RESEND_API_KEY: true })
+const monitoringSchema = envSchema.pick({ SENTRY_DSN: true, SENTRY_ENVIRONMENT: true, ALERT_EMAIL: true, RESEND_API_KEY: true, EMAIL_DELIVERY: true })
 export type MonitoringEnv = z.output<typeof monitoringSchema>
 
 /**
@@ -112,6 +118,7 @@ export function monitoringEnv(vars: Record<string, string | undefined> = process
     SENTRY_ENVIRONMENT: read('SENTRY_ENVIRONMENT', shape.SENTRY_ENVIRONMENT),
     ALERT_EMAIL: read('ALERT_EMAIL', shape.ALERT_EMAIL),
     RESEND_API_KEY: read('RESEND_API_KEY', shape.RESEND_API_KEY),
+    EMAIL_DELIVERY: read('EMAIL_DELIVERY', shape.EMAIL_DELIVERY) ?? 'off',
   }
   if (invalid.length > 0) {
     console.warn(`Ignoring invalid monitoring variables: ${invalid.join(', ')}. See apps/web/.env.example.`)

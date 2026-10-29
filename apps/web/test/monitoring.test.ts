@@ -161,7 +161,7 @@ describe('monitoringEnv', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const vars = monitoringEnv({ SENTRY_DSN: 'not-a-dsn-secret-value', ALERT_EMAIL: 'alerts@example.com', RESEND_API_KEY: ' ' })
 
-    expect(vars).toEqual({ SENTRY_DSN: undefined, SENTRY_ENVIRONMENT: undefined, ALERT_EMAIL: 'alerts@example.com', RESEND_API_KEY: undefined })
+    expect(vars).toEqual({ SENTRY_DSN: undefined, SENTRY_ENVIRONMENT: undefined, ALERT_EMAIL: 'alerts@example.com', RESEND_API_KEY: undefined, EMAIL_DELIVERY: 'off' })
     expect(warn).toHaveBeenCalledTimes(1)
     expect(String(warn.mock.calls[0]?.[0])).toContain('SENTRY_DSN')
     expect(String(warn.mock.calls[0]?.[0])).not.toContain('not-a-dsn-secret-value')

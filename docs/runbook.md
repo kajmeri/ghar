@@ -25,7 +25,7 @@ segments in paths (like `/a/<token>`) are replaced.
 | `SENTRY_DSN`             | Server errors to Sentry: API routes, server actions, rendering, and cron failures with their job |
 | `NEXT_PUBLIC_SENTRY_DSN` | Browser errors that the server never saw. Read at build time, so changing it needs a redeploy    |
 | `SENTRY_ENVIRONMENT`     | Optional. Defaults to `VERCEL_ENV`                                                               |
-| `ALERT_EMAIL`            | Where cron failure emails go. Needs `RESEND_API_KEY` too, or nothing is sent                     |
+| `ALERT_EMAIL`            | Where cron failure emails go. Needs `RESEND_API_KEY` and `EMAIL_DELIVERY=on`, or nothing is sent |
 
 No source maps are uploaded and no Sentry build plugin runs. Stack traces in Sentry point at built
 code.

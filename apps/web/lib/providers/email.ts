@@ -11,6 +11,8 @@ export interface EmailMessage {
 
 export interface SentEmail {
   id: string
+  /** Set when EMAIL_DELIVERY is off and the message was dropped instead of sent. */
+  skipped?: true
 }
 
 export interface EmailProvider {
@@ -72,6 +74,16 @@ export function createConsoleProvider(): EmailProvider {
   }
 }
 
+/** EMAIL_DELIVERY=off. Drops every message and logs only that it did, never who it was for or what it said. */
+export function createOffProvider(): EmailProvider {
+  return {
+    send() {
+      console.info('[email] Emails are off (EMAIL_DELIVERY). Skipped one email.')
+      return Promise.resolve({ id: 'skipped', skipped: true })
+    },
+  }
+}
+
 /** For tests: keeps what would have been sent. */
 export function createMemoryProvider(): EmailProvider & { sent: EmailMessage[] } {
   const sent: EmailMessage[] = []
@@ -88,8 +100,10 @@ let provider: EmailProvider | undefined
 
 export function getEmailProvider(): EmailProvider {
   if (provider) return provider
-  const { RESEND_API_KEY } = env()
-  if (RESEND_API_KEY) {
+  const { RESEND_API_KEY, EMAIL_DELIVERY } = env()
+  if (EMAIL_DELIVERY === 'off') {
+    provider = createOffProvider()
+  } else if (RESEND_API_KEY) {
     provider = createResendProvider({ apiKey: RESEND_API_KEY, from: EMAIL_FROM, replyTo: EMAIL_REPLY_TO })
   } else if (process.env.NODE_ENV === 'production') {
     // The console fallback would write invitation links into production logs.

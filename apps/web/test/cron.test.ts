@@ -126,12 +126,20 @@ describe('alertsFromEnv', () => {
     expect(createEmail).not.toHaveBeenCalled()
   })
 
-  it('emails ALERT_EMAIL when both are set', async () => {
+  it('sends nothing while EMAIL_DELIVERY is off', async () => {
+    const { monitoring } = setup()
+    const createEmail = vi.fn(() => createMemoryProvider())
+
+    await alertsFromEnv({ ALERT_EMAIL: ALERT_TO, RESEND_API_KEY: 're_test_key_0123456789', EMAIL_DELIVERY: 'off' }, { monitoring, createEmail }).cronFailed(failure)
+    expect(createEmail).not.toHaveBeenCalled()
+  })
+
+  it('emails ALERT_EMAIL when all three are set', async () => {
     const { monitoring } = setup()
     const inbox = createMemoryProvider()
     const createEmail = vi.fn(() => inbox)
 
-    await alertsFromEnv({ ALERT_EMAIL: ALERT_TO, RESEND_API_KEY: 're_test_key_0123456789' }, { monitoring, createEmail }).cronFailed(failure)
+    await alertsFromEnv({ ALERT_EMAIL: ALERT_TO, RESEND_API_KEY: 're_test_key_0123456789', EMAIL_DELIVERY: 'on' }, { monitoring, createEmail }).cronFailed(failure)
     expect(createEmail).toHaveBeenCalledWith('re_test_key_0123456789')
     expect(inbox.sent.map(mail => mail.to)).toEqual([ALERT_TO])
   })
